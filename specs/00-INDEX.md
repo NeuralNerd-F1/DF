@@ -10,7 +10,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 0 — Foundation contracts (do first, tiny, unblocks everything)
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F00 | Error-code Enum, result objects, `config.yaml`, repo skeleton, Docker Compose | — | 1 | TODO |
+| F00 | Error-code Enum, result objects, `config.yaml`, repo skeleton, Docker Compose | — | 1 | DONE (2026-06-25) |
 
 ## Layer 1 — Data pipeline
 | ID  | Feature | Depends on | Wk | Status |

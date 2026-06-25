@@ -1,0 +1,2 @@
+# Trained models and saved parameters live here (normalisation.json, umap_model.pkl,
+# pca_fallback.pkl, champion models). Tracked dir, contents are build artefacts.

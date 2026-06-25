@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# APEX runtime artefacts (tracked dir, untracked contents)
+artefacts/*
+!artefacts/.gitkeep
+cache/
+logs/
+
+# MLflow / Optuna
+mlruns/
+*.db
+
+# OS / editor
+.DS_Store
+Thumbs.db

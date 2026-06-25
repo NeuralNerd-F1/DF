@@ -1,0 +1,45 @@
+[tool.poetry]
+name = "apex"
+version = "0.1.0"
+description = "APEX — F1 driver behavioural profiling platform (Failsafe Architecture Edition)"
+authors = ["APEX"]
+readme = "CLAUDE.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+# Constitution pins Python 3.11. Heavy ML/runtime deps (FastAPI, pandas, xgboost,
+# umap-learn, shap, mlflow, fastf1, sqlalchemy, ...) are added by the features that
+# first import them — F00 only needs the contract layer's runtime deps.
+python = "^3.11"
+pydantic = "^2.7"
+pyyaml = "^6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+ruff = "^0.5"
+mypy = "^1.10"
+types-pyyaml = "^6.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "W"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["app"]
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,33 @@
+# APEX configuration — the single source of truth for constants.
+#
+# The constitution bans magic numbers: every seed, threshold, and path is read from
+# here through app/contracts/config.py. F00 seeds the foundational blocks below.
+# Feature-owned sections (e.g. `ingest:`, `classifier:`) are appended by their
+# features; where a feature needs one of the named thresholds below it MUST reference
+# the value here rather than redefine it, so this file stays the single source.
+
+# RNG seeds — reproducibility contract (non-negotiable #3). All fixed to 42.
+seeds:
+  numpy: 42
+  xgboost: 42
+  optuna: 42
+
+# Filesystem locations.
+paths:
+  artefacts_dir: artefacts                       # normalisation.json, models, umap/pca
+  cache_dir: cache                               # raw telemetry Parquet cache (F01)
+  data_quality_log: logs/data_quality_log.jsonl  # append-only failure/fallback audit log
+
+# Circuits withheld from ALL training, evaluated only in F20 (master spec §3.2).
+# Quarantined from F00 onward; any .fit() that sees these is a build-breaking bug.
+held_out_circuits: [Belgium, Italy]
+
+# The named numeric constants the constitution requires live in config.
+# Canonical home for each value — feature blocks reference these, never re-declare.
+thresholds:
+  confidence_gate: 0.65          # classifier max-prob floor; below -> LOW_CONFIDENCE (§5.1)
+  entropy_ambiguous_bits: 2.9    # Shannon entropy above -> AMBIGUOUS (§5.1)
+  null_ceiling: 6                # > N NULL features -> reject vector; shared F03/F06 (§4.5)
+  min_clean_laps: 30             # min clean laps per driver-circuit combination (§3.2)
+  sample_rate_floor_hz: 20       # effective sampling-rate floor after interpolation (§3.3)
+  laptime_bound_pct: 115         # lap-time must be within this % of driver median (§3.3)

@@ -1,0 +1,34 @@
+# Local development stores for APEX. The constitution pins PostgreSQL 15 and Redis 7.
+# The cache is an optimisation, never a hard dependency — the system must run with
+# Redis down (master spec §8.2). These services back F12 (schema) and F14 (cache/queue).
+services:
+  postgres:
+    image: postgres:15
+    container_name: apex-postgres
+    environment:
+      POSTGRES_USER: apex
+      POSTGRES_PASSWORD: apex
+      POSTGRES_DB: apex
+    ports:
+      - "5432:5432"
+    volumes:
+      - apex_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apex -d apex"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: apex-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  apex_pgdata:

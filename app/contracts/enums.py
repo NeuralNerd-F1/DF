@@ -24,6 +24,20 @@ class Status(StrEnum):
     FAILED = "FAILED"
 
 
+class LapStatus(StrEnum):
+    """Admit/reject outcome for a single lap in the F02 filter chain (§3.3).
+
+    A deliberately binary axis — a lap either enters the feature matrix or it does
+    not. This is distinct from ``Status`` (OK/DEGRADED/FAILED), which describes a
+    whole pipeline stage; a per-lap result carries ``LapStatus`` plus the documented
+    ``error_code`` (``OK`` when clean) and any accept-time ``flags``
+    (``LAP_INTERP``, ``LAP_PARTIAL``).
+    """
+
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+
+
 class ConfidenceState(StrEnum):
     """Explicit confidence / uncertainty state for a classifier prediction.
 

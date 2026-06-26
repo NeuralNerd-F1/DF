@@ -16,7 +16,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
 | F01 | Data ingestion (FastF1/OpenF1/Ergast, caching, circuit breakers) | F00 | 1 | DONE (2026-06-26) |
-| F02 | Lap filter chain / validation contract (9 filters, error codes) | F00, F01 | 2 | TODO |
+| F02 | Lap filter chain / validation contract (9 filters, error codes) | F00, F01 | 2 | DONE (2026-06-26) |
 | F03 | Feature extraction — 28 features, NULL tolerance | F00, F02 | 3 | TODO |
 | F04 | Circuit-aware normalisation (train-only, saved artefact) | F03 | 4 | TODO |
 | F05 | Manual CSV upload pipeline + edge cases (UPLOAD_001–004) | F02, F03 | 16 | TODO |
@@ -68,3 +68,8 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   `track_status` (FastF1 `Laps.TrackStatus`) is now persisted to the Parquet cache and
   added to the F01→F02 column contract; new `TRACK_STATUS_UNAVAILABLE` error code. See
   `specs/F01-data-ingestion.md` §11.
+- **F02 — 2026-06-26 (feature/F02-lap-filtering):** DONE. Added validator
+  (`app/pipeline/validate.py`), `LapStatus` enum, `ValidateConfig` block, and two F02
+  error codes from review hardening: `ORPHAN_SAMPLES` (null-lap samples dropped + logged)
+  and `VALIDATION_ERROR` (malformed-frame / unexpected-internal backstop, kept distinct
+  from per-lap data codes). `ValidateConfig` enforces `Speed ∈ required_channels`.

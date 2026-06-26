@@ -32,6 +32,8 @@ EXPECTED_CODES: set[str] = {
     "LAP_PARTIAL",
     "COMBO_001",
     "DATA_INSUFFICIENT",
+    "ORPHAN_SAMPLES",
+    "VALIDATION_ERROR",
     # Feature extraction (F03)
     "FEATURE_001",
     "LAP_NULL_EXCESS",

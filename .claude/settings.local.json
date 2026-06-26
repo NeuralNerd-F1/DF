@@ -10,7 +10,29 @@
       "Bash(ruff --version)",
       "Bash(mypy --version)",
       "Bash(.venv/Scripts/ruff.exe --version)",
-      "Bash(.venv/Scripts/ruff.exe check *)"
+      "Bash(.venv/Scripts/ruff.exe check *)",
+      "Bash(python -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(python -c \"import pandas; print\\('pandas', pandas.__version__\\)\")",
+      "Bash(python -c \"import pyarrow; print\\('pyarrow', pyarrow.__version__\\)\")",
+      "Bash(python -c \"import pytest; print\\('pytest', pytest.__version__\\)\")",
+      "Bash(python -c \"import fastf1; print\\('fastf1', fastf1.__version__\\)\")",
+      "PowerShell($cmds = @\\('python','python3','py','poetry'\\); foreach\\($c in $cmds\\){ $g = Get-Command $c -ErrorAction SilentlyContinue; if\\($g\\){ \"$c -> $\\($g.Source\\)\" } else { \"$c -> NOT FOUND\" } }; \"--- venv? ---\"; if\\(Test-Path .venv\\){ \"has .venv\" } else { \"no .venv\" }; Get-ChildItem -Path . -Filter \"poetry.lock\" -ErrorAction SilentlyContinue | Select-Object -First 1 Name)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; if\\(Test-Path $py\\){ & $py --version; \"---\"; & $py -c \"import pandas, pyarrow, pytest; print\\('pandas', pandas.__version__\\); print\\('pyarrow', pyarrow.__version__\\); print\\('pytest', pytest.__version__\\)\"; \"---fastf1---\"; & $py -c \"import fastf1; print\\('fastf1', fastf1.__version__\\)\" } else { \"no venv python\" })",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m pip list 2>$null)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m pip install \"pandas>=2.0\" \"pyarrow>=15.0\" 2>&1 | Select-Object -Last 15)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m pytest -q 2>&1 | Select-Object -Last 15)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m pytest tests/contracts/test_config.py -q 2>&1 | Select-Object -Last 20)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m pytest tests/pipeline/test_ingest.py -q 2>&1 | Select-Object -Last 40)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest ===\"; & $py -m pytest -q 2>&1 | Select-Object -Last 8; \"=== ruff ===\"; & $py -m ruff check . 2>&1 | Select-Object -Last 30)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m ruff check . --output-format concise 2>&1)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== ruff ===\"; & $py -m ruff check . 2>&1 | Select-Object -Last 5; \"=== mypy ===\"; & $py -m mypy app 2>&1 | Select-Object -Last 30)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m pip install pandas-stubs 2>&1 | Select-Object -Last 6)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m mypy app 2>&1 | Select-Object -Last 30)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest ===\"; & $py -m pytest -q 2>&1 | Select-Object -Last 5; \"=== ruff ===\"; & $py -m ruff check . 2>&1 | Select-Object -Last 3; \"=== mypy ===\"; & $py -m mypy app 2>&1 | Select-Object -Last 3)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest ===\"; & $py -m pytest -q 2>&1 | Select-Object -Last 12; \"=== ruff ===\"; & $py -m ruff check . 2>&1 | Select-Object -Last 10; \"=== mypy ===\"; & $py -m mypy app 2>&1 | Select-Object -Last 6)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest ===\"; & $py -m pytest -q 2>&1 | Select-Object -Last 4; \"=== ruff ===\"; & $py -m ruff check . 2>&1 | Select-Object -Last 3)",
+      "PowerShell(git *)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest \\(F01 scope\\) ===\"; & $py -m pytest tests/pipeline tests/contracts/test_config.py tests/contracts/test_errors.py -q 2>&1 | Select-Object -Last 6; \"=== mypy ===\"; & $py -m mypy app 2>&1 | Select-Object -Last 4)"
     ]
   }
 }

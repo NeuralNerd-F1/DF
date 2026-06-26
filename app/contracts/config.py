@@ -6,8 +6,12 @@ Pydantic and surfaces a typed ``ConfigError`` (``CONFIG_001``) on any problem ra
 than letting a missing key blow up deep in a pipeline stage.
 
 Feature-owned sections (``ingest:``, ``classifier:``, ...) are added to the YAML by
-their features; ``AppConfig`` tolerates them (``extra="allow"``) so the loader never
-needs editing when a downstream feature extends the file.
+their features. The standing rule (adopted in F01): each feature defines its typed
+sub-model *here* in ``config.py`` and wires it onto ``AppConfig`` as an optional typed
+field — never as an untyped ``extra="allow"`` passthrough. ``AppConfig`` therefore uses
+``extra="forbid"`` so a typo'd top-level section is a build-breaking error, not a
+silently-ignored block (non-negotiable #1), and feature code reads its config through a
+validated model rather than a raw dict.
 """
 
 from __future__ import annotations
@@ -69,19 +73,60 @@ class Thresholds(BaseModel):
     laptime_bound_pct: int  # lap-time plausibility bound (§3.3)
 
 
+class BreakerConfig(BaseModel):
+    """Per-source circuit-breaker / retry policy for one external data source (F01)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    timeout_s: float  # per-attempt wall-clock timeout
+    retries: int  # extra attempts after the first within one call_with_breaker call
+    backoff_s: list[float]  # sleep between attempts; len must cover the retries
+    open_after: int  # failed (post-retry) invocations within window_s before opening
+    window_s: float  # rolling window the failure count is measured over
+
+
+class IngestBreakers(BaseModel):
+    """The three source breakers F01 wraps (§8.3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fastf1: BreakerConfig
+    openf1: BreakerConfig
+    ergast: BreakerConfig
+
+
+class IngestConfig(BaseModel):
+    """Typed view over the ``ingest:`` block (F01).
+
+    Lives here, not in ``app/pipeline/ingest.py``, so the dependency points
+    feature -> config and the block is strictly validated (standing rule, F01).
+    ``cache_dir`` is intentionally absent — ingestion reads ``paths.cache_dir`` as the
+    single source of truth for the cache location.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cache_max_age_days: int  # §8.2 — serve cache fresher than this without fetching
+    breakers: IngestBreakers
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
-    The foundational blocks are strictly validated; ``extra="allow"`` keeps any
-    feature-owned sections so they round-trip without breaking the loader.
+    Every block — foundational and feature-owned — is a typed field validated
+    strictly. ``extra="forbid"`` means a stray or typo'd top-level section is a
+    build-breaking error rather than a silently-ignored block. Feature sections are
+    optional (``None`` until their feature ships) so the minimal foundation config
+    still loads.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     seeds: Seeds
     paths: Paths
     held_out_circuits: list[str]  # quarantined from all training (§3.2)
     thresholds: Thresholds
+    ingest: IngestConfig | None = None  # F01; None until the ingest: block is present
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:

@@ -15,7 +15,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 1 — Data pipeline
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F01 | Data ingestion (FastF1/OpenF1/Ergast, caching, circuit breakers) | F00 | 1 | TODO |
+| F01 | Data ingestion (FastF1/OpenF1/Ergast, caching, circuit breakers) | F00 | 1 | DONE (2026-06-26) |
 | F02 | Lap filter chain / validation contract (9 filters, error codes) | F00, F01 | 2 | TODO |
 | F03 | Feature extraction — 28 features, NULL tolerance | F00, F02 | 3 | TODO |
 | F04 | Circuit-aware normalisation (train-only, saved artefact) | F03 | 4 | TODO |

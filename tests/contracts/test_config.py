@@ -27,6 +27,29 @@ def test_repo_config_has_shipped_foundation_values(repo_config_path: Path) -> No
 def test_loads_valid_fixture(valid_config_file: Path) -> None:
     cfg = load_config(valid_config_file)
     assert cfg.paths.data_quality_log.endswith("data_quality_log.jsonl")
+    assert cfg.ingest is None  # minimal foundation config has no ingest: block
+
+
+def test_repo_config_parses_ingest_block(repo_config_path: Path) -> None:
+    """F01's ingest: block validates into the typed IngestConfig sub-model."""
+    cfg = load_config(repo_config_path)
+    assert cfg.ingest is not None
+    assert cfg.ingest.cache_max_age_days == 7
+    assert cfg.ingest.breakers.fastf1.open_after == 3
+    assert cfg.ingest.breakers.fastf1.backoff_s == [5, 15, 30]
+    assert cfg.ingest.breakers.ergast.retries == 2
+
+
+def test_malformed_ingest_block_raises(valid_config_file: Path, tmp_path: Path) -> None:
+    """A typed feature block is strictly validated — a missing breaker key raises."""
+    extended = valid_config_file.read_text(encoding="utf-8") + (
+        "ingest:\n  cache_max_age_days: 7\n  breakers:\n"
+        "    fastf1: { timeout_s: 30, retries: 3, backoff_s: [5], open_after: 3, window_s: 60 }\n"
+    )  # openf1 + ergast breakers missing -> IngestBreakers validation fails
+    p = tmp_path / "bad_ingest.yaml"
+    p.write_text(extended, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
 
 
 def test_missing_file_raises_config_001(tmp_path: Path) -> None:
@@ -67,15 +90,19 @@ def test_unknown_key_in_strict_block_raises(valid_config_file: Path, tmp_path: P
         load_config(p)
 
 
-def test_feature_owned_section_is_tolerated(valid_config_file: Path, tmp_path: Path) -> None:
-    """A downstream feature appending its own block must not break the loader."""
+def test_unknown_top_level_section_is_rejected(valid_config_file: Path, tmp_path: Path) -> None:
+    """Standing rule (F01): AppConfig forbids extras, so a typo'd/untyped block raises.
+
+    Replaces the old extra="allow" tolerance — feature sections must be typed fields on
+    AppConfig, never silently-passed-through unknown keys.
+    """
     extended = valid_config_file.read_text(encoding="utf-8") + (
-        "ingest:\n  cache_dir: cache\n  cache_max_age_days: 7\n"
+        "wibble:\n  not_a_real_section: true\n"
     )
     p = tmp_path / "extended.yaml"
     p.write_text(extended, encoding="utf-8")
-    cfg = load_config(p)
-    assert cfg.seeds.numpy == 42  # foundational block still intact
+    with pytest.raises(ConfigError):
+        load_config(p)
 
 
 def test_non_mapping_top_level_raises(tmp_path: Path) -> None:

@@ -13,12 +13,18 @@ packages = [{ include = "app" }]
 python = "^3.11"
 pydantic = "^2.7"
 pyyaml = "^6.0"
+# F01 ingestion: telemetry frames + Parquet cache. pandas 2.x / numpy 1.x are the
+# constitution's pins; the build environment here runs Python 3.14, where only
+# pandas 3.x / numpy 2.x wheels exist — see README/handover note on the version skew.
+pandas = ">=2.2"
+pyarrow = ">=15.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
 ruff = "^0.5"
 mypy = "^1.10"
 types-pyyaml = "^6.0"
+pandas-stubs = ">=2.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -38,6 +44,13 @@ files = ["app"]
 strict = true
 warn_unused_ignores = true
 warn_redundant_casts = true
+
+# numpy 2.x ships stubs that use 3.12+ `type` syntax, unparseable under our 3.11
+# target. We never import numpy directly (only via pandas), so skip following it.
+[[tool.mypy.overrides]]
+module = "numpy.*"
+follow_imports = "skip"
+follow_imports_for_stubs = true
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

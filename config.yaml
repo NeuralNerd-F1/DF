@@ -31,3 +31,14 @@ thresholds:
   min_clean_laps: 30             # min clean laps per driver-circuit combination (§3.2)
   sample_rate_floor_hz: 20       # effective sampling-rate floor after interpolation (§3.3)
   laptime_bound_pct: 115         # lap-time must be within this % of driver median (§3.3)
+
+# --- F01 data ingestion (§3.1, §8.2, §8.3) ---------------------------------
+# Telemetry cache lives at paths.cache_dir (single source of truth — this block
+# deliberately omits cache_dir; ingest reads paths.cache_dir). Every external call
+# goes through call_with_breaker using the per-source policy below.
+ingest:
+  cache_max_age_days: 7            # §8.2 — use cache if fresher than this
+  breakers:
+    fastf1:  { timeout_s: 30, retries: 3, backoff_s: [5, 15, 30], open_after: 3, window_s: 60 }
+    openf1:  { timeout_s: 10, retries: 3, backoff_s: [2, 5, 10],  open_after: 3, window_s: 60 }
+    ergast:  { timeout_s: 10, retries: 2, backoff_s: [3, 8],      open_after: 2, window_s: 60 }

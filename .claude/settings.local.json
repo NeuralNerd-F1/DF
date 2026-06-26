@@ -32,7 +32,29 @@
       "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest ===\"; & $py -m pytest -q 2>&1 | Select-Object -Last 12; \"=== ruff ===\"; & $py -m ruff check . 2>&1 | Select-Object -Last 10; \"=== mypy ===\"; & $py -m mypy app 2>&1 | Select-Object -Last 6)",
       "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest ===\"; & $py -m pytest -q 2>&1 | Select-Object -Last 4; \"=== ruff ===\"; & $py -m ruff check . 2>&1 | Select-Object -Last 3)",
       "PowerShell(git *)",
-      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest \\(F01 scope\\) ===\"; & $py -m pytest tests/pipeline tests/contracts/test_config.py tests/contracts/test_errors.py -q 2>&1 | Select-Object -Last 6; \"=== mypy ===\"; & $py -m mypy app 2>&1 | Select-Object -Last 4)"
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest \\(F01 scope\\) ===\"; & $py -m pytest tests/pipeline tests/contracts/test_config.py tests/contracts/test_errors.py -q 2>&1 | Select-Object -Last 6; \"=== mypy ===\"; & $py -m mypy app 2>&1 | Select-Object -Last 4)",
+      "Bash(python -c \"import pypdf; print\\('pypdf ok'\\)\")",
+      "Bash(python -c \"import pdfplumber; print\\('pdfplumber ok'\\)\")",
+      "Bash(python -c \"import fitz; print\\('fitz ok'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python *)",
+      "PowerShell(git status; \"----DIFFSTAT----\"; git diff --stat)",
+      "PowerShell(git branch -vv; \"----REFLOG----\"; git reflog -8; \"----REMOTE----\"; git log --oneline origin/master -5)",
+      "PowerShell(git diff specs/00-INDEX.md; \"=====SETTINGS=====\"; git diff .claude/settings.local.json)",
+      "PowerShell(git branch --show-current; git log --oneline -3; \"----MERGE-BASE CHECK----\"; git merge-base --is-ancestor origin/master HEAD; if \\($?\\) { \"feature branch contains origin/master: YES\" } else { \"NO\" })",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -c \"from app.contracts.config import load_config; c = load_config\\(\\); print\\('validate block:', c.validate\\); print\\('green:', repr\\(c.validate.green_track_status_code\\)\\); print\\('thresholds floor:', c.thresholds.sample_rate_floor_hz\\)\")",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -W error::UserWarning -c \"from app.contracts.config import load_config; c = load_config\\(\\); print\\('OK lap_validation:', c.lap_validation.green_track_status_code, c.lap_validation.required_channels\\)\")",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py \"C:\\\\Users\\\\sabah\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--COMP702-DF\\\\9f3039c6-a49d-4992-988b-02222bdee232\\\\scratchpad\\\\smoke.py\")",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; $env:PYTHONPATH = \\(Get-Location\\).Path; & $py \"C:\\\\Users\\\\sabah\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--COMP702-DF\\\\9f3039c6-a49d-4992-988b-02222bdee232\\\\scratchpad\\\\smoke.py\")",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m pytest tests/pipeline/test_validate.py -q 2>&1 | Select-Object -Last 40)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest \\(full\\) ===\"; & $py -m pytest -q 2>&1 | Select-Object -Last 8; \"=== ruff ===\"; & $py -m ruff check . 2>&1 | Select-Object -Last 15; \"=== mypy ===\"; & $py -m mypy app 2>&1 | Select-Object -Last 12)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m ruff check . 2>&1 | Select-String -Pattern \"^\\\\S+\\\\.py:|E501|F401|-->\" | Select-Object -First 30)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m ruff check . --fix 2>&1 | Select-Object -Last 5)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m ruff check . 2>&1 | Select-String -Pattern \"E501|-->\")",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m ruff check . 2>&1 | Select-String -Pattern \"E501|B905|-->\")",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== ruff ===\"; & $py -m ruff check . 2>&1 | Select-Object -Last 4; \"=== mypy ===\"; & $py -m mypy app 2>&1 | Select-Object -Last 3; \"=== pytest ===\"; & $py -m pytest -q 2>&1 | Select-Object -Last 4)",
+      "PowerShell(git --no-pager diff --stat HEAD; \"==================== FULL DIFF \\(app + config\\) ====================\"; git --no-pager diff HEAD -- app/ config.yaml)",
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest \\(F02 scope\\) ===\"; & $py -m pytest tests/pipeline/test_validate.py -q 2>&1 | Select-Object -Last 6; \"=== mypy \\(touched\\) ===\"; & $py -m mypy app/pipeline/validate.py app/contracts/config.py app/contracts/enums.py 2>&1 | Select-Object -Last 4; \"=== test count ===\"; & $py -m pytest tests/pipeline/test_validate.py --collect-only -q 2>&1 | Select-Object -Last 2)"
     ]
   }
 }

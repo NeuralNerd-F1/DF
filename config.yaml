@@ -42,3 +42,16 @@ ingest:
     fastf1:  { timeout_s: 30, retries: 3, backoff_s: [5, 15, 30], open_after: 3, window_s: 60 }
     openf1:  { timeout_s: 10, retries: 3, backoff_s: [2, 5, 10],  open_after: 3, window_s: 60 }
     ergast:  { timeout_s: 10, retries: 2, backoff_s: [3, 8],      open_after: 2, window_s: 60 }
+
+# --- F02 lap filter chain / validation contract (§3.2, §3.3) ---------------
+# The 9-filter data-quality gate between F01's cache and F03 feature extraction.
+# Shared bounds (sample_rate_floor_hz=20, laptime_bound_pct=115, min_clean_laps=30)
+# live under `thresholds:` above and are referenced there, never re-declared here.
+validate:
+  required_channels: [Speed, Throttle, Brake, RPM, Gear]  # §3.3 LAP_003 completeness set
+  green_track_status_code: "1"       # §3.3 LAP_001 — FastF1 green token; green iff every token == this
+  max_consecutive_nan_pct: 10        # §3.3 LAP_003 — > N% consecutive NaN in a channel -> reject
+  interp_gap_max_samples: 5          # §3.3 LAP_INTERP — gaps of 1..N consecutive NaN linear-interpolated
+  min_moving_speed_kmh: 0            # §3.3 LAP_005 — speed must exceed this to count as moving
+  max_stationary_fraction: 0.01      # §3.3 LAP_005 — stationary samples must be < this (>99% moving)
+  degradation_features: [F27, F28]   # §3.3 LAP_PARTIAL — NULL'd when tyre age UNKNOWN

@@ -19,7 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.contracts.errors import ErrorCode
 
@@ -110,6 +110,37 @@ class IngestConfig(BaseModel):
     breakers: IngestBreakers
 
 
+class ValidateConfig(BaseModel):
+    """Typed view over the ``validate:`` block (F02 lap filter chain, §3.2/§3.3).
+
+    Lives here, not in ``app/pipeline/validate.py`` (standing rule, F01): the feature
+    reads its config through a strictly-validated model. Holds only the constants
+    unique to F02; the shared bounds it also needs — ``sample_rate_floor_hz`` (20 Hz),
+    ``laptime_bound_pct`` (115%), ``min_clean_laps`` (30) — are read from
+    ``Thresholds`` so this file stays the single source for each value.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    required_channels: list[str]  # §3.3 LAP_003 completeness check set
+    green_track_status_code: str  # §3.3 LAP_001 — green token; lap green iff every token == this
+    max_consecutive_nan_pct: float  # §3.3 LAP_003 — > N% consecutive NaN in a channel -> reject
+    interp_gap_max_samples: int  # §3.3 LAP_INTERP — 1..N consecutive-NaN gaps interpolated
+    min_moving_speed_kmh: float  # §3.3 LAP_005 — speed must exceed this to count as moving
+    max_stationary_fraction: float  # §3.3 LAP_005 — stationary samples must be < this (>99% moving)
+    degradation_features: list[str]  # §3.3 LAP_PARTIAL — NULL'd when tyre age UNKNOWN
+
+    @model_validator(mode="after")
+    def _speed_channel_present(self) -> ValidateConfig:
+        """LAP_005 (speed anomaly) reads the ``Speed`` channel, so it MUST be one of the
+        required channels. Enforcing it here turns a bad config into a build-breaking
+        ``CONFIG_001`` at load time, rather than a per-lap ``KeyError`` that the validator
+        would otherwise launder into a whole-combination exclusion."""
+        if "Speed" not in self.required_channels:
+            raise ValueError("validate.required_channels must include 'Speed' (LAP_005 reads it)")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -120,13 +151,18 @@ class AppConfig(BaseModel):
     still loads.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    # populate_by_name lets the `lap_validation` field be set by its YAML alias
+    # `validate` (which would otherwise shadow a BaseModel attribute) or by name.
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     seeds: Seeds
     paths: Paths
     held_out_circuits: list[str]  # quarantined from all training (§3.2)
     thresholds: Thresholds
     ingest: IngestConfig | None = None  # F01; None until the ingest: block is present
+    # YAML key is `validate:`; the Python attribute is `lap_validation` to avoid
+    # shadowing pydantic's deprecated BaseModel.validate (F02; None until block present).
+    lap_validation: ValidateConfig | None = Field(default=None, alias="validate")
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:

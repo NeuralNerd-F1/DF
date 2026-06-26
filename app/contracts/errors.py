@@ -47,6 +47,8 @@ class ErrorCode(StrEnum):
     LAP_PARTIAL = "LAP_PARTIAL"  # tyre age UNKNOWN -> F27/F28 NULL, lap still accepted
     COMBO_001 = "COMBO_001"  # < 30 clean laps post-filter -> exclude combination
     DATA_INSUFFICIENT = "DATA_INSUFFICIENT"  # < 30 clean laps coverage (§3.2)
+    ORPHAN_SAMPLES = "ORPHAN_SAMPLES"  # telemetry samples with no lap key -> dropped + logged (F02)
+    VALIDATION_ERROR = "VALIDATION_ERROR"  # validator-internal / structural fault (F02)
 
     # --- Feature extraction (F03) — §4 --------------------------------------
     FEATURE_001 = "FEATURE_001"  # feature out-of-range / failed -> NULL + logged

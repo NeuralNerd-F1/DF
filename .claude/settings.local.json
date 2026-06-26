@@ -54,7 +54,9 @@
       "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; & $py -m ruff check . 2>&1 | Select-String -Pattern \"E501|B905|-->\")",
       "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== ruff ===\"; & $py -m ruff check . 2>&1 | Select-Object -Last 4; \"=== mypy ===\"; & $py -m mypy app 2>&1 | Select-Object -Last 3; \"=== pytest ===\"; & $py -m pytest -q 2>&1 | Select-Object -Last 4)",
       "PowerShell(git --no-pager diff --stat HEAD; \"==================== FULL DIFF \\(app + config\\) ====================\"; git --no-pager diff HEAD -- app/ config.yaml)",
-      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest \\(F02 scope\\) ===\"; & $py -m pytest tests/pipeline/test_validate.py -q 2>&1 | Select-Object -Last 6; \"=== mypy \\(touched\\) ===\"; & $py -m mypy app/pipeline/validate.py app/contracts/config.py app/contracts/enums.py 2>&1 | Select-Object -Last 4; \"=== test count ===\"; & $py -m pytest tests/pipeline/test_validate.py --collect-only -q 2>&1 | Select-Object -Last 2)"
+      "PowerShell($py = \".\\\\.venv\\\\Scripts\\\\python.exe\"; \"=== pytest \\(F02 scope\\) ===\"; & $py -m pytest tests/pipeline/test_validate.py -q 2>&1 | Select-Object -Last 6; \"=== mypy \\(touched\\) ===\"; & $py -m mypy app/pipeline/validate.py app/contracts/config.py app/contracts/enums.py 2>&1 | Select-Object -Last 4; \"=== test count ===\"; & $py -m pytest tests/pipeline/test_validate.py --collect-only -q 2>&1 | Select-Object -Last 2)",
+      "Bash(git checkout *)",
+      "Bash(git --no-pager diff --stat HEAD)"
     ]
   }
 }

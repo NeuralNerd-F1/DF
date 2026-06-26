@@ -62,3 +62,9 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   Pydantic schemas earlier (Wk 15) but wire real outputs after.
 - The held-out circuits (Belgium, Italy) are quarantined from F00 onward; F20 is the
   only place they are evaluated.
+
+## Amendments
+- **F01 — 2026-06-26 (feature/F01-track-status):** additive change — raw per-lap
+  `track_status` (FastF1 `Laps.TrackStatus`) is now persisted to the Parquet cache and
+  added to the F01→F02 column contract; new `TRACK_STATUS_UNAVAILABLE` error code. See
+  `specs/F01-data-ingestion.md` §11.

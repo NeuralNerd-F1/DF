@@ -69,6 +69,16 @@ def openf1_frame(laps: tuple[int, ...] = (1, 2, 3)) -> pd.DataFrame:
     )
 
 
+def track_status_frame(
+    laps: tuple[int, ...] = (1, 2, 3), status: dict[int, str] | None = None
+) -> pd.DataFrame:
+    """FastF1 Laps.TrackStatus per lap: raw status code (default "1" = all-green)."""
+    status = status or {}
+    return pd.DataFrame(
+        {"lap": list(laps), "track_status": [status.get(lap, "1") for lap in laps]}
+    )
+
+
 def ergast_frame(laps: tuple[int, ...] = (1, 2, 3), *, with_compound: bool = False) -> pd.DataFrame:
     """Ergast per-lap context: lap_time, stint, tyre_age (+ compound when it is the fallback)."""
     data = {

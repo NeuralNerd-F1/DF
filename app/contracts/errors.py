@@ -34,6 +34,7 @@ class ErrorCode(StrEnum):
     COMPOUND_FALLBACK = "COMPOUND_FALLBACK"  # OpenF1 down; compound sourced from Ergast (flag)
     DERIVED_AGE = "DERIVED_AGE"  # tyre age derived from pit flags (tag)
     CACHE_CORRUPT = "CACHE_CORRUPT"  # local Parquet cache unreadable/unwritable (F01 integrity)
+    TRACK_STATUS_UNAVAILABLE = "TRACK_STATUS_UNAVAILABLE"  # FastF1 Laps.TrackStatus absent (flag)
 
     # --- Lap filter chain (F02) — §3.2, §3.3 --------------------------------
     LAP_001 = "LAP_001"  # not green-flag (SC / VSC / red)

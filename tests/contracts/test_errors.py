@@ -20,6 +20,7 @@ EXPECTED_CODES: set[str] = {
     "COMPOUND_FALLBACK",
     "DERIVED_AGE",
     "CACHE_CORRUPT",
+    "TRACK_STATUS_UNAVAILABLE",
     # Lap filter chain (F02)
     "LAP_001",
     "LAP_002",

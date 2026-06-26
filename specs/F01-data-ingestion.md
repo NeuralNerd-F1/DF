@@ -52,6 +52,7 @@ ingest:
 | OpenF1 timeout >10s | breaker | — | Fall back to Ergast for compound | yes | none |
 | OpenF1 + Ergast both fail | both breakers open | `COMPOUND_UNKNOWN` | Mark compound UNKNOWN; exclude from compound-stratified analysis ONLY; core fingerprint unaffected | yes | "Compound unknown for N laps." |
 | Ergast unavailable | breaker | `DERIVED_AGE` (tag) | Derive tyre age from FastF1 pit flags; tag affected laps | yes | none |
+| Track status unavailable | `Laps.TrackStatus` missing/empty | `TRACK_STATUS_UNAVAILABLE` (flag) | Leave `track_status` null for affected laps; session continues, NOT failed | yes | none |
 | Any breaker trips | 3 (or 2) failures in window | — | Open circuit; subsequent calls return immediately with fallback within 500ms | yes | none |
 
 ## 7. Acceptance criteria
@@ -85,3 +86,12 @@ ingestion is out of scope (historical/cached only).
 - FastF1 gaps for specific driver-circuit-season combos (Risk Register row 2) ->
   combinations below 30 clean laps are dropped downstream in F02; ingestion only
   reports availability, it does not pad.
+
+## 11. Amendments
+- **2026-06-26 (feature/F01-track-status):** additive — persist the RAW per-lap
+  `track_status` (FastF1 `Laps.TrackStatus`) into the Parquet cache, left-joined on
+  `lap` like the compound/pit-flag columns. Stored verbatim with no green-flag
+  interpretation (that is F02's job, feeding `LAP_001`). When track status is
+  unavailable the column is left null for those laps and a `TRACK_STATUS_UNAVAILABLE`
+  row is written; the session is not failed. Adds `track_status` to the cached-column
+  contract (§4 method / docstring) and the `TRACK_STATUS_UNAVAILABLE` error code.

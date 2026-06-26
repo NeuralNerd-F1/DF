@@ -16,25 +16,36 @@ two typed errors below.
 
 Cached column contract — the F01 -> F02 handoff
 -----------------------------------------------
-A persisted session Parquet (``cache/<season>/<circuit>/<driver>.parquet``) holds one
-row per telemetry sample with these columns:
+A persisted session Parquet (``cache/<season>/<circuit>/<driver>.parquet``) ALWAYS
+holds one row per telemetry sample with EVERY one of these columns present (a column
+is never dropped — an unavailable source fills it with the documented null marker):
 
 * FastF1 telemetry (~50 Hz): ``Speed``, ``Throttle``, ``Brake``, ``RPM``, ``Gear``,
   ``DRS``, ``X``, ``Y`` and the ``lap`` number the sample belongs to.
+* FastF1 ``Laps.TrackStatus`` (per lap, left-joined on ``lap``): ``track_status`` — the
+  RAW status code stored verbatim (no green-flag interpretation here; that is F02's
+  job). Null for affected laps when track status is unavailable (logged, never fatal).
 * OpenF1 enrichment (per lap, left-joined on ``lap``): ``compound``, ``pit_in``,
   ``pit_out``.
 * Ergast / derived lap context (per lap, left-joined on ``lap``): ``lap_time``,
   ``stint``, ``tyre_age``.
 
-When a source is unavailable the affected columns are still present but carry the
-documented fallback marker (``compound == "UNKNOWN"``, tyre age derived from pit
-flags) and the result's ``flags`` / ``data_quality_log`` record exactly which.
+Provenance (which source each column came from, and the fallback flags) is NOT
+recoverable from the frame's shape, so it is persisted in a sidecar JSON next to the
+Parquet (see :func:`cache_meta_path`). A cache read restores that provenance verbatim
+— a session ingested via a fallback is replayed as ``DEGRADED`` with the same flags,
+never laundered back to ``OK``.
+
+Batch ingestion: build the breakers ONCE with :func:`build_breakers` and pass the same
+dict to every :func:`ingest_session` call, so an open breaker short-circuits across the
+whole batch. Calling ``ingest_session`` without a ``breakers`` argument gives each call
+a fresh breaker (correct only for one-off ingests).
 """
 
 from __future__ import annotations
 
+import json
 import time
-from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -53,9 +64,23 @@ from app.contracts.results import BaseResult
 
 T = TypeVar("T")
 
-# Errors a corrupt / unwritable Parquet cache can raise. Caught so a bad cache file is
-# a typed, logged outcome — never an exception escaping ingest_session (non-negotiable #1).
-_CACHE_IO_ERRORS = (OSError, ValueError, pyarrow.ArrowInvalid)
+SECONDS_PER_DAY = 86_400.0
+
+# Errors a corrupt / unwritable / incomplete Parquet cache can raise. Caught so a bad
+# cache is a typed, logged outcome — never an exception escaping ingest_session (#1).
+_CACHE_IO_ERRORS = (OSError, ValueError, KeyError, pyarrow.ArrowInvalid)
+
+# The per-lap context columns the F01 -> F02 contract guarantees, with the null marker
+# used when a source could not supply them (so the column is present but explicitly empty).
+_CONTEXT_DEFAULTS: dict[str, object] = {
+    "track_status": pd.NA,
+    "compound": "UNKNOWN",
+    "pit_in": False,
+    "pit_out": False,
+    "lap_time": pd.NA,
+    "stint": pd.NA,
+    "tyre_age": pd.NA,
+}
 
 # ----------------------------------------------------------------------------------
 # Typed inputs / outputs
@@ -97,8 +122,8 @@ class IngestResult(BaseResult):
     """Typed outcome of ingesting one session.
 
     Inherits ``status`` / ``error_code`` / ``flags`` / ``logged`` from
-    :class:`BaseResult`. ``status`` is ``OK`` on a clean fetch (or fresh cache hit),
-    ``DEGRADED`` when a documented fallback fired (the ``flags`` say which), and
+    :class:`BaseResult`. ``status`` is ``OK`` on a clean fetch (or fresh clean cache
+    hit), ``DEGRADED`` when a documented fallback fired (the ``flags`` say which), and
     ``FAILED`` when no usable telemetry could be produced (``error_code`` says why).
     """
 
@@ -118,7 +143,7 @@ class IngestSourceError(Exception):
     """A transport / availability fault (timeout, connection error, 5xx).
 
     These are *retried* inside one :func:`call_with_breaker` invocation and, once a
-    call is fully exhausted, counted as one failure toward the breaker window.
+    call is fully exhausted, counted as one failure toward the breaker.
     """
 
 
@@ -158,36 +183,53 @@ class CircuitBreaker:
     The clock and the backoff sleeper are injected so tests never touch wall time
     (the freshness clock in :func:`ingest_session` is injected for the same reason).
 
-    Retry/breaker relationship (locked by F01): retries happen *inside* one
-    :func:`call_with_breaker` invocation; only a fully-exhausted invocation counts as
-    a single failure toward the window. The breaker opens once ``open_after`` such
-    failures fall inside ``window_s``; while open, calls short-circuit immediately
-    (no source call, no sleep) and never add further failures.
+    Semantics (locked by F01): retries happen *inside* one :func:`call_with_breaker`
+    invocation; only a fully-exhausted invocation counts as one failure. The breaker
+    counts *consecutive* exhausted failures and opens once it reaches ``open_after`` —
+    counting consecutively rather than over a wall-clock window is deliberate, because
+    a source's own retry backoff (e.g. FastF1's 5+15+30 s) can exceed ``window_s``, so
+    a sliding-window count could never reach the threshold during a real outage. A
+    ``success`` resets the streak; an idle gap longer than ``window_s`` between failures
+    also resets it (an isolated blip is forgotten). Once open, calls short-circuit
+    immediately for ``window_s`` (the cooldown), after which one trial call is allowed.
     """
 
     name: str
     config: BreakerConfig
     clock: Callable[[], float] = time.monotonic
     sleep: Callable[[float], None] = time.sleep
-    _failures: deque[float] = field(default_factory=deque, repr=False)
-
-    def _prune(self, now: float) -> None:
-        """Drop failure timestamps that have aged out of the rolling window."""
-        horizon = now - self.config.window_s
-        while self._failures and self._failures[0] <= horizon:
-            self._failures.popleft()
+    _consecutive: int = field(default=0, repr=False)
+    _last_failure_at: float | None = field(default=None, repr=False)
+    _opened_at: float | None = field(default=None, repr=False)
 
     def failure_count(self) -> int:
-        """Number of post-retry failures currently inside the window."""
-        self._prune(self.clock())
-        return len(self._failures)
+        """Consecutive post-retry failures recorded (the count that trips the breaker)."""
+        return self._consecutive
 
     def is_open(self) -> bool:
-        """True once the in-window failure count reaches ``open_after``."""
-        return self.failure_count() >= self.config.open_after
+        """True while the breaker is open and still inside its ``window_s`` cooldown."""
+        if self._opened_at is None:
+            return False
+        # Cooldown elapsed -> half-open: allow one trial call through.
+        return (self.clock() - self._opened_at) < self.config.window_s
 
-    def _record_failure(self) -> None:
-        self._failures.append(self.clock())
+    def record_success(self) -> None:
+        """A successful call closes the breaker and clears the failure streak."""
+        self._consecutive = 0
+        self._last_failure_at = None
+        self._opened_at = None
+
+    def record_failure(self) -> None:
+        """A fully-exhausted call: extend the streak and open if it hits ``open_after``."""
+        now = self.clock()
+        if self._last_failure_at is not None and now - self._last_failure_at > self.config.window_s:
+            # Failures spaced further apart than the window are not a sustained outage.
+            self._consecutive = 0
+            self._opened_at = None
+        self._consecutive += 1
+        self._last_failure_at = now
+        if self._consecutive >= self.config.open_after:
+            self._opened_at = now
 
 
 def call_with_breaker(breaker: CircuitBreaker, fn: Callable[[], T]) -> T:
@@ -209,13 +251,16 @@ def call_with_breaker(breaker: CircuitBreaker, fn: Callable[[], T]) -> T:
     last_exc: IngestSourceError | None = None
     for i in range(attempts):
         try:
-            return fn()
+            result = fn()
         except IngestSourceError as exc:  # transport fault — retry, then count once
             last_exc = exc
             if i < attempts - 1:
                 breaker.sleep(backoff[min(i, len(backoff) - 1)])
+        else:
+            breaker.record_success()
+            return result
     # Every attempt failed: this whole invocation is exactly one failure.
-    breaker._record_failure()
+    breaker.record_failure()
     raise SourceUnavailableError(breaker.name, short_circuited=False, cause=last_exc)
 
 
@@ -225,8 +270,13 @@ def build_breakers(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, CircuitBreaker]:
-    """Construct the three source breakers from the validated ``ingest:`` config."""
-    if config.ingest is None:  # pragma: no cover - guarded by config validation
+    """Construct the three source breakers from the validated ``ingest:`` config.
+
+    Precondition: ``config.ingest`` is present (callers that load a config without an
+    ``ingest:`` block must handle that before calling this — :func:`ingest_session`
+    does, returning a typed ``CONFIG_001`` result).
+    """
+    if config.ingest is None:
         raise ValueError("config.ingest is missing; cannot build breakers")
     b = config.ingest.breakers
     return {
@@ -237,7 +287,7 @@ def build_breakers(
 
 
 # ----------------------------------------------------------------------------------
-# Cache
+# Cache (Parquet frame + provenance sidecar)
 # ----------------------------------------------------------------------------------
 
 
@@ -246,12 +296,56 @@ def cache_path_for(request: SessionRequest, cache_dir: Path) -> Path:
     return cache_dir / str(request.season) / request.circuit / f"{request.driver}.parquet"
 
 
+def cache_meta_path(cpath: Path) -> Path:
+    """Sidecar path carrying a cached session's provenance: ``<cpath>.meta.json``."""
+    return cpath.with_name(cpath.name + ".meta.json")
+
+
 def _cache_is_fresh(path: Path, max_age_days: int, now_epoch: float) -> bool:
     """True if ``path`` exists and is younger than ``max_age_days`` at ``now_epoch``."""
     if not path.is_file():
         return False
-    age_days = (now_epoch - path.stat().st_mtime) / 86400.0
+    age_days = (now_epoch - path.stat().st_mtime) / SECONDS_PER_DAY
     return age_days < max_age_days
+
+
+def _write_cache(
+    cpath: Path,
+    telemetry: pd.DataFrame,
+    *,
+    compound_source: CompoundSource,
+    tyre_age_source: TyreAgeSource,
+    flags: list[ErrorCode],
+) -> None:
+    """Persist the telemetry frame and its provenance sidecar atomically-ish."""
+    cpath.parent.mkdir(parents=True, exist_ok=True)
+    telemetry.to_parquet(cpath, index=False)
+    meta = {
+        "compound_source": compound_source.value,
+        "tyre_age_source": tyre_age_source.value,
+        "flags": [f.value for f in flags],
+    }
+    cache_meta_path(cpath).write_text(json.dumps(meta), encoding="utf-8")
+
+
+def _read_cached_session(
+    cpath: Path,
+) -> tuple[pd.DataFrame, CompoundSource, TyreAgeSource, list[ErrorCode]]:
+    """Read a cached frame and its provenance sidecar.
+
+    Raises one of ``_CACHE_IO_ERRORS`` if the Parquet or the sidecar is missing,
+    unreadable, or malformed — so an incomplete cache is treated as corrupt rather than
+    served with guessed provenance.
+    """
+    df = pd.read_parquet(cpath)
+    mpath = cache_meta_path(cpath)
+    if not mpath.is_file():
+        raise ValueError(f"cache provenance sidecar missing for {cpath}")
+    meta = json.loads(mpath.read_text(encoding="utf-8"))
+    compound_source = CompoundSource(meta["compound_source"])
+    tyre_age_source = TyreAgeSource(meta["tyre_age_source"])
+    flags = [ErrorCode(f) for f in meta["flags"]]
+    return df, compound_source, tyre_age_source, flags
 
 
 # ----------------------------------------------------------------------------------
@@ -262,25 +356,45 @@ def _cache_is_fresh(path: Path, max_age_days: int, now_epoch: float) -> bool:
 def _merge_on_lap(
     telemetry: pd.DataFrame, context: pd.DataFrame, columns: list[str]
 ) -> pd.DataFrame:
-    """Left-join the named per-lap ``columns`` of ``context`` onto ``telemetry`` by ``lap``."""
-    take = ["lap", *[c for c in columns if c in context.columns]]
-    return telemetry.merge(context[take], on="lap", how="left")
+    """Left-join the named per-lap ``columns`` of ``context`` onto ``telemetry`` by ``lap``.
 
-
-def _derive_tyre_age_from_pit(telemetry: pd.DataFrame) -> pd.DataFrame:
-    """Derive per-lap ``tyre_age`` from ``pit_out`` flags (Ergast-down fallback).
-
-    Tyre age = laps completed since the most recent pit-out (a fresh stint starts at
-    age 0 on its out-lap). Vectorised over the unique lap list — no per-row Python loop.
+    Defensive against malformed adapter frames: if ``context`` has no ``lap`` key or is
+    empty, nothing is merged (the caller's fallback then fills the columns). The context
+    is de-duplicated on ``lap`` first so a source returning multiple rows per lap can
+    never multiply the telemetry row count.
     """
-    out = telemetry.copy()
-    out = out.drop(columns=["tyre_age"], errors="ignore")
+    present = [c for c in columns if c in context.columns]
+    if "lap" not in context.columns or context.empty or not present:
+        return telemetry
+    keep_cols: list[str] = ["lap", *present]
+    per_lap = context.reindex(columns=keep_cols).drop_duplicates(subset="lap", keep="first")
+    return telemetry.merge(per_lap, on="lap", how="left")
+
+
+def _ensure_columns(df: pd.DataFrame, defaults: dict[str, object]) -> pd.DataFrame:
+    """Guarantee every key in ``defaults`` is a column, filling absent ones with its value."""
+    missing = {c: v for c, v in defaults.items() if c not in df.columns}
+    if not missing:
+        return df
+    df = df.copy()
+    for col, value in missing.items():
+        df[col] = value
+    return df
+
+
+def _derive_stint_and_age_from_pit(telemetry: pd.DataFrame) -> pd.DataFrame:
+    """Derive per-lap ``stint`` and ``tyre_age`` from ``pit_out`` flags (Ergast-down fallback).
+
+    Stint increments on each pit-out lap; tyre age = laps completed since that stint's
+    out-lap. Vectorised over the unique lap list — no per-row Python loop.
+    """
+    out = telemetry.copy().drop(columns=["stint", "tyre_age"], errors="ignore")
     laps = pd.Index(sorted(out["lap"].unique()), name="lap")
     pit_out = out.groupby("lap")["pit_out"].max().reindex(laps).fillna(False).astype(bool)
-    # Stint index increments on each pit-out lap; age = position within the stint.
-    stint = pit_out.cumsum()
-    age_by_lap = pit_out.groupby(stint).cumcount().rename("tyre_age").reset_index()
-    return out.merge(age_by_lap, on="lap", how="left")
+    stint = pit_out.cumsum().clip(lower=1)  # 1-based stint index
+    age = pit_out.groupby(stint).cumcount()
+    per_lap = pd.DataFrame({"lap": laps, "stint": stint.to_numpy(), "tyre_age": age.to_numpy()})
+    return out.merge(per_lap, on="lap", how="left")
 
 
 # ----------------------------------------------------------------------------------
@@ -313,6 +427,30 @@ class _Ledger:
             self.flags.append(code)
 
 
+def _config_missing_result(request: SessionRequest, config: AppConfig) -> IngestResult:
+    """Typed result when the loaded config has no ``ingest:`` block (no bare raise, #1)."""
+    log_data_quality(
+        error_code=ErrorCode.CONFIG_001,
+        entity_type="session",
+        entity_id=request.entity_id,
+        error_detail="config.ingest block absent; cannot ingest",
+        fallback_used=False,
+        log_path=Path(config.paths.data_quality_log),
+    )
+    return IngestResult(
+        status=Status.FAILED, error_code=ErrorCode.CONFIG_001, source_used="", rows=0, logged=True
+    )
+
+
+def _data_001(ledger: _Ledger, detail: str) -> IngestResult:
+    """FastF1 session unavailable / unusable: skip, never substitute."""
+    ledger.record(ErrorCode.DATA_001, detail, fallback_used=False, flag=False)
+    return IngestResult(
+        status=Status.FAILED, error_code=ErrorCode.DATA_001, source_used="fastf1", rows=0,
+        logged=True,
+    )
+
+
 def ingest_session(
     request: SessionRequest,
     config: AppConfig,
@@ -320,6 +458,7 @@ def ingest_session(
     fastf1_fetch: Callable[[SessionRequest], pd.DataFrame],
     openf1_fetch: Callable[[SessionRequest], pd.DataFrame],
     ergast_fetch: Callable[[SessionRequest], pd.DataFrame],
+    fastf1_laps_fetch: Callable[[SessionRequest], pd.DataFrame] | None = None,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
     now_epoch: Callable[[], float] = time.time,
@@ -331,92 +470,87 @@ def ingest_session(
     fallback writes one ``data_quality_log`` row and is reflected in the returned
     :class:`IngestResult`. The cache is always consulted before any network call.
 
-    The ``clock`` (breaker window) and ``now_epoch`` (cache freshness) clocks plus the
-    backoff ``sleep`` are injected so the whole flow is deterministic under test.
-    """
-    if config.ingest is None:  # pragma: no cover - guarded by config validation
-        raise ValueError("config.ingest is missing; cannot ingest")
+    ``fastf1_laps_fetch`` supplies the per-lap FastF1 ``Laps.TrackStatus`` frame
+    (``[lap, track_status]``); when omitted, track status is recorded as unavailable.
 
-    cache_dir = Path(config.paths.cache_dir)
+    The ``clock`` (breaker), ``now_epoch`` (cache freshness) and ``sleep`` (backoff) are
+    injected so the whole flow is deterministic under test. For batch ingestion, build
+    ``breakers`` once and pass the same dict to every call (see the module docstring).
+    """
+    if config.ingest is None:
+        return _config_missing_result(request, config)
+
     log_path = Path(config.paths.data_quality_log)
-    cpath = cache_path_for(request, cache_dir)
+    cpath = cache_path_for(request, Path(config.paths.cache_dir))
     ledger = _Ledger(log_path=log_path, entity_id=request.entity_id)
     if breakers is None:
         breakers = build_breakers(config, clock=clock, sleep=sleep)
 
-    # 1) Cache-first: a fresh cache hit is served without any network call. A corrupt
-    #    cache is not fatal — it is logged and treated as a miss, so we fetch fresh.
+    # 1) Cache-first: a fresh cache hit is served without any network call. Provenance
+    #    is restored from the sidecar, so a previously-degraded session is NOT laundered
+    #    to OK. A corrupt/incomplete cache is logged and treated as a miss (refetch).
     if _cache_is_fresh(cpath, config.ingest.cache_max_age_days, now_epoch()):
         try:
-            cached = pd.read_parquet(cpath)
+            cached, compound_source, tyre_age_source, flags = _read_cached_session(cpath)
         except _CACHE_IO_ERRORS as exc:
             ledger.record(
-                ErrorCode.CACHE_CORRUPT,
-                f"fresh cache unreadable, refetching: {exc}",
+                ErrorCode.CACHE_CORRUPT, f"fresh cache unreadable, refetching: {exc}",
                 fallback_used=True,
             )
         else:
+            cached = _ensure_columns(cached, _CONTEXT_DEFAULTS)  # honour the column contract
             return IngestResult(
-                status=Status.OK,
+                status=Status.DEGRADED if flags else Status.OK,
+                flags=flags,
                 source_used="cache",
                 rows=int(len(cached)),
-                compound_source=_compound_source_of(cached),
-                tyre_age_source=_tyre_age_source_of(cached),
+                compound_source=compound_source,
+                tyre_age_source=tyre_age_source,
                 cache_path=cpath,
+                logged=bool(flags),  # degradations were logged at original fetch time
             )
 
     # 2) FastF1 — primary telemetry. Distinguish "no such session" from "source down".
     try:
         telemetry = call_with_breaker(breakers["fastf1"], lambda: fastf1_fetch(request))
     except SessionUnavailableError:
-        # Session genuinely unavailable: skip, never substitute (not even from cache).
-        ledger.record(
-            ErrorCode.DATA_001, "FastF1 session unavailable", fallback_used=False, flag=False
-        )
-        return IngestResult(
-            status=Status.FAILED, error_code=ErrorCode.DATA_001,
-            source_used="fastf1", rows=0, logged=True,
-        )
+        return _data_001(ledger, "FastF1 session unavailable")
     except SourceUnavailableError:
-        # Source down (breaker open or retries exhausted). Serve stale cache if present.
-        return _fastf1_down(request, cpath, ledger)
+        return _fastf1_down(cpath, ledger)
 
     if telemetry is None or len(telemetry) == 0:
-        # Empty frame is the same outcome as an unavailable session.
-        ledger.record(
-            ErrorCode.DATA_001, "FastF1 returned an empty frame", fallback_used=False, flag=False
-        )
-        return IngestResult(
-            status=Status.FAILED, error_code=ErrorCode.DATA_001,
-            source_used="fastf1", rows=0, logged=True,
-        )
+        return _data_001(ledger, "FastF1 returned an empty frame")
+    if "lap" not in telemetry.columns:
+        return _data_001(ledger, "FastF1 frame missing the 'lap' key column")
 
-    # 3) Enrich compound + pit flags from OpenF1; fall back to Ergast for compound.
-    telemetry, compound_source = _enrich_compound(
+    # 2b) Attach the raw per-lap FastF1 track status (no green-flag interpretation).
+    telemetry = _attach_track_status(request, telemetry, fastf1_laps_fetch, ledger)
+
+    # 3) Enrich compound (+ pit flags) and lap context (lap_time/stint/tyre_age).
+    #    OpenF1 and Ergast are each fetched at most once (Ergast serves both the
+    #    compound fallback and the lap context).
+    telemetry, compound_source, tyre_age_source = _enrich(
         request, telemetry, openf1_fetch, ergast_fetch, breakers, ledger
     )
 
-    # 4) Lap context (lap_time, stint, tyre_age) from Ergast; derive age if Ergast down.
-    telemetry, tyre_age_source = _enrich_lap_context(
-        request, telemetry, ergast_fetch, breakers, ledger
-    )
+    # Guarantee the full F01 -> F02 column contract before persisting.
+    telemetry = _ensure_columns(telemetry, _CONTEXT_DEFAULTS)
 
-    # 5) Persist the (possibly fallback-marked) telemetry to the Parquet cache. The
-    #    cache is an optimisation, never a hard dependency: a write failure is logged
-    #    and degrades the result, but the freshly-fetched telemetry is still returned.
+    # 5) Persist telemetry + provenance. The cache is an optimisation, never a hard
+    #    dependency: a write failure is logged and degrades the result, but the
+    #    freshly-fetched telemetry is still returned.
     written_path: Path | None = cpath
     try:
-        cpath.parent.mkdir(parents=True, exist_ok=True)
-        telemetry.to_parquet(cpath, index=False)
-    except _CACHE_IO_ERRORS as exc:
-        ledger.record(
-            ErrorCode.CACHE_CORRUPT, f"cache write failed: {exc}", fallback_used=False
+        _write_cache(
+            cpath, telemetry, compound_source=compound_source,
+            tyre_age_source=tyre_age_source, flags=list(ledger.flags),
         )
+    except _CACHE_IO_ERRORS as exc:
+        ledger.record(ErrorCode.CACHE_CORRUPT, f"cache write failed: {exc}", fallback_used=False)
         written_path = None
 
-    status = Status.DEGRADED if ledger.flags else Status.OK
     return IngestResult(
-        status=status,
+        status=Status.DEGRADED if ledger.flags else Status.OK,
         flags=list(ledger.flags),
         source_used="fastf1",
         rows=int(len(telemetry)),
@@ -427,134 +561,152 @@ def ingest_session(
     )
 
 
-def _fastf1_down(request: SessionRequest, cpath: Path, ledger: _Ledger) -> IngestResult:
+def _fastf1_down(cpath: Path, ledger: _Ledger) -> IngestResult:
     """FastF1 source is down: serve stale cache (STALE_DATA) or fail (DATA_SOURCE_UNAVAILABLE)."""
     if cpath.is_file():
         try:
-            cached = pd.read_parquet(cpath)
+            cached, compound_source, tyre_age_source, carried = _read_cached_session(cpath)
         except _CACHE_IO_ERRORS as exc:
-            # Source down AND the only cache is corrupt -> no usable telemetry.
+            # Source down AND the only cache is corrupt/incomplete -> no usable telemetry.
             ledger.record(
-                ErrorCode.DATA_SOURCE_UNAVAILABLE,
-                f"FastF1 down and cache unreadable: {exc}",
-                fallback_used=False,
-                flag=False,
+                ErrorCode.DATA_SOURCE_UNAVAILABLE, f"FastF1 down and cache unreadable: {exc}",
+                fallback_used=False, flag=False,
             )
             return IngestResult(
-                status=Status.FAILED,
-                error_code=ErrorCode.DATA_SOURCE_UNAVAILABLE,
-                source_used="fastf1",
-                rows=0,
-                logged=True,
+                status=Status.FAILED, error_code=ErrorCode.DATA_SOURCE_UNAVAILABLE,
+                source_used="fastf1", rows=0, logged=True,
             )
-        ledger.record(
-            ErrorCode.STALE_DATA, "FastF1 down; served stale cache", fallback_used=True
-        )
+        ledger.record(ErrorCode.STALE_DATA, "FastF1 down; served stale cache", fallback_used=True)
+        cached = _ensure_columns(cached, _CONTEXT_DEFAULTS)  # honour the column contract
+        # Carry the cached session's own fallback flags forward, plus the stale flag.
+        flags = [*carried, *(f for f in ledger.flags if f not in carried)]
         return IngestResult(
-            status=Status.DEGRADED,
-            flags=list(ledger.flags),
-            source_used="cache",
-            rows=int(len(cached)),
-            compound_source=_compound_source_of(cached),
-            tyre_age_source=_tyre_age_source_of(cached),
-            cache_path=cpath,
-            logged=True,
+            status=Status.DEGRADED, flags=flags, source_used="cache", rows=int(len(cached)),
+            compound_source=compound_source, tyre_age_source=tyre_age_source,
+            cache_path=cpath, logged=True,
         )
     ledger.record(
-        ErrorCode.DATA_SOURCE_UNAVAILABLE,
-        "FastF1 down and no cache present",
-        fallback_used=False,
-        flag=False,
+        ErrorCode.DATA_SOURCE_UNAVAILABLE, "FastF1 down and no cache present",
+        fallback_used=False, flag=False,
     )
     return IngestResult(
-        status=Status.FAILED,
-        error_code=ErrorCode.DATA_SOURCE_UNAVAILABLE,
-        source_used="fastf1",
-        rows=0,
-        logged=True,
+        status=Status.FAILED, error_code=ErrorCode.DATA_SOURCE_UNAVAILABLE,
+        source_used="fastf1", rows=0, logged=True,
     )
 
 
-def _enrich_compound(
+def _try_source(
+    breaker: CircuitBreaker, fn: Callable[[], pd.DataFrame]
+) -> pd.DataFrame | None:
+    """Call an enrichment source through its breaker; return ``None`` if unavailable.
+
+    Both "source down" and "session has no data" map to ``None`` for an *enrichment*
+    source — the caller then falls back. (Only FastF1, the primary, distinguishes them.)
+    """
+    try:
+        return call_with_breaker(breaker, fn)
+    except (SourceUnavailableError, SessionUnavailableError):
+        return None
+
+
+def _has_values(df: pd.DataFrame, column: str) -> bool:
+    """True if ``column`` exists in ``df`` and holds at least one non-null value."""
+    return column in df.columns and bool(df[column].notna().any())
+
+
+def _attach_track_status(
+    request: SessionRequest,
+    telemetry: pd.DataFrame,
+    fastf1_laps_fetch: Callable[[SessionRequest], pd.DataFrame] | None,
+    ledger: _Ledger,
+) -> pd.DataFrame:
+    """Left-join the raw per-lap FastF1 ``track_status`` onto telemetry (no interpretation).
+
+    The status code is stored verbatim — green/SC/VSC classification is F02's job. If
+    track status is unavailable (no fetcher, a fetch fault, or no ``track_status``
+    values), the column is left null for every lap and one ``data_quality_log`` row is
+    written; the session is NOT failed (track status is non-critical context).
+    """
+    laps: pd.DataFrame | None = None
+    if fastf1_laps_fetch is not None:
+        try:
+            laps = fastf1_laps_fetch(request)
+        except (IngestSourceError, SourceUnavailableError, SessionUnavailableError):
+            # Covers a direct adapter fault AND an adapter that wraps the fetch in
+            # call_with_breaker (which raises SourceUnavailableError when the breaker
+            # is open / retries exhausted) — none may escape untyped.
+            laps = None
+    if laps is not None:
+        telemetry = _merge_on_lap(telemetry, laps, ["track_status"])
+    if _has_values(telemetry, "track_status"):
+        return telemetry
+    telemetry = _ensure_columns(telemetry, {"track_status": pd.NA})
+    ledger.record(
+        ErrorCode.TRACK_STATUS_UNAVAILABLE,
+        "FastF1 Laps.TrackStatus unavailable; track_status left null",
+        fallback_used=False,
+    )
+    return telemetry
+
+
+def _enrich(
     request: SessionRequest,
     telemetry: pd.DataFrame,
     openf1_fetch: Callable[[SessionRequest], pd.DataFrame],
     ergast_fetch: Callable[[SessionRequest], pd.DataFrame],
     breakers: dict[str, CircuitBreaker],
     ledger: _Ledger,
-) -> tuple[pd.DataFrame, CompoundSource]:
-    """Attach compound (+ pit flags) from OpenF1; on OpenF1 failure fall back to Ergast."""
-    try:
-        openf1 = call_with_breaker(breakers["openf1"], lambda: openf1_fetch(request))
+) -> tuple[pd.DataFrame, CompoundSource, TyreAgeSource]:
+    """Attach compound + pit flags + lap context, fetching each source at most once.
+
+    Always returns telemetry carrying every per-lap contract column; an unavailable
+    source is logged (COMPOUND_FALLBACK / COMPOUND_UNKNOWN / DERIVED_AGE) and its
+    columns are filled with the documented null marker rather than dropped.
+    """
+    openf1 = _try_source(breakers["openf1"], lambda: openf1_fetch(request))
+    ergast = _try_source(breakers["ergast"], lambda: ergast_fetch(request))
+
+    # --- compound (+ pit flags from OpenF1) ---
+    if openf1 is not None:
         telemetry = _merge_on_lap(telemetry, openf1, ["compound", "pit_in", "pit_out"])
-        return telemetry, CompoundSource.OPENF1
-    except (SourceUnavailableError, SessionUnavailableError):
-        pass  # OpenF1 unavailable -> try Ergast for compound (and keep pit flags absent).
-
-    try:
-        ergast = call_with_breaker(breakers["ergast"], lambda: ergast_fetch(request))
-    except (SourceUnavailableError, SessionUnavailableError):
-        ergast = None
-
-    if ergast is not None and "compound" in ergast.columns:
+    if _has_values(telemetry, "compound"):
+        compound_source = CompoundSource.OPENF1
+    elif ergast is not None and "compound" in ergast.columns:
         telemetry = _merge_on_lap(telemetry, ergast, ["compound"])
+        if _has_values(telemetry, "compound"):
+            compound_source = CompoundSource.ERGAST
+            ledger.record(
+                ErrorCode.COMPOUND_FALLBACK, "OpenF1 unavailable; compound sourced from Ergast",
+                fallback_used=True,
+            )
+        else:
+            compound_source = CompoundSource.UNKNOWN
+    else:
+        compound_source = CompoundSource.UNKNOWN
+
+    if compound_source is CompoundSource.UNKNOWN:
+        # Excluded from compound-stratified analysis only — core telemetry untouched.
+        telemetry = telemetry.copy()
+        telemetry["compound"] = "UNKNOWN"
         ledger.record(
-            ErrorCode.COMPOUND_FALLBACK,
-            "OpenF1 unavailable; compound sourced from Ergast",
+            ErrorCode.COMPOUND_UNKNOWN, "OpenF1 and Ergast both unavailable for compound",
+            fallback_used=False,
+        )
+    telemetry = _ensure_columns(telemetry, {"pit_in": False, "pit_out": False})
+
+    # --- lap context: lap_time, stint, tyre_age ---
+    if ergast is not None and "tyre_age" in ergast.columns:
+        telemetry = _merge_on_lap(telemetry, ergast, ["lap_time", "stint", "tyre_age"])
+    if _has_values(telemetry, "tyre_age"):
+        tyre_age_source = TyreAgeSource.ERGAST
+    else:
+        # Ergast down / no tyre age: derive stint + age from pit flags, tag the laps.
+        # lap_time has no fallback source -> left as the documented null marker.
+        telemetry = _derive_stint_and_age_from_pit(telemetry)
+        tyre_age_source = TyreAgeSource.DERIVED
+        ledger.record(
+            ErrorCode.DERIVED_AGE, "Ergast unavailable; stint and tyre age derived from pit flags",
             fallback_used=True,
         )
-        return telemetry, CompoundSource.ERGAST
 
-    # Both sources failed to supply compound: mark UNKNOWN, exclude from compound
-    # stratification only — core telemetry is untouched.
-    telemetry = telemetry.copy()
-    telemetry["compound"] = "UNKNOWN"
-    ledger.record(
-        ErrorCode.COMPOUND_UNKNOWN,
-        "OpenF1 and Ergast both unavailable for compound",
-        fallback_used=False,
-    )
-    return telemetry, CompoundSource.UNKNOWN
-
-
-def _enrich_lap_context(
-    request: SessionRequest,
-    telemetry: pd.DataFrame,
-    ergast_fetch: Callable[[SessionRequest], pd.DataFrame],
-    breakers: dict[str, CircuitBreaker],
-    ledger: _Ledger,
-) -> tuple[pd.DataFrame, TyreAgeSource]:
-    """Attach lap_time/stint/tyre_age from Ergast; derive tyre age from pit flags if down."""
-    try:
-        ergast = call_with_breaker(breakers["ergast"], lambda: ergast_fetch(request))
-        telemetry = _merge_on_lap(telemetry, ergast, ["lap_time", "stint", "tyre_age"])
-        if "tyre_age" in ergast.columns:
-            return telemetry, TyreAgeSource.ERGAST
-    except (SourceUnavailableError, SessionUnavailableError):
-        pass
-
-    # Ergast down (or no tyre_age): derive age from pit flags and tag the laps.
-    if "pit_out" not in telemetry.columns:
-        telemetry = telemetry.copy()
-        telemetry["pit_out"] = False
-    telemetry = _derive_tyre_age_from_pit(telemetry)
-    ledger.record(
-        ErrorCode.DERIVED_AGE,
-        "Ergast unavailable; tyre age derived from pit flags",
-        fallback_used=True,
-    )
-    return telemetry, TyreAgeSource.DERIVED
-
-
-def _compound_source_of(df: pd.DataFrame) -> CompoundSource:
-    """Infer the compound provenance of a cached frame from its columns."""
-    if "compound" not in df.columns:
-        return CompoundSource.UNKNOWN
-    if df["compound"].astype(str).eq("UNKNOWN").all():
-        return CompoundSource.UNKNOWN
-    return CompoundSource.OPENF1
-
-
-def _tyre_age_source_of(df: pd.DataFrame) -> TyreAgeSource:
-    """A cached frame carries Ergast-quality tyre age unless it was derived."""
-    return TyreAgeSource.ERGAST if "tyre_age" in df.columns else TyreAgeSource.DERIVED
+    return telemetry, compound_source, tyre_age_source

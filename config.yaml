@@ -55,3 +55,47 @@ validate:
   min_moving_speed_kmh: 0            # §3.3 LAP_005 — speed must exceed this to count as moving
   max_stationary_fraction: 0.01      # §3.3 LAP_005 — stationary samples must be < this (>99% moving)
   degradation_features: [F27, F28]   # §3.3 LAP_PARTIAL — NULL'd when tyre age UNKNOWN
+
+# --- F03a scalar-channel feature extraction + assembly (§4.1, §4.2, §4.5) ---
+# The 22 telemetry-channel features (F01–F18, F22–F24, F26) + the shared 28-key vector
+# assembly / 6-NULL tolerance gate. The NULL ceiling (null_ceiling=6) lives under
+# `thresholds:` above and is referenced there, never re-declared here.
+features:
+  sample_period_ms: 50            # §4.2 — canonical step for "% per 50ms" rate features (F03, F08)
+  throttle_full_pct: 100          # §4.2 F04 — sample counts as full throttle at >= this %
+  throttle_lift_pct: 5            # §4.2 F05 — sample counts as a lift below this %
+  brake_peak_top_n: 10            # §4.2 F06 — mean of top-N brake-pressure peaks
+  min_braking_events: 5           # §4.2 F06/F09 — fewer braking events -> NULL
+  braking_event_threshold_bar: 5  # design decision (master leaves "braking event" open) — Brake > this delimits an event
+  corner_min_prominence_kmh: 10   # design decision — speed-minimum prominence delimiting a corner (F09/F11)
+  overlap_throttle_pct: 5         # §4.2 F10 — throttle > this AND ...
+  overlap_brake_pct: 5            # §4.2 F10 — ... brake > this => overlap sample
+  overlap_cap: 0.25               # §4.2 F10 — value above -> cap to this and log (sensor fault), not NULL
+  speed_p_low: 10                 # §4.2 F13 — low percentile
+  speed_p_high: 90                # §4.2 F14 — high percentile
+  redline_pct: 97                 # §4.2 F17 — fraction of lap above this % of session-max RPM
+  min_gear_changes: 10            # §4.2 F16 — fewer gear changes -> NULL
+  min_transitions: 5              # §4.2 F24 — fewer brake->throttle transitions -> NULL
+  valid_ranges:                   # §4.2 — value outside [min,max] -> FeatureComputationError -> NULL + FEATURE_001
+    F01: [0, 100]
+    F02: [0, 50]
+    F03: [0, 200]
+    F04: [0, 1]
+    F05: [0, 1]
+    F06: [0, 200]
+    F07: [50, 4000]
+    F08: [0, 100]
+    F09: [0, 380]
+    F10: [0, 0.25]
+    F11: [0, 200]
+    F12: [0, 8000]
+    F13: [0, 150]
+    F14: [100, 380]
+    F15: [0, 15]
+    F16: [100, 10000]
+    F17: [0, 0.6]
+    F18: [0, 5000]
+    F22: [-1, 1]
+    F23: [-1, 1]
+    F24: [0, 3000]
+    F26: [-30, 30]

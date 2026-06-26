@@ -53,6 +53,7 @@ class ErrorCode(StrEnum):
     # --- Feature extraction (F03) — §4 --------------------------------------
     FEATURE_001 = "FEATURE_001"  # feature out-of-range / failed -> NULL + logged
     LAP_NULL_EXCESS = "LAP_NULL_EXCESS"  # > 6 NULL features -> reject vector (§4.5)
+    IMPUTED = "IMPUTED"  # <= 6 NULL features imputed from train-only median (§4.5, flag)
 
     # --- Corner decomposition (F09) — §4.4 ----------------------------------
     CORNER_001 = "CORNER_001"  # curvature / X-Y unavailable -> skip decomposition

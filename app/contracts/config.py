@@ -141,6 +141,80 @@ class ValidateConfig(BaseModel):
         return self
 
 
+# The 22 scalar feature IDs F03a computes (master spec §4.2: F01–F18, F22–F24, F26).
+# F19–F21, F25, F27–F28 are F03b's; the full 28-key vector is assembled by F03a but only
+# these 22 carry a valid-range contract here.
+SCALAR_FEATURE_IDS: tuple[str, ...] = (
+    *(f"F{n:02d}" for n in range(1, 19)),  # F01..F18
+    "F22",
+    "F23",
+    "F24",
+    "F26",
+)
+
+
+class FeaturesConfig(BaseModel):
+    """Typed view over the ``features:`` block (F03a scalar extraction, §4.1/§4.2/§4.5).
+
+    Lives here, not in ``app/pipeline/features.py`` (standing rule, F01): the feature reads
+    its config through a strictly-validated model. Holds only the constants unique to F03a;
+    the NULL ceiling it also needs — ``null_ceiling`` (6) — is read from ``Thresholds`` so
+    this file stays the single source for that shared value. ``valid_ranges`` carries the
+    §4.2 out-of-range bound per feature (value outside -> ``FeatureComputationError``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    sample_period_ms: int  # §4.2 canonical step for "% per 50ms" rate features (F03, F08)
+    throttle_full_pct: float  # §4.2 F04 — sample is full throttle at >= this %
+    throttle_lift_pct: float  # §4.2 F05 — sample is a lift below this %
+    brake_peak_top_n: int  # §4.2 F06 — mean of top-N brake-pressure peaks
+    min_braking_events: int  # §4.2 F06/F09 — fewer braking events -> NULL
+    braking_event_threshold_bar: float  # design decision — Brake > this delimits an event
+    corner_min_prominence_kmh: float  # design decision — speed-min prominence => corner (F09/F11)
+    overlap_throttle_pct: float  # §4.2 F10 — throttle > this AND ...
+    overlap_brake_pct: float  # §4.2 F10 — ... brake > this => overlap sample
+    overlap_cap: float  # §4.2 F10 — value above -> cap to this and log (not NULL)
+    speed_p_low: float  # §4.2 F13 — low percentile
+    speed_p_high: float  # §4.2 F14 — high percentile
+    redline_pct: float  # §4.2 F17 — fraction of lap above this % of session-max RPM
+    min_gear_changes: int  # §4.2 F16 — fewer gear changes -> NULL
+    min_transitions: int  # §4.2 F24 — fewer brake->throttle transitions -> NULL
+    valid_ranges: dict[str, tuple[float, float]]  # §4.2 per-feature [min, max] bound
+
+    @model_validator(mode="after")
+    def _ranges_cover_scalar_ids(self) -> FeaturesConfig:
+        """``valid_ranges`` MUST cover exactly the 22 scalar IDs — no more, no fewer — and
+        each must be a well-ordered ``[min, max]``. A missing or stray key is a config error
+        surfaced as ``CONFIG_001`` at load time rather than a per-lap ``KeyError`` later."""
+        keys = set(self.valid_ranges)
+        expected = set(SCALAR_FEATURE_IDS)
+        if keys != expected:
+            missing = sorted(expected - keys)
+            extra = sorted(keys - expected)
+            raise ValueError(
+                f"features.valid_ranges must cover exactly {len(expected)} scalar IDs; "
+                f"missing={missing} unexpected={extra}"
+            )
+        for fid, (lo, hi) in self.valid_ranges.items():
+            if lo > hi:
+                raise ValueError(f"features.valid_ranges[{fid}] is not [min, max]: [{lo}, {hi}]")
+        return self
+
+    @model_validator(mode="after")
+    def _overlap_cap_matches_f10_range(self) -> FeaturesConfig:
+        """``overlap_cap`` and the upper bound of ``valid_ranges['F10']`` encode the same
+        physical limit (§4.2 F10). Tie them at load so the cap can never drift above F10's
+        range and silently emit an out-of-range value (non-negotiable #1)."""
+        f10_hi = self.valid_ranges["F10"][1]
+        if self.overlap_cap != f10_hi:
+            raise ValueError(
+                f"features.overlap_cap ({self.overlap_cap}) must equal the upper bound of "
+                f"valid_ranges.F10 ({f10_hi})"
+            )
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -163,6 +237,7 @@ class AppConfig(BaseModel):
     # YAML key is `validate:`; the Python attribute is `lap_validation` to avoid
     # shadowing pydantic's deprecated BaseModel.validate (F02; None until block present).
     lap_validation: ValidateConfig | None = Field(default=None, alias="validate")
+    features: FeaturesConfig | None = None  # F03a; None until the features: block is present
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:

@@ -37,6 +37,7 @@ EXPECTED_CODES: set[str] = {
     # Feature extraction (F03)
     "FEATURE_001",
     "LAP_NULL_EXCESS",
+    "IMPUTED",
     # Corner decomposition (F09)
     "CORNER_001",
     # Manual upload (F05)

@@ -17,8 +17,9 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 |-----|---------|-----------|----|--------|
 | F01 | Data ingestion (FastF1/OpenF1/Ergast, caching, circuit breakers) | F00 | 1 | DONE (2026-06-26) |
 | F02 | Lap filter chain / validation contract (9 filters, error codes) | F00, F01 | 2 | DONE (2026-06-26) |
-| F03 | Feature extraction — 28 features, NULL tolerance | F00, F02 | 3 | TODO |
-| F04 | Circuit-aware normalisation (train-only, saved artefact) | F03 | 4 | TODO |
+| F03a | Scalar-channel features (F01–F18, F22–F24, F26) + vector assembly, `FeatureComputationError`, 6-NULL tolerance | F00, F02 | 3 | DONE (2026-06-26) |
+| F03b | X/Y cornering (F19–F21), corner-balance (F25), tyre-age slopes (F27–F28) — plug into F03a's vector | F00, F02, F03a | 3 | TODO |
+| F04 | Circuit-aware normalisation (train-only, saved artefact) | F03a, F03b | 4 | TODO |
 | F05 | Manual CSV upload pipeline + edge cases (UPLOAD_001–004) | F02, F03 | 16 | TODO |
 
 ## Layer 2 — Machine learning
@@ -27,7 +28,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | TODO |
 | F07 | SHAP explainability (beeswarm, force, radar, NL templates) | F06 | 7 | TODO |
 | F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | TODO |
-| F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03 | 9 | TODO |
+| F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | TODO |
 | F10 | Model 3 — Degradation detector (deviation, rolling mean, alert threshold) | F04, F08 | 11–12 | TODO |
 | F11 | Car personalisation engine (3 layers: mapping, constraints, confidence) | F07, F08 | 13 | TODO |
 
@@ -64,6 +65,15 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F03 split — 2026-06-26 (feature/F03a-scalar-features):** the 28-feature extraction is
+  split into **F03a** (the 22 scalar-channel features F01–F18, F22–F24, F26 computable
+  directly from validated telemetry, plus the shared infrastructure: the 28-key vector
+  contract, `FeatureComputationError` + catch-mark-NULL-log behaviour, and the §4.5 6-NULL
+  tolerance / imputation / `LAP_NULL_EXCESS` gate) and **F03b** (the X/Y-derived cornering
+  features F19–F21, the corner-balance F25, and the tyre-age slopes F27–F28, which plug into
+  F03a's vector without changing it). F03a adds a new `IMPUTED` error code. Downstream
+  consumers (F04, F09) now depend on both. See `specs/F03a-scalar-features.md`.
+
 - **F01 — 2026-06-26 (feature/F01-track-status):** additive change — raw per-lap
   `track_status` (FastF1 `Laps.TrackStatus`) is now persisted to the Parquet cache and
   added to the F01→F02 column contract; new `TRACK_STATUS_UNAVAILABLE` error code. See

@@ -34,7 +34,12 @@ import numpy as np
 import pandas as pd
 from pydantic import Field
 
-from app.contracts.config import SCALAR_FEATURE_IDS, AppConfig, FeaturesConfig
+from app.contracts.config import (
+    GEOMETRY_FEATURE_IDS,
+    SCALAR_FEATURE_IDS,
+    AppConfig,
+    FeaturesConfig,
+)
 from app.contracts.enums import Status
 from app.contracts.errors import ErrorCode
 from app.contracts.logging import log_data_quality
@@ -123,6 +128,43 @@ class FeatureResult(BaseResult):
     null_count: int = 0
     imputed_features: list[str] = Field(default_factory=list)
     corner_type: str | None = None
+
+
+class GeometryFeatureResult(BaseResult):
+    """Per-lap output of :func:`compute_geometry_features` (F03b) — the four X/Y-derived
+    cornering values + diagnostics. ``status`` is ``OK`` only when all four computed in range,
+    else ``DEGRADED``. ``error_code`` carries ``CORNER_001`` when X/Y was unavailable (the
+    shared NULL path); lap-level result is never ``FAILED`` — F03b never rejects a lap."""
+
+    lap_number: int
+    features: dict[str, float | None] = Field(default_factory=dict)  # exactly {F19,F20,F21,F25}
+    null_features: list[str] = Field(default_factory=list)
+    detail: dict[str, dict[str, object]] = Field(default_factory=dict)
+
+
+class DegradationResult(BaseResult):
+    """Per-**stint** output of :func:`compute_degradation_slopes` (F03b) — the F27/F28 tyre-age
+    slopes, broadcast to every lap of the stint via ``applies_to``. ``f27``/``f28`` are NULL
+    (with ``null_reason``) when the stint has < ``min_stint_laps`` usable laps or tyre age is
+    UNKNOWN. Unconstrained — slopes are never range-gated."""
+
+    stint_id: int
+    f27: float | None = None
+    f28: float | None = None
+    applies_to: list[int] = Field(default_factory=list)  # lap numbers the slopes apply to
+    null_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class StintLap:
+    """One lap's degradation inputs (F03b): tyre age + the per-lap F01/F06 values F27/F28
+    regress against. Collected by the orchestrator from F03a's per-lap results — F03b does not
+    recompute them. ``tyre_age=None`` marks UNKNOWN (consistent with F02's ``LAP_PARTIAL``)."""
+
+    lap_number: int
+    tyre_age: int | None
+    throttle_mean: float | None  # F01
+    brake_peak_mean: float | None  # F06
 
 
 # ----------------------------------------------------------------------------------
@@ -750,5 +792,394 @@ def assemble_feature_vector(
         status=status,
         error_code=None,
         flags=out_flags,
+        logged=ledger.rows > 0,
+    )
+
+
+# ==================================================================================
+# F03b — geometry (F19–F21, F25) + degradation slopes (F27, F28)
+#
+# Plugs its six values into assemble_feature_vector (above) unchanged. The four cornering
+# features share one X/Y-availability precondition: X/Y missing -> all four NULL + one
+# CORNER_001 row, lap continues (§4.4). F27/F28 are stint-level (not lap-level) and
+# unconstrained. Reuses F03a's FeatureComputationError / _checked / _require / _runs /
+# _corner_indices / _DQLedger / _finite / _resolve_time_base.
+# ==================================================================================
+
+REASON_XY_UNAVAILABLE = "X_Y_UNAVAILABLE"
+
+
+@dataclass(frozen=True)
+class _GeometryContext:
+    """Per-lap arrays derived once for the four cornering features."""
+
+    signed_g: np.ndarray  # signed lateral G per sample (sign from the curvature cross-product)
+    speed: np.ndarray
+    brake: np.ndarray
+    corners: np.ndarray  # apex (speed-minimum) indices
+    duration_s: float | None  # lap wall-time, for F21's per-second rate
+
+
+def _xy_available(lap: pd.DataFrame, cfg: FeaturesConfig) -> bool:
+    """True iff the X/Y position trace exists with enough finite samples to derive curvature.
+
+    Requires at least 3 finite paired samples AND a finite fraction >= ``min_xy_finite_fraction``
+    — a near-total dropout (a handful of finite points in a mostly-NaN trace) is treated as
+    unavailable (-> CORNER_001), not fabricated into a cornering value."""
+    if "X" not in lap.columns or "Y" not in lap.columns:
+        return False
+    n = len(lap)
+    if n == 0:
+        return False
+    x = _numeric(lap["X"])
+    y = _numeric(lap["Y"])
+    finite = int(np.count_nonzero(np.isfinite(x) & np.isfinite(y)))
+    return finite >= 3 and (finite / n) >= cfg.min_xy_finite_fraction
+
+
+def _signed_lateral_g(
+    x: np.ndarray, y: np.ndarray, speed: np.ndarray, cfg: FeaturesConfig
+) -> np.ndarray:
+    """Signed lateral G per sample from the X/Y trace + speed.
+
+    Curvature κ = |x'y'' − y'x''| / (x'² + y'²)^1.5 (gradients via ``np.gradient``); lateral
+    acceleration a = v²·κ (v = Speed ÷ 3.6 m/s); G = a / ``gravity_m_s2``. The sign carries the
+    turn direction (sign of the cross-product) so F21 can count left/right reversals.
+    """
+    x1, y1 = np.gradient(x), np.gradient(y)
+    x2, y2 = np.gradient(x1), np.gradient(y1)
+    cross = x1 * y2 - y1 * x2
+    denom = (x1**2 + y1**2) ** 1.5
+    with np.errstate(divide="ignore", invalid="ignore"):
+        kappa = np.where(denom > 0, np.abs(cross) / denom, 0.0)
+    v = speed / 3.6  # km/h -> m/s
+    g = (v**2 * kappa) / cfg.gravity_m_s2
+    return np.sign(cross) * g
+
+
+def _lateral_g_peaks(absg: np.ndarray, cfg: FeaturesConfig) -> np.ndarray:
+    """Values of |lateral G| local maxima whose prominence >= ``lateral_g_peak_min_prominence``.
+
+    A NaN window yields a NaN valley, so peaks bordering a dropout are conservatively dropped.
+    """
+    a = absg
+    if a.size < 3:
+        return np.empty(0, dtype=float)
+    is_peak = (a[1:-1] > a[:-2]) & (a[1:-1] >= a[2:])
+    idx = np.flatnonzero(is_peak) + 1
+    if idx.size == 0:
+        return np.empty(0, dtype=float)
+    kept: list[float] = []
+    for i, m in enumerate(idx):  # iterates detected peaks (few), not samples
+        left_start = int(idx[i - 1]) if i > 0 else 0
+        right_stop = int(idx[i + 1]) + 1 if i + 1 < idx.size else a.size
+        left_valley = float(np.min(a[left_start : m + 1]))
+        right_valley = float(np.min(a[m:right_stop]))
+        if float(a[m]) - max(left_valley, right_valley) >= cfg.lateral_g_peak_min_prominence:
+            kept.append(float(a[m]))
+    return np.asarray(kept, dtype=float)
+
+
+def _f19(gctx: _GeometryContext, cfg: FeaturesConfig) -> float:
+    absg = _finite(np.abs(gctx.signed_g))
+    _require("F19", absg.size > 0, "lateral G not computable")
+    return _checked("F19", float(np.mean(absg)), cfg)
+
+
+def _f20(gctx: _GeometryContext, cfg: FeaturesConfig) -> float:
+    # _finite() first (like F19/F21) so a single NaN sample cannot poison a neighbour's
+    # prominence valley and spuriously drop a genuine peak.
+    peaks = _lateral_g_peaks(_finite(np.abs(gctx.signed_g)), cfg)
+    _require(
+        "F20",
+        peaks.size >= cfg.min_lateral_g_peaks,
+        f"{peaks.size} distinct lateral-G peaks < {cfg.min_lateral_g_peaks}",
+    )
+    top = np.sort(peaks)[-cfg.lateral_g_peak_top_n :]
+    return _checked("F20", float(np.mean(top)), cfg)
+
+
+def _f21(gctx: _GeometryContext, cfg: FeaturesConfig) -> float:
+    _require("F21", gctx.duration_s is not None and gctx.duration_s > 0, "lap duration unavailable")
+    g = _finite(gctx.signed_g)
+    _require("F21", g.size > 0, "lateral G not computable")
+    # Sign of lateral G, ignoring |G| below the deadband (noise around straight-line driving).
+    sign = np.where(np.abs(g) >= cfg.steering_g_deadband, np.sign(g), 0.0)
+    nz = sign[sign != 0]
+    reversals = int(np.count_nonzero(np.diff(nz) != 0)) if nz.size > 1 else 0
+    return _checked("F21", reversals / float(gctx.duration_s), cfg)  # type: ignore[arg-type]
+
+
+def _f25(gctx: _GeometryContext, cfg: FeaturesConfig) -> float:
+    corners = gctx.corners
+    _require("F25", corners.size > 0, "corner segmentation failed")
+    speed, brake = gctx.speed, gctx.brake
+    brake_on = (brake > cfg.braking_event_threshold_bar).astype(float)
+    n = speed.size
+    ratios: list[float] = []
+    for i, c in enumerate(corners):  # iterates detected corners (few), not samples
+        left_bound = int(corners[i - 1]) if i > 0 else 0
+        right_bound = int(corners[i + 1]) if i + 1 < corners.size else n - 1
+        # Corner window = the speed maxima bracketing the apex; split at the apex.
+        left_max = (
+            left_bound + int(np.argmax(speed[left_bound : c + 1])) if c > left_bound else left_bound
+        )
+        right_max = (
+            c + int(np.argmax(speed[c : right_bound + 1])) if right_bound > c else right_bound
+        )
+        # Exit window is [apex, right_max) — exclusive of right_max so the shared inter-corner
+        # speed-maximum index is not double-counted across two adjacent corners.
+        entry = float(np.sum(brake_on[left_max:c]))
+        exit_ = float(np.sum(brake_on[c:right_max]))
+        if entry + exit_ > 0:
+            ratios.append(entry / (entry + exit_))  # fraction of in-corner braking before apex
+    _require("F25", len(ratios) > 0, "no corner has braking to segment")
+    return _checked("F25", float(np.mean(ratios)), cfg)
+
+
+_GEOM_FUNCS = {"F19": _f19, "F20": _f20, "F21": _f21, "F25": _f25}
+
+
+def compute_geometry_features(
+    lap: pd.DataFrame,
+    *,
+    lap_number: int,
+    config: AppConfig,
+    log_path: str | Path | None = None,
+    entity_id: str | None = None,
+) -> GeometryFeatureResult:
+    """Compute the four X/Y-derived cornering features (F19, F20, F21, F25) for one lap.
+
+    If the X/Y trace is unavailable, all four are NULL, one ``CORNER_001`` row is logged, and
+    the lap **continues** (§4.4) — F03b never rejects a lap; the 6-NULL ceiling (F03a) decides
+    rejection. With X/Y present, each feature is computed independently: a
+    ``FeatureComputationError`` (out of range — no clamp — or NULL trigger) or any unexpected
+    error is caught, the feature NULL'd, and one ``FEATURE_001`` row logged. Never raises.
+    """
+    path = Path(log_path) if log_path is not None else Path(config.paths.data_quality_log)
+    ledger = _DQLedger(log_path=path)
+    eid = entity_id or f"lap{lap_number}"
+
+    fcfg = config.features
+    if fcfg is None:
+        ledger.record(
+            code=ErrorCode.CONFIG_001,
+            entity_id=eid,
+            detail="config.features block absent; cannot compute geometry features",
+            fallback_used=False,
+        )
+        return GeometryFeatureResult(
+            lap_number=lap_number,
+            features={fid: None for fid in GEOMETRY_FEATURE_IDS},
+            null_features=list(GEOMETRY_FEATURE_IDS),
+            status=Status.DEGRADED,
+            error_code=ErrorCode.CONFIG_001,
+            logged=True,
+        )
+
+    if not _xy_available(lap, fcfg):
+        # §4.4: corner decomposition skipped; the four cornering features NULL, lap continues.
+        ledger.record(
+            code=ErrorCode.CORNER_001,
+            entity_id=eid,
+            detail="X/Y position trace unavailable; cornering features F19,F20,F21,F25 NULL",
+            fallback_used=False,
+        )
+        return GeometryFeatureResult(
+            lap_number=lap_number,
+            features={fid: None for fid in GEOMETRY_FEATURE_IDS},
+            null_features=list(GEOMETRY_FEATURE_IDS),
+            detail={fid: {"reason": REASON_XY_UNAVAILABLE} for fid in GEOMETRY_FEATURE_IDS},
+            status=Status.DEGRADED,
+            error_code=ErrorCode.CORNER_001,
+            logged=True,
+        )
+
+    features: dict[str, float | None] = {}
+    null_features: list[str] = []
+    detail: dict[str, dict[str, object]] = {}
+
+    try:
+        ch = _extract_channels(lap)
+        x = _numeric(lap["X"])
+        y = _numeric(lap["Y"])
+        time, dt_ms = _resolve_time_base(lap, None, len(lap), fcfg)
+        if time is not None and time.size >= 2 and np.isfinite(time).all():
+            duration_s: float | None = float(time[-1] - time[0])
+        elif dt_ms is not None:
+            duration_s = dt_ms / 1000.0 * (len(lap) - 1)
+        else:
+            duration_s = None
+        gctx = _GeometryContext(
+            signed_g=_signed_lateral_g(x, y, ch.speed, fcfg),
+            speed=ch.speed,
+            brake=ch.brake,
+            corners=_corner_indices(ch.speed, fcfg),
+            duration_s=duration_s,
+        )
+    except Exception as exc:  # noqa: BLE001 — derived-context build must not propagate (#1)
+        for fid in GEOMETRY_FEATURE_IDS:
+            ledger.record(
+                code=ErrorCode.FEATURE_001,
+                entity_id=eid,
+                detail=f"{fid} NULL (UNEXPECTED building geometry context): {exc!r}",
+                fallback_used=False,
+            )
+        return GeometryFeatureResult(
+            lap_number=lap_number,
+            features={fid: None for fid in GEOMETRY_FEATURE_IDS},
+            null_features=list(GEOMETRY_FEATURE_IDS),
+            detail={
+                fid: {"reason": REASON_UNEXPECTED, "error": repr(exc)}
+                for fid in GEOMETRY_FEATURE_IDS
+            },
+            status=Status.DEGRADED,
+            logged=True,
+        )
+
+    for fid in GEOMETRY_FEATURE_IDS:
+        try:
+            features[fid] = _GEOM_FUNCS[fid](gctx, fcfg)
+        except FeatureComputationError as exc:
+            features[fid] = None
+            null_features.append(fid)
+            detail[fid] = {"reason": exc.reason, "detail": exc.detail}
+            ledger.record(
+                code=ErrorCode.FEATURE_001,
+                entity_id=eid,
+                detail=f"{fid} NULL ({exc.reason}): {exc.detail}",
+                fallback_used=False,
+            )
+        except Exception as exc:  # noqa: BLE001 — last-resort: NULL, never propagate (#1)
+            features[fid] = None
+            null_features.append(fid)
+            detail[fid] = {"reason": REASON_UNEXPECTED, "error": repr(exc)}
+            ledger.record(
+                code=ErrorCode.FEATURE_001,
+                entity_id=eid,
+                detail=f"{fid} NULL (UNEXPECTED): {exc!r}",
+                fallback_used=False,
+            )
+
+    status = Status.OK if not null_features else Status.DEGRADED
+    return GeometryFeatureResult(
+        lap_number=lap_number,
+        features=features,
+        null_features=null_features,
+        detail=detail,
+        status=status,
+        logged=ledger.rows > 0,
+    )
+
+
+def _stint_slope(
+    stint: list[StintLap], attr: str, cfg: FeaturesConfig
+) -> tuple[float | None, str | None]:
+    """Degree-1 polyfit slope of ``attr`` (F01 or F06) vs tyre age across a stint's usable laps.
+
+    A *usable* lap has a known tyre age (not UNKNOWN) and a non-NULL feature value. Returns
+    ``(None, reason)`` when there are no known-tyre-age laps, fewer than ``min_stint_laps``
+    usable laps, or the tyre ages are constant (slope undefined); else ``(slope, None)``.
+    Unconstrained — the slope is never range-gated.
+    """
+    known_age = [lap for lap in stint if lap.tyre_age is not None]
+    if not known_age:
+        return None, "tyre age UNKNOWN"
+    ages: list[float] = []
+    vals: list[float] = []
+    for lap in known_age:
+        value = getattr(lap, attr)
+        if value is None:
+            continue  # known tyre age but this feature is NULL for the lap; excluded
+        ages.append(float(lap.tyre_age))  # type: ignore[arg-type]
+        vals.append(float(value))
+    if len(vals) < cfg.min_stint_laps:
+        return None, f"{len(vals)} usable laps < {cfg.min_stint_laps}"
+    age_arr = np.asarray(ages)
+    if float(np.ptp(age_arr)) == 0.0:
+        return None, "tyre age constant across stint; slope undefined"
+    return float(np.polyfit(age_arr, np.asarray(vals), 1)[0]), None
+
+
+def compute_degradation_slopes(
+    stint: list[StintLap],
+    *,
+    stint_id: int,
+    config: AppConfig,
+    log_path: str | Path | None = None,
+) -> DegradationResult:
+    """Compute the stint-level tyre-age slopes F27 (throttle_mean) and F28 (brake_peak_mean).
+
+    Computes only when the stint has >= ``min_stint_laps`` usable laps with known tyre age,
+    else NULL (one ``FEATURE_001`` row per lap of the stint, per NULL'd slope). The slopes are
+    broadcast to every lap of the stint via ``applies_to``. Never raises for a data fault.
+    """
+    path = Path(log_path) if log_path is not None else Path(config.paths.data_quality_log)
+    ledger = _DQLedger(log_path=path)
+    applies = [lap.lap_number for lap in stint]
+
+    if not stint:
+        # Degenerate input — log at stint level so the NULL slopes are never unaudited (#1).
+        ledger.record(
+            code=ErrorCode.FEATURE_001,
+            entity_id=f"stint{stint_id}",
+            detail="empty stint; F27/F28 NULL",
+            fallback_used=False,
+        )
+        return DegradationResult(
+            stint_id=stint_id, applies_to=[], null_reason="empty stint",
+            status=Status.DEGRADED, logged=True,
+        )
+
+    fcfg = config.features
+    if fcfg is None:
+        for lap_no in applies:
+            ledger.record(
+                code=ErrorCode.CONFIG_001,
+                entity_id=f"lap{lap_no}",
+                detail="config.features block absent; cannot compute degradation slopes",
+                fallback_used=False,
+            )
+        return DegradationResult(
+            stint_id=stint_id,
+            applies_to=applies,
+            null_reason="config.features absent",
+            status=Status.DEGRADED,
+            error_code=ErrorCode.CONFIG_001,
+            logged=bool(applies),
+        )
+
+    try:
+        f27, r27 = _stint_slope(stint, "throttle_mean", fcfg)
+        f28, r28 = _stint_slope(stint, "brake_peak_mean", fcfg)
+    except Exception as exc:  # noqa: BLE001 — last-resort: NULL both, never propagate (#1)
+        f27, f28 = None, None
+        r27 = r28 = f"unexpected: {exc!r}"
+
+    for lap_no in applies:
+        if f27 is None:
+            ledger.record(
+                code=ErrorCode.FEATURE_001,
+                entity_id=f"lap{lap_no}",
+                detail=f"F27 NULL: {r27}",
+                fallback_used=False,
+            )
+        if f28 is None:
+            ledger.record(
+                code=ErrorCode.FEATURE_001,
+                entity_id=f"lap{lap_no}",
+                detail=f"F28 NULL: {r28}",
+                fallback_used=False,
+            )
+
+    null_reason = "; ".join(r for r in (r27, r28) if r) or None
+    status = Status.OK if f27 is not None and f28 is not None else Status.DEGRADED
+    return DegradationResult(
+        stint_id=stint_id,
+        f27=f27,
+        f28=f28,
+        applies_to=applies,
+        null_reason=null_reason,
+        status=status,
         logged=ledger.rows > 0,
     )

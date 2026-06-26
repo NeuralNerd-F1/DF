@@ -152,6 +152,15 @@ SCALAR_FEATURE_IDS: tuple[str, ...] = (
     "F26",
 )
 
+# The X/Y-derived geometry feature IDs F03b range-checks (master spec §4.2: F19–F21 lateral
+# G / steering, F25 corner balance). F27/F28 are degradation slopes — *unconstrained*, so
+# they carry no valid-range entry.
+GEOMETRY_FEATURE_IDS: tuple[str, ...] = ("F19", "F20", "F21", "F25")
+
+# Every feature that carries a valid-range contract: the 22 scalar (F03a) + the 4 geometry
+# (F03b). ``valid_ranges`` must cover exactly these 26 IDs.
+RANGE_CHECKED_IDS: tuple[str, ...] = SCALAR_FEATURE_IDS + GEOMETRY_FEATURE_IDS
+
 
 class FeaturesConfig(BaseModel):
     """Typed view over the ``features:`` block (F03a scalar extraction, §4.1/§4.2/§4.5).
@@ -180,20 +189,29 @@ class FeaturesConfig(BaseModel):
     redline_pct: float  # §4.2 F17 — fraction of lap above this % of session-max RPM
     min_gear_changes: int  # §4.2 F16 — fewer gear changes -> NULL
     min_transitions: int  # §4.2 F24 — fewer brake->throttle transitions -> NULL
+    # --- F03b geometry & degradation (§4.2, §4.4) ---
+    lateral_g_peak_top_n: int  # §4.2 F20 — mean of top-N lateral-G peaks
+    min_lateral_g_peaks: int  # §4.2 F20 — fewer distinct peaks -> NULL
+    lateral_g_peak_min_prominence: float  # design decision — min G prominence for a "distinct" peak
+    steering_g_deadband: float  # design decision — |lateral G| below this ignored for F21 reversals
+    gravity_m_s2: float  # physical constant — lateral accel (m/s^2) -> G (F19/F20/F21)
+    min_stint_laps: int  # §4.2 F27/F28 — stint with fewer usable laps -> NULL
+    min_xy_finite_fraction: float  # design decision — X/Y "available" iff >= this fraction finite
     valid_ranges: dict[str, tuple[float, float]]  # §4.2 per-feature [min, max] bound
 
     @model_validator(mode="after")
-    def _ranges_cover_scalar_ids(self) -> FeaturesConfig:
-        """``valid_ranges`` MUST cover exactly the 22 scalar IDs — no more, no fewer — and
-        each must be a well-ordered ``[min, max]``. A missing or stray key is a config error
-        surfaced as ``CONFIG_001`` at load time rather than a per-lap ``KeyError`` later."""
+    def _ranges_cover_checked_ids(self) -> FeaturesConfig:
+        """``valid_ranges`` MUST cover exactly the 26 range-bearing IDs — the 22 scalar (F03a)
+        plus the 4 geometry (F03b: F19, F20, F21, F25) — no more, no fewer, each a well-ordered
+        ``[min, max]``. F27/F28 are unconstrained slopes and must NOT appear. A missing or stray
+        key is a config error surfaced as ``CONFIG_001`` at load time, not a later ``KeyError``."""
         keys = set(self.valid_ranges)
-        expected = set(SCALAR_FEATURE_IDS)
+        expected = set(RANGE_CHECKED_IDS)
         if keys != expected:
             missing = sorted(expected - keys)
             extra = sorted(keys - expected)
             raise ValueError(
-                f"features.valid_ranges must cover exactly {len(expected)} scalar IDs; "
+                f"features.valid_ranges must cover exactly {len(expected)} range-bearing IDs; "
                 f"missing={missing} unexpected={extra}"
             )
         for fid, (lo, hi) in self.valid_ranges.items():
@@ -212,6 +230,21 @@ class FeaturesConfig(BaseModel):
                 f"features.overlap_cap ({self.overlap_cap}) must equal the upper bound of "
                 f"valid_ranges.F10 ({f10_hi})"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _geometry_counts_sane(self) -> FeaturesConfig:
+        """Guard the F03b count/fraction constants so a mis-edit fails fast at load rather than
+        producing a silent wrong feature (e.g. ``lateral_g_peak_top_n=0`` makes the top-N slice
+        return *all* peaks). ``min_stint_laps`` needs >= 2 points for a regression slope."""
+        if self.lateral_g_peak_top_n < 1:
+            raise ValueError("features.lateral_g_peak_top_n must be >= 1")
+        if self.min_lateral_g_peaks < 1:
+            raise ValueError("features.min_lateral_g_peaks must be >= 1")
+        if self.min_stint_laps < 2:
+            raise ValueError("features.min_stint_laps must be >= 2 (regression needs >= 2 points)")
+        if not 0.0 < self.min_xy_finite_fraction <= 1.0:
+            raise ValueError("features.min_xy_finite_fraction must be in (0, 1]")
         return self
 
 

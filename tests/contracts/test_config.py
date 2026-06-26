@@ -52,6 +52,37 @@ def test_malformed_ingest_block_raises(valid_config_file: Path, tmp_path: Path) 
         load_config(p)
 
 
+def test_repo_config_parses_features_block(repo_config_path: Path) -> None:
+    """The F03a+F03b features block loads, covers exactly the 26 range-bearing IDs, and the
+    F27/F28 unconstrained slopes carry no range entry."""
+    cfg = load_config(repo_config_path)
+    assert cfg.features is not None
+    assert len(cfg.features.valid_ranges) == 26
+    assert "F27" not in cfg.features.valid_ranges and "F28" not in cfg.features.valid_ranges
+    assert cfg.features.min_stint_laps == 8
+
+
+def test_zero_lateral_g_peak_top_n_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    """lateral_g_peak_top_n=0 would make the top-N slice return ALL peaks -> rejected at load."""
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "lateral_g_peak_top_n: 5", "lateral_g_peak_top_n: 0"
+    )
+    p = tmp_path / "bad_topn.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_bad_min_xy_finite_fraction_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "min_xy_finite_fraction: 0.9", "min_xy_finite_fraction: 1.5"
+    )
+    p = tmp_path / "bad_xy_fraction.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
 def test_missing_file_raises_config_001(tmp_path: Path) -> None:
     with pytest.raises(ConfigError) as exc:
         load_config(tmp_path / "does_not_exist.yaml")

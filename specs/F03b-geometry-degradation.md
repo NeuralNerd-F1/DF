@@ -88,11 +88,13 @@ G (for F21) carries the sign of (x'y'' − y'x'').
 | F27 | tyre_age_throttle_slope | Degradation | `np.polyfit(tyre_age, throttle_mean, 1)[0]` across the stint's laps | unconstrained | stint < `min_stint_laps` usable laps, or tyre age UNKNOWN (`FEATURE_001`) |
 | F28 | tyre_age_brake_slope | Degradation | `np.polyfit(tyre_age, brake_peak_mean, 1)[0]` across the stint's laps | unconstrained | stint < `min_stint_laps` usable laps, or tyre age UNKNOWN (`FEATURE_001`) |
 
-**Corners for F25** reuse F03a's `_corner_indices` (speed-minima apices) bounded by the
-braking zones (`_runs(Brake > braking_event_threshold_bar)`); a corner's window is split at its
-apex and the brake-on sample fraction of each half is compared. F25 is grouped with the X/Y
-features (its corner segmentation is part of the geometry pass), so X/Y unavailable → F25 NULL
-+ `CORNER_001`.
+**Corners for F25** reuse F03a's `_corner_indices` (speed-minima apices). Each corner's window
+spans the **bracketing speed maxima** (the entry maximum before the apex to the exit maximum
+after — i.e. the full entry→exit arc), split at the apex; the brake-on fraction is the entry
+half's brake-on samples over (entry + exit), so trail-braking past the apex lowers the ratio.
+Adjacent corners share the inter-corner speed maximum as a half-open boundary, so no sample is
+double-counted. F25 is grouped with the X/Y features (its corner segmentation is part of the
+geometry pass), so X/Y unavailable → F25 NULL + `CORNER_001`.
 
 **Degradation slopes (F27/F28) — stint-level.** A *usable* stint lap has a **known** tyre age
 (consistent with F02 `LAP_PARTIAL`) and a non-NULL feature value (F01 for F27, F06 for F28).
@@ -197,9 +199,17 @@ degradation *detector* is F10).
 - **X/Y data patchy (Risk Register / §4.4):** the shared X/Y-availability guard NULLs the four
   cornering features and logs `CORNER_001` while the lap continues — never a crash, never a
   silent zero; F03a's 6-NULL ceiling decides rejection, not F03b.
-- **Curvature noise at low speed / near-straight:** lateral G uses `np.gradient` on the smoothed
-  X/Y trace; the peak-prominence and deadband constants (config-driven, boundary-tested) keep
-  sensor jitter from inventing peaks (F20) or steering reversals (F21).
+- **Curvature noise at low speed / near-straight:** lateral G double-differentiates the X/Y
+  trace (`np.gradient` of `np.gradient`), which amplifies sampling/quantisation noise on real
+  (low-Hz, decimetre-quantised) FastF1 position data — curvature spikes can push F19/F20 out of
+  `[0,6]` G and NULL them. By design that is the failsafe path (NULL beats a fabricated value),
+  and the 6-NULL tolerance absorbs a few; but if F19/F20/F21 chronically NULL on real laps, a
+  smoothing window on X/Y before differentiation is the first tuning lever — to be calibrated
+  against real telemetry in F04/evaluation, not against the (perfectly smooth) synthetic fixtures.
+- **F20 range `[0,6]` G is copied verbatim from master spec §4.2**, but F20 is a *peak* lateral-G
+  mean and the highest-downforce F1 corners can approach/exceed 6 G — those laps would NULL F20.
+  The bound is a master-spec contract, not ours to widen here; flag for the spec owner if F20
+  NULLs cluster on fast corners during evaluation.
 - **Short / single-lap stints:** F27/F28 require ≥ `min_stint_laps` usable laps and known tyre
   age, else NULL — no slope is fabricated from too few points (consistent with F10's stint<8
   `MONITOR_INACTIVE` posture).

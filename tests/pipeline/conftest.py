@@ -233,3 +233,63 @@ def validate_config(repo_config_path: Path, tmp_path: Path) -> AppConfig:
     cfg = load_config(repo_config_path)
     cfg.paths.data_quality_log = str(tmp_path / "logs" / "dq.jsonl")
     return cfg
+
+
+# --- F04 normalisation: config fixture + wide fit-input frame builder ----------------
+#
+# F04 consumes the assembled feature matrix (one row per accepted lap, the 28 canonical
+# keys + a `circuit` and `split` column). `feature_frame` builds that shape with one knob
+# per acceptance criterion so each test triggers exactly the condition it asserts, and with
+# hand-computable distributions for the six normalised features so (x-mean)/std is checkable.
+
+# The 28 canonical feature IDs (mirrors features.FEATURE_IDS without importing the module).
+_FEATURE_IDS = tuple(f"F{n:02d}" for n in range(1, 29))
+
+# The six F04-normalised IDs (mirrors config.NORMALISED_FEATURE_IDS).
+_NORMALISED_IDS = ("F09", "F11", "F13", "F14", "F19", "F20")
+
+
+@pytest.fixture
+def normalise_config(repo_config_path: Path, tmp_path: Path) -> AppConfig:
+    """Real repo config (shipped normalise/threshold values) with the DQ log + artefacts dir
+    redirected under tmp, mirroring `validate_config`."""
+    cfg = load_config(repo_config_path)
+    cfg.paths.data_quality_log = str(tmp_path / "logs" / "dq.jsonl")
+    cfg.paths.artefacts_dir = str(tmp_path / "artefacts")
+    return cfg
+
+
+def feature_frame(
+    circuits: dict[str, int],
+    *,
+    split: str = "train",
+    base: float = 100.0,
+    step: float = 1.0,
+    constant_feature: str | None = None,
+    extra: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Wide F04 fit-input frame: one row per lap, columns `circuit`, `split`, `F01..F28`.
+
+    ``circuits`` maps circuit name -> lap count. For each circuit the six normalised features
+    are a deterministic arithmetic ramp ``base, base+step, base+2*step, ...`` (so mean/std are
+    hand-computable); the other 22 keys are held at a constant (``1.0``) so a test can assert
+    they pass through untouched. ``constant_feature`` forces one normalised feature to a single
+    value across every lap (zero variance). ``extra`` is concatenated verbatim (e.g. pathological
+    held-out rows for the leakage-zero-effect test).
+    """
+    frames: list[pd.DataFrame] = []
+    for circuit, n in circuits.items():
+        data: dict[str, object] = {"circuit": [circuit] * n, "split": [split] * n}
+        ramp = [base + step * i for i in range(n)]
+        for fid in _FEATURE_IDS:
+            if fid in _NORMALISED_IDS:
+                if constant_feature is not None and fid == constant_feature:
+                    data[fid] = [base] * n
+                else:
+                    data[fid] = list(ramp)
+            else:
+                data[fid] = [1.0] * n
+        frames.append(pd.DataFrame(data))
+    if extra is not None:
+        frames.append(extra)
+    return pd.concat(frames, ignore_index=True)

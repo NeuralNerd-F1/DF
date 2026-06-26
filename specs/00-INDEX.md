@@ -19,7 +19,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F02 | Lap filter chain / validation contract (9 filters, error codes) | F00, F01 | 2 | DONE (2026-06-26) |
 | F03a | Scalar-channel features (F01–F18, F22–F24, F26) + vector assembly, `FeatureComputationError`, 6-NULL tolerance | F00, F02 | 3 | DONE (2026-06-26) |
 | F03b | X/Y cornering (F19–F21), corner-balance (F25), tyre-age slopes (F27–F28) — plug into F03a's vector | F00, F02, F03a | 3 | DONE (2026-06-26) |
-| F04 | Circuit-aware normalisation (train-only, saved artefact) | F03a, F03b | 4 | TODO |
+| F04 | Circuit-aware normalisation (train-only, saved artefact) | F03a, F03b | 4 | DONE (2026-06-26) |
 | F05 | Manual CSV upload pipeline + edge cases (UPLOAD_001–004) | F02, F03 | 16 | TODO |
 
 ## Layer 2 — Machine learning
@@ -83,3 +83,14 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   error codes from review hardening: `ORPHAN_SAMPLES` (null-lap samples dropped + logged)
   and `VALIDATION_ERROR` (malformed-frame / unexpected-internal backstop, kept distinct
   from per-lap data codes). `ValidateConfig` enforces `Speed ∈ required_channels`.
+
+- **F04 — 2026-06-26 (feature/F04-circuit-aware-normalisation):** DONE. Authored the missing
+  spec (`specs/F04-circuit-aware-normalisation.md`) and shipped the **leakage-chokepoint
+  machinery**: `app/pipeline/normalise.py` (one writer `fit_normaliser`, two readers
+  `load_normalisation_params` / `apply_normalisation` — readers provably contain no
+  `.fit`/`groupby`), the typed `NormaliseConfig` block + `NORMALISED_FEATURE_IDS` tuple
+  (F09/F11/F13/F14/F19/F20), and the deterministic content-hashed artefact. Reuses the existing
+  `NORMALISATION_FALLBACK` code (no new code). **No real `artefacts/normalisation.json` is
+  committed** — there is no training matrix until the F06 era; this session ships the machinery
+  only. The per-circuit fit floor reuses `thresholds.min_clean_laps` (30), defined per
+  driver-circuit in §3.2 but applied per-circuit here (documented design decision).

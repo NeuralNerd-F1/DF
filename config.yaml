@@ -111,3 +111,15 @@ features:
     F20: [0, 6]                  # §4.2 F20 lateral_g_peak_mean (G)
     F21: [0, 5]                  # §4.2 F21 steering_correction_rate (reversals/s)
     F25: [0, 1]                  # §4.2 F25 corner_entry_balance (ratio)
+
+# --- F04 circuit-aware normalisation (train-only artefact, leakage chokepoint) ---
+# Z-scores the six circuit-dependent features per circuit, fitting mean/std on the TRAINING
+# split ONLY and saving them to paths.artefacts_dir/normalisation.json. The per-circuit fit
+# floor (min_clean_laps=30) lives under thresholds: above and is referenced, never re-declared;
+# the quarantined held_out_circuits: (Belgium, Italy) are excluded before any .fit() (§4.3).
+normalise:
+  features: [F09, F11, F13, F14, F19, F20]  # the 6 circuit-dependent features Z-scored per circuit
+  grouping_key: circuit                      # fit mean/std per circuit
+  artefact_filename: normalisation.json      # written under paths.artefacts_dir
+  ddof: 0                                     # population std (numpy default)
+  min_std: 1.0e-8                            # std below this -> zero-variance fallback (no div-by-zero)

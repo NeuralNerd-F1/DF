@@ -161,6 +161,12 @@ GEOMETRY_FEATURE_IDS: tuple[str, ...] = ("F19", "F20", "F21", "F25")
 # (F03b). ``valid_ranges`` must cover exactly these 26 IDs.
 RANGE_CHECKED_IDS: tuple[str, ...] = SCALAR_FEATURE_IDS + GEOMETRY_FEATURE_IDS
 
+# The six circuit-dependent feature IDs F04 Z-score normalises **per circuit** (master spec
+# §4.3): the speed-dependent F09/F11/F13/F14 (scalar) and the lateral-G F19/F20 (geometry). All
+# six are members of ``RANGE_CHECKED_IDS``; F04's config validator pins ``normalise.features`` to
+# exactly this tuple so the leakage chokepoint can never be silently widened/narrowed in YAML.
+NORMALISED_FEATURE_IDS: tuple[str, ...] = ("F09", "F11", "F13", "F14", "F19", "F20")
+
 
 class FeaturesConfig(BaseModel):
     """Typed view over the ``features:`` block (F03a scalar extraction, §4.1/§4.2/§4.5).
@@ -248,6 +254,61 @@ class FeaturesConfig(BaseModel):
         return self
 
 
+class NormaliseConfig(BaseModel):
+    """Typed view over the ``normalise:`` block (F04 circuit-aware normalisation, §4.3/§8.2).
+
+    Lives here, not in ``app/pipeline/normalise.py`` (standing rule, F01): the feature reads its
+    config through a strictly-validated model. Holds only the constants unique to F04; the
+    per-circuit fit floor it also needs — ``min_clean_laps`` (30) — is read from ``Thresholds`` so
+    this file stays the single source for that value, and the quarantined ``held_out_circuits`` are
+    read from ``AppConfig``. ``features`` is pinned to ``NORMALISED_FEATURE_IDS`` so the leakage
+    chokepoint's scope cannot be silently changed in YAML.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    features: list[str]  # §4.3 — the six circuit-dependent IDs Z-scored per circuit
+    grouping_key: str  # §4.3 — fit mean/std per this key (circuit)
+    artefact_filename: str  # §8.2 — written under paths.artefacts_dir
+    ddof: int  # delta-degrees-of-freedom for std (0 = population std)
+    min_std: float  # std below this -> zero-variance fallback (no division by zero)
+
+    @model_validator(mode="after")
+    def _features_are_the_normalised_ids(self) -> NormaliseConfig:
+        """``normalise.features`` MUST be exactly the six ``NORMALISED_FEATURE_IDS`` (order-free),
+        and every one MUST be a range-bearing feature (member of ``RANGE_CHECKED_IDS``). Pinning
+        the set here makes widening/narrowing the leakage chokepoint a build-breaking
+        ``CONFIG_001`` rather than a silent YAML edit (non-negotiable #2)."""
+        expected = set(NORMALISED_FEATURE_IDS)
+        got = set(self.features)
+        if got != expected:
+            missing = sorted(expected - got)
+            extra = sorted(got - expected)
+            raise ValueError(
+                f"normalise.features must be exactly {sorted(expected)}; "
+                f"missing={missing} unexpected={extra}"
+            )
+        stray = sorted(got - set(RANGE_CHECKED_IDS))
+        if stray:
+            raise ValueError(f"normalise.features contains non-range-checked IDs: {stray}")
+        return self
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> NormaliseConfig:
+        """Guard the grouping key and the numeric constants so a mis-edit fails fast at load
+        rather than producing a silent wrong artefact (e.g. ``min_std <= 0`` re-enabling
+        division by zero, or a non-``circuit`` grouping key)."""
+        if self.grouping_key != "circuit":
+            raise ValueError(f"normalise.grouping_key must be 'circuit', got {self.grouping_key!r}")
+        if not self.artefact_filename:
+            raise ValueError("normalise.artefact_filename must be non-empty")
+        if self.ddof < 0:
+            raise ValueError(f"normalise.ddof must be >= 0, got {self.ddof}")
+        if self.min_std <= 0:
+            raise ValueError(f"normalise.min_std must be > 0, got {self.min_std}")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -271,6 +332,7 @@ class AppConfig(BaseModel):
     # shadowing pydantic's deprecated BaseModel.validate (F02; None until block present).
     lap_validation: ValidateConfig | None = Field(default=None, alias="validate")
     features: FeaturesConfig | None = None  # F03a; None until the features: block is present
+    normalise: NormaliseConfig | None = None  # F04; None until the normalise: block is present
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:

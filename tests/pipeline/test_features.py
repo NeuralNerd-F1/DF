@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from app.contracts.config import SCALAR_FEATURE_IDS, AppConfig, load_config
+from app.contracts.config import GEOMETRY_FEATURE_IDS, SCALAR_FEATURE_IDS, AppConfig, load_config
 from app.contracts.enums import Status
 from app.contracts.errors import ErrorCode
 from app.pipeline import features as feat
@@ -22,7 +22,10 @@ from app.pipeline.features import (
     FEATURE_IDS,
     FeatureComputationError,
     FeatureMedians,
+    StintLap,
     assemble_feature_vector,
+    compute_degradation_slopes,
+    compute_geometry_features,
     compute_scalar_features,
 )
 
@@ -772,3 +775,337 @@ def test_rate_features_resample_invariant(feat_cfg: AppConfig) -> None:
     # it the two rates would differ by 2.5x (the dt ratio), so 2% proves invariance.
     assert slow.features["F03"] == pytest.approx(fast.features["F03"], rel=2e-2)
     assert slow.features["F08"] == pytest.approx(fast.features["F08"], rel=2e-2)
+
+
+# ==================================================================================
+# F03b — geometry (F19-F21, F25) + degradation slopes (F27, F28)
+# ==================================================================================
+
+GRAVITY = 9.81
+
+
+def _arc_lap(*, radius_m: float = 50.0, v_kmh: float = 108.0, n: int = 240) -> pd.DataFrame:
+    """A constant-radius circular arc at constant speed -> analytic lateral G = v^2/(R*g)."""
+    v = v_kmh / 3.6
+    dt = (2 * np.pi * radius_m / v) / n
+    theta = np.linspace(0.0, 2 * np.pi, n)
+    return pd.DataFrame(
+        {
+            "time": np.arange(n) * dt,
+            "X": radius_m * np.cos(theta),
+            "Y": radius_m * np.sin(theta),
+            "Speed": v_kmh,
+            "Throttle": 50.0, "Brake": 0.0, "RPM": 9000.0, "Gear": 5.0, "lap": 1,
+        }
+    )
+
+
+def _slalom_lap(
+    *, cycles: int = 3, n: int = 360, amp: float = 25.0, v_kmh: float = 150.0
+) -> pd.DataFrame:
+    """Sinusoidal lateral path: amp*sin gives 2*cycles alternating-sign curvature peaks ->
+    exercises F20 (peaks) and F21 (direction reversals)."""
+    i = np.arange(n)
+    v = v_kmh / 3.6
+    return pd.DataFrame(
+        {
+            "time": i * (3.0 / v), "X": i * 3.0, "Y": amp * np.sin(2 * np.pi * cycles * i / n),
+            "Speed": v_kmh, "Throttle": 50.0, "Brake": 0.0, "RPM": 9000.0, "Gear": 5.0, "lap": 1,
+        }
+    )
+
+
+def _corner_brake_lap() -> pd.DataFrame:
+    """Straight X/Y (X/Y available) with two speed valleys (corners) and braking only on the
+    ENTRY side of each -> F25 ratio ~ 1.0 (all in-corner braking before the apex)."""
+    block = [280.0, 260.0, 220.0, 180.0, 140.0, 120.0, 140.0, 180.0, 220.0, 260.0]
+    speed = np.array(block * 2 + [280.0], dtype=float)
+    n = speed.size
+    brake = np.zeros(n)
+    brake[1:5] = 80.0   # descending side of valley 1 (apex at idx 5)
+    brake[11:15] = 80.0  # descending side of valley 2 (apex at idx 15)
+    return pd.DataFrame(
+        {
+            "time": np.arange(n) * DT, "X": np.arange(n, dtype=float), "Y": 0.0,
+            "Speed": speed, "Throttle": 0.0, "Brake": brake, "RPM": 9000.0, "Gear": 5.0, "lap": 1,
+        }
+    )
+
+
+def _geom(df: pd.DataFrame, cfg: AppConfig) -> feat.GeometryFeatureResult:
+    return compute_geometry_features(df, lap_number=1, config=cfg)
+
+
+def _stint(n: int, *, throttle_slope: float = -0.5, brake_slope: float = 1.0,
+           tyre_age_known: bool = True) -> list[StintLap]:
+    return [
+        StintLap(
+            lap_number=i,
+            tyre_age=(i if tyre_age_known else None),
+            throttle_mean=80.0 + throttle_slope * i,
+            brake_peak_mean=100.0 + brake_slope * i,
+        )
+        for i in range(n)
+    ]
+
+
+# --- happy path ---
+
+
+def test_geometry_result_keys_exactly_four(feat_cfg: AppConfig) -> None:
+    res = _geom(_slalom_lap(), feat_cfg)
+    assert set(res.features) == set(GEOMETRY_FEATURE_IDS)
+    for fid in ("F27", "F28"):
+        assert fid not in res.features
+
+
+def test_f19_lateral_g_matches_analytic_arc(feat_cfg: AppConfig) -> None:
+    res = _geom(_arc_lap(radius_m=50.0, v_kmh=108.0), feat_cfg)
+    expected = (108.0 / 3.6) ** 2 / (50.0 * GRAVITY)  # v^2/(R*g) ~ 1.835 G
+    assert res.features["F19"] == pytest.approx(expected, rel=0.05)
+    assert 0.0 <= res.features["F19"] <= 6.0
+
+
+def test_f20_peaks_on_slalom(feat_cfg: AppConfig) -> None:
+    res = _geom(_slalom_lap(cycles=3), feat_cfg)  # 6 curvature peaks >= min 5
+    assert res.features["F20"] is not None
+    assert 0.0 <= res.features["F20"] <= 6.0
+
+
+def test_f21_reversals_slalom_vs_arc(feat_cfg: AppConfig) -> None:
+    slalom = _geom(_slalom_lap(cycles=3), feat_cfg)
+    arc = _geom(_arc_lap(), feat_cfg)
+    assert slalom.features["F21"] > 0.0  # alternating turns -> reversals
+    assert arc.features["F21"] == pytest.approx(0.0)  # single-direction arc -> none
+
+
+def test_f25_corner_balance_entry_biased(feat_cfg: AppConfig) -> None:
+    res = _geom(_corner_brake_lap(), feat_cfg)
+    assert res.features["F25"] == pytest.approx(1.0)  # all in-corner braking before the apex
+
+
+def test_degradation_slopes_known_trend(feat_cfg: AppConfig) -> None:
+    res = compute_degradation_slopes(_stint(10), stint_id=1, config=feat_cfg)
+    assert res.f27 == pytest.approx(-0.5)
+    assert res.f28 == pytest.approx(1.0)
+    assert res.applies_to == list(range(10))
+    assert res.status is Status.OK
+
+
+# --- X/Y unavailable: CORNER_001, four NULL, lap survives ---
+
+
+def test_xy_unavailable_nulls_four_and_logs_corner_001(feat_cfg: AppConfig) -> None:
+    df = _slalom_lap().drop(columns=["X", "Y"])
+    res = _geom(df, feat_cfg)
+    assert all(res.features[fid] is None for fid in GEOMETRY_FEATURE_IDS)
+    assert set(res.null_features) == set(GEOMETRY_FEATURE_IDS)
+    assert res.error_code is ErrorCode.CORNER_001
+    assert res.status is Status.DEGRADED  # lap continues, not FAILED
+    rows = read_dq(feat_cfg.paths.data_quality_log)
+    assert len(rows) == 1 and rows[0]["error_code"] == ErrorCode.CORNER_001.value
+
+
+def test_xy_all_nan_logs_corner_001(feat_cfg: AppConfig) -> None:
+    df = _slalom_lap()
+    df["X"] = np.nan
+    df["Y"] = np.nan
+    res = _geom(df, feat_cfg)
+    assert res.error_code is ErrorCode.CORNER_001
+    assert all(res.features[fid] is None for fid in GEOMETRY_FEATURE_IDS)
+
+
+def test_xy_mostly_nan_below_fraction_logs_corner_001(feat_cfg: AppConfig) -> None:
+    """A near-total X/Y dropout (finite fraction < min_xy_finite_fraction) is unavailable, not
+    fabricated from the few finite samples."""
+    df = _slalom_lap()
+    xy = df["X"].to_numpy(float).copy()
+    xy[5:] = np.nan  # only 5 finite of 360 -> ~1.4% << 90%
+    df["X"] = xy
+    df["Y"] = xy
+    res = _geom(df, feat_cfg)
+    assert res.error_code is ErrorCode.CORNER_001
+    assert all(res.features[fid] is None for fid in GEOMETRY_FEATURE_IDS)
+
+
+def test_geometry_context_build_error_is_caught(feat_cfg: AppConfig, monkeypatch) -> None:
+    """An unexpected error while building the geometry context is caught: 4 NULL, no raise."""
+    def boom(*_a, **_k):
+        raise ValueError("synthetic gradient failure")
+
+    monkeypatch.setattr(feat, "_signed_lateral_g", boom)
+    res = _geom(_slalom_lap(), feat_cfg)
+    assert all(res.features[fid] is None for fid in GEOMETRY_FEATURE_IDS)
+    assert res.status is Status.DEGRADED
+    assert str(res.detail["F19"]["reason"]) == feat.REASON_UNEXPECTED
+
+
+# --- per-feature NULL / out-of-range (X/Y present) ---
+
+
+def test_f19_out_of_range_raises_no_clamp(feat_cfg: AppConfig) -> None:
+    res = _geom(_arc_lap(radius_m=10.0, v_kmh=200.0), feat_cfg)  # G >> 6
+    assert res.features["F19"] is None
+    assert str(res.detail["F19"]["reason"]) == feat.REASON_OUT_OF_RANGE
+
+
+def test_checked_raises_on_out_of_range_geometry() -> None:
+    cfg = load_config().features
+    assert cfg is not None
+    with pytest.raises(FeatureComputationError) as ei:
+        feat._checked("F19", 7.0, cfg)  # range [0, 6]
+    assert ei.value.reason == feat.REASON_OUT_OF_RANGE
+
+
+def test_f20_too_few_peaks_on_arc_nulls(feat_cfg: AppConfig) -> None:
+    res = _geom(_arc_lap(), feat_cfg)  # constant curvature -> no distinct peaks
+    assert res.features["F20"] is None
+    assert str(res.detail["F20"]["reason"]) == feat.REASON_NULL_TRIGGER
+
+
+def test_f25_no_corners_nulls(feat_cfg: AppConfig) -> None:
+    res = _geom(_slalom_lap(), feat_cfg)  # constant speed -> no speed-minimum corners
+    assert res.features["F25"] is None
+    assert str(res.detail["F25"]["reason"]) == feat.REASON_NULL_TRIGGER
+
+
+def test_f21_no_time_base_nulls(feat_cfg: AppConfig) -> None:
+    """F21 (X/Y present) NULLs when there is no clock to give a per-second rate -> the
+    documented 'lap duration unavailable' trigger."""
+    df = _slalom_lap().drop(columns=["time"])  # no per-sample clock and no lap_time column
+    res = _geom(df, feat_cfg)
+    assert res.features["F21"] is None
+    assert str(res.detail["F21"]["reason"]) == feat.REASON_NULL_TRIGGER
+    # X/Y is still present, so this is a per-feature FEATURE_001 NULL, not CORNER_001.
+    assert res.error_code is not ErrorCode.CORNER_001
+
+
+def test_f21_lateral_g_not_computable_nulls(feat_cfg: AppConfig) -> None:
+    """F21 second trigger: X/Y present but speed all-NaN -> lateral G undefined -> NULL."""
+    df = _slalom_lap()
+    df["Speed"] = np.nan
+    res = _geom(df, feat_cfg)
+    assert res.features["F21"] is None
+    assert "lateral G not computable" in str(res.detail["F21"]["detail"])
+
+
+def test_f25_no_in_corner_braking_nulls(feat_cfg: AppConfig) -> None:
+    """F25 second trigger: corners exist but no braking inside any corner window -> NULL."""
+    df = _corner_brake_lap()
+    df["Brake"] = 0.0  # corners (speed valleys) remain, but no in-corner braking
+    res = _geom(df, feat_cfg)
+    assert res.features["F25"] is None
+    assert "no corner has braking" in str(res.detail["F25"]["detail"])
+
+
+# --- F27/F28 stint gate ---
+
+
+def test_stint_too_short_nulls_f27_f28(feat_cfg: AppConfig) -> None:
+    res = compute_degradation_slopes(_stint(7), stint_id=1, config=feat_cfg)  # 7 < 8
+    assert res.f27 is None and res.f28 is None
+    assert res.status is Status.DEGRADED
+    rows = read_dq(feat_cfg.paths.data_quality_log)  # 7 laps * 2 NULL slopes
+    assert len(rows) == 14
+    assert all(r["error_code"] == ErrorCode.FEATURE_001.value for r in rows)
+
+
+def test_stint_exactly_min_computes(feat_cfg: AppConfig) -> None:
+    res = compute_degradation_slopes(_stint(8), stint_id=1, config=feat_cfg)  # boundary: 8
+    assert res.f27 is not None and res.f28 is not None
+
+
+def test_tyre_age_unknown_nulls_f27_f28(feat_cfg: AppConfig) -> None:
+    res = compute_degradation_slopes(_stint(10, tyre_age_known=False), stint_id=1, config=feat_cfg)
+    assert res.f27 is None and res.f28 is None
+    assert "tyre age UNKNOWN" in (res.null_reason or "")
+
+
+def test_f27_f28_are_unconstrained(feat_cfg: AppConfig) -> None:
+    res = compute_degradation_slopes(
+        _stint(10, throttle_slope=1e6, brake_slope=-1e6), stint_id=1, config=feat_cfg
+    )
+    assert res.f27 == pytest.approx(1e6)
+    assert res.f28 == pytest.approx(-1e6)
+
+
+def test_degradation_never_raises_on_polyfit_error(feat_cfg: AppConfig, monkeypatch) -> None:
+    """A numpy failure in the slope fit is caught -> both slopes NULL, no exception escapes."""
+    def boom(*_a, **_k):
+        raise np.linalg.LinAlgError("synthetic LAPACK failure")
+
+    monkeypatch.setattr(feat.np, "polyfit", boom)
+    res = compute_degradation_slopes(_stint(10), stint_id=1, config=feat_cfg)
+    assert res.f27 is None and res.f28 is None
+    assert res.status is Status.DEGRADED
+
+
+def test_stint_known_age_but_all_values_null_reports_usable_laps(feat_cfg: AppConfig) -> None:
+    """Reason is '0 usable laps < N' (not the misleading 'tyre age UNKNOWN') when tyre ages
+    are known but every F01/F06 value is NULL."""
+    stint = [StintLap(lap_number=i, tyre_age=i, throttle_mean=None, brake_peak_mean=None)
+             for i in range(10)]
+    res = compute_degradation_slopes(stint, stint_id=1, config=feat_cfg)
+    assert res.f27 is None
+    assert "usable laps" in (res.null_reason or "")
+    assert "tyre age UNKNOWN" not in (res.null_reason or "")
+
+
+def test_empty_stint_is_logged(feat_cfg: AppConfig) -> None:
+    """A degenerate empty stint NULLs F27/F28 but is never unaudited (one stint-level row)."""
+    res = compute_degradation_slopes([], stint_id=9, config=feat_cfg)
+    assert res.f27 is None and res.f28 is None
+    assert res.logged is True
+    rows = read_dq(feat_cfg.paths.data_quality_log)
+    assert len(rows) == 1 and rows[0]["entity_id"] == "stint9"
+
+
+# --- config-driven ---
+
+
+def test_min_stint_laps_is_config_driven(feat_cfg: AppConfig) -> None:
+    feat_cfg.features.min_stint_laps = 12  # type: ignore[union-attr]
+    res = compute_degradation_slopes(_stint(10), stint_id=1, config=feat_cfg)  # 10 < new 12
+    assert res.f27 is None
+
+
+def test_f19_range_is_config_driven(feat_cfg: AppConfig) -> None:
+    feat_cfg.features.valid_ranges["F19"] = (0.0, 1.0)  # type: ignore[union-attr]
+    res = _geom(_arc_lap(), feat_cfg)  # arc ~1.8 G now out of the tightened range
+    assert res.features["F19"] is None
+    assert str(res.detail["F19"]["reason"]) == feat.REASON_OUT_OF_RANGE
+
+
+# --- integration with F03a's assemble_feature_vector (unchanged) ---
+
+
+def _full_values() -> dict[str, float | None]:
+    return {fid: 1.0 for fid in FEATURE_IDS}
+
+
+def test_xy_loss_plus_short_stint_sits_at_ceiling(feat_cfg: AppConfig) -> None:
+    values = _full_values()
+    for fid in (*GEOMETRY_FEATURE_IDS, "F27", "F28"):  # 4 + 2 = 6 NULL == ceiling
+        values[fid] = None
+    medians = FeatureMedians(global_medians={fid: 5.0 for fid in FEATURE_IDS})
+    out = assemble_feature_vector(
+        values, lap_number=1, driver="VER", circuit_type="high_speed",
+        medians=medians, config=feat_cfg,
+    )
+    assert out.status is Status.DEGRADED
+    assert out.error_code is None
+    assert out.null_count == 6
+    assert len(out.imputed_features) == 6
+
+
+def test_one_more_null_over_ceiling_rejects(feat_cfg: AppConfig) -> None:
+    values = _full_values()
+    for fid in (*GEOMETRY_FEATURE_IDS, "F27", "F28", "F01"):  # 7 NULL
+        values[fid] = None
+    medians = FeatureMedians(global_medians={fid: 5.0 for fid in FEATURE_IDS})
+    out = assemble_feature_vector(
+        values, lap_number=1, driver="VER", circuit_type="high_speed",
+        medians=medians, config=feat_cfg,
+    )
+    assert out.status is Status.FAILED
+    assert out.error_code is ErrorCode.LAP_NULL_EXCESS

@@ -76,6 +76,14 @@ features:
   redline_pct: 97                 # §4.2 F17 — fraction of lap above this % of session-max RPM
   min_gear_changes: 10            # §4.2 F16 — fewer gear changes -> NULL
   min_transitions: 5              # §4.2 F24 — fewer brake->throttle transitions -> NULL
+  # --- F03b geometry & degradation (§4.2, §4.4) ---
+  lateral_g_peak_top_n: 5         # §4.2 F20 — mean of top-N lateral-G peaks
+  min_lateral_g_peaks: 5          # §4.2 F20 — fewer distinct peaks -> NULL
+  lateral_g_peak_min_prominence: 0.2  # design decision — min G prominence for a "distinct" peak (F20)
+  steering_g_deadband: 0.1        # design decision — |lateral G| below this ignored for F21 sign-reversals
+  gravity_m_s2: 9.81              # physical constant — lateral accel (m/s^2) -> G (F19/F20/F21)
+  min_stint_laps: 8               # §4.2 F27/F28 — stint with fewer usable laps -> NULL
+  min_xy_finite_fraction: 0.9     # design decision — X/Y "available" iff >= this fraction of samples finite
   valid_ranges:                   # §4.2 — value outside [min,max] -> FeatureComputationError -> NULL + FEATURE_001
     F01: [0, 100]
     F02: [0, 50]
@@ -99,3 +107,7 @@ features:
     F23: [-1, 1]
     F24: [0, 3000]
     F26: [-30, 30]
+    F19: [0, 6]                  # §4.2 F19 lateral_g_mean (G)
+    F20: [0, 6]                  # §4.2 F20 lateral_g_peak_mean (G)
+    F21: [0, 5]                  # §4.2 F21 steering_correction_rate (reversals/s)
+    F25: [0, 1]                  # §4.2 F25 corner_entry_balance (ratio)

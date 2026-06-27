@@ -33,6 +33,7 @@ filename, the per-circuit fit floor) is read from ``config.yaml`` via ``config.n
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -44,7 +45,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.contracts.config import AppConfig
 from app.contracts.enums import Status
 from app.contracts.errors import ErrorCode
-from app.contracts.logging import log_data_quality
+from app.contracts.logging import DataQualityLogError, log_data_quality
 from app.contracts.results import BaseResult
 
 # Structural constants (not tunable thresholds — those live in config). Bumped only when the
@@ -54,10 +55,20 @@ SCHEMA_VERSION = "1.0"
 # Sentinel entity id for the global (all-circuit) params in fit-time data_quality_log rows.
 _GLOBAL_ENTITY = "GLOBAL"
 
+# Centre-only fallbacks: when a stat is degenerate it cannot scale/centre the feature, so we
+# substitute a no-op. ``std=1.0`` (global std < min_std / NaN) and ``mean=0.0`` (global mean
+# non-finite — feature all-NULL across training) keep the artefact finite + valid JSON instead of
+# storing NaN. Architectural constants (spec §4.2), not tunable thresholds — named so they are
+# self-documenting and excluded from the config-literal scan.
+_CENTRE_ONLY_STD = 1.0
+_CENTRE_ONLY_MEAN = 0.0
+
 # data_quality_log detail tags (mirrors features.py's REASON_* convention).
 REASON_ZERO_VARIANCE = "ZERO_VARIANCE"
+REASON_NON_FINITE_MEAN = "NON_FINITE_MEAN"  # fit: feature all-NULL at a circuit -> mean is NaN
 REASON_UNKNOWN_CIRCUIT = "UNKNOWN_CIRCUIT"
 REASON_NULL_INPUT = "NULL_INPUT"
+REASON_NON_FINITE_INPUT = "NON_FINITE_INPUT"  # apply: a feature value is NaN/Inf, not a real float
 REASON_SUB_MIN_CIRCUIT = "SUB_MIN_CIRCUIT"
 REASON_UNEXPECTED = "UNEXPECTED"
 
@@ -162,17 +173,29 @@ class _DQLedger:
     log_path: Path
     entity_type: str
     rows: int = 0
+    failed: int = 0
 
     def record(self, *, code: ErrorCode, entity_id: str, detail: str, fallback_used: bool) -> None:
-        log_data_quality(
-            error_code=code,
-            entity_type=self.entity_type,
-            entity_id=entity_id,
-            error_detail=detail,
-            fallback_used=fallback_used,
-            log_path=self.log_path,
-        )
-        self.rows += 1
+        """Append one row; never propagate a sink failure.
+
+        If the ``data_quality_log`` sink is unwritable, ``log_data_quality`` raises
+        ``DataQualityLogError`` — but at this boundary that must NOT crash the caller:
+        ``apply_normalisation`` is contractually never-raises, and ``fit_normaliser`` must still
+        produce its artefact. We count the loss in ``failed`` so the caller can surface
+        ``DATA_QUALITY_LOG_UNWRITABLE`` on the result's ``flags`` (visible, not silent) rather
+        than lose the audit signal entirely (non-negotiable #1)."""
+        try:
+            log_data_quality(
+                error_code=code,
+                entity_type=self.entity_type,
+                entity_id=entity_id,
+                error_detail=detail,
+                fallback_used=fallback_used,
+                log_path=self.log_path,
+            )
+            self.rows += 1
+        except DataQualityLogError:
+            self.failed += 1
 
 
 # ----------------------------------------------------------------------------------
@@ -208,7 +231,10 @@ def _canonical_body(params: NormalisationParams) -> str:
     platforms for identical float values (reproducibility, non-negotiable #3).
     """
     body = params.model_dump(exclude={"content_hash"})
-    return json.dumps(body, sort_keys=True, separators=(",", ":"))
+    # allow_nan=False: a non-finite stat must never be written as the bare `NaN`/`Infinity` token
+    # (invalid JSON for strict readers). With the fit's centre-only fallbacks this never triggers;
+    # it is a fail-loud guard against any future regression that lets a NaN reach serialisation.
+    return json.dumps(body, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 # ----------------------------------------------------------------------------------
@@ -262,6 +288,17 @@ def fit_normaliser(
     if n_train_laps == 0:
         raise NormalisationError("no training rows after excluding held-out / non-train split")
 
+    # 2b. Reject null circuit keys: pandas groupby silently DROPS NaN-key rows from the per-circuit
+    # fit, yet they would still skew the global params — two stat sets fit on inconsistent
+    # populations, with no audit row. Fail loud (consistent with the other fit-time guards) rather
+    # than fit on a row that has no per-circuit home (non-negotiable #1/#2).
+    if bool(train[grouping_key].isna().any()):
+        n_null = int(train[grouping_key].isna().sum())
+        raise NormalisationError(
+            f"{n_null} training row(s) have a null '{grouping_key}' key; refusing to fit "
+            "(they would skew global params while being dropped from every per-circuit fit)"
+        )
+
     # 3. Per-circuit aggregation (vectorised; no per-row loops).
     grouped = train.groupby(grouping_key)
     counts = grouped.size()
@@ -275,6 +312,16 @@ def fit_normaliser(
     for f in features:
         gmean = float(global_means[f])
         gstd = float(global_stds[f])
+        # A feature that is all-NULL across the whole train split yields a NaN mean; storing it
+        # verbatim would ship NaN into every downstream model. Centre to 0.0 and log instead.
+        if not math.isfinite(gmean):
+            ledger.record(
+                code=ErrorCode.NORMALISATION_FALLBACK,
+                entity_id=_GLOBAL_ENTITY,
+                detail=f"{f} {REASON_NON_FINITE_MEAN} (global mean={gmean}); centred (mean=0.0)",
+                fallback_used=True,
+            )
+            gmean = _CENTRE_ONLY_MEAN
         # `not (gstd >= min_std)` is True for both gstd < min_std AND gstd NaN.
         if not (gstd >= min_std):
             ledger.record(
@@ -283,7 +330,7 @@ def fit_normaliser(
                 detail=f"{f} {REASON_ZERO_VARIANCE} (global std={gstd}); centred (std=1.0)",
                 fallback_used=True,
             )
-            gstd = 1.0
+            gstd = _CENTRE_ONLY_STD
         global_stats[f] = FeatureStats(mean=gmean, std=gstd)
 
     # 5. Per-circuit params + skip / zero-variance handling.
@@ -308,6 +355,14 @@ def fit_normaliser(
         for f in features:
             mean = float(means.loc[circuit, f])
             std = float(stds.loc[circuit, f])
+            if not math.isfinite(mean):
+                mean = global_stats[f].mean  # already finite (centred to 0.0 if global all-NULL)
+                ledger.record(
+                    code=ErrorCode.NORMALISATION_FALLBACK,
+                    entity_id=name,
+                    detail=f"{f} {REASON_NON_FINITE_MEAN}; using global mean {mean}",
+                    fallback_used=True,
+                )
             if not (std >= min_std):
                 std = global_stats[f].std  # already >= min_std or centred to 1.0
                 ledger.record(
@@ -340,10 +395,11 @@ def fit_normaliser(
         else Path(config.paths.artefacts_dir) / ncfg.artefact_filename
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(params.model_dump(), sort_keys=True, indent=2) + "\n"
+    text = json.dumps(params.model_dump(), sort_keys=True, indent=2, allow_nan=False) + "\n"
     path.write_text(text, encoding="utf-8")
 
-    degraded = bool(skipped) or ledger.rows > 0
+    degraded = bool(skipped) or ledger.rows > 0 or ledger.failed > 0
+    flags = [ErrorCode.DATA_QUALITY_LOG_UNWRITABLE] if ledger.failed else []
     return NormalisationFitResult(
         n_train_laps=n_train_laps,
         n_circuits=len(per_circuit),
@@ -352,6 +408,7 @@ def fit_normaliser(
         skipped_circuits=skipped,
         artefact_path=str(path),
         content_hash=params.content_hash,
+        flags=flags,
         status=Status.DEGRADED if degraded else Status.OK,
         # A skipped circuit / zero-variance fallback names a specific degradation condition, so
         # the result carries the code (consistent with F03b's GeometryFeatureResult on a DEGRADED
@@ -450,8 +507,32 @@ def apply_normalisation(
             )
             continue
         try:
+            xf = float(x)
+        except (TypeError, ValueError) as exc:
+            out[f] = None  # non-numeric value -> NULL (typed result stays valid)
+            fallback_features.append(f)
+            ledger.record(
+                code=ErrorCode.NORMALISATION_FALLBACK,
+                entity_id=circuit,
+                detail=f"{f} {REASON_UNEXPECTED}: {exc!r}; left un-normalised",
+                fallback_used=True,
+            )
+            continue
+        if not math.isfinite(xf):
+            # A NaN/Inf input (e.g. a missing channel surfaced as np.nan) is NOT a real value:
+            # normalising it would ship NaN downstream with status OK. Treat as missing -> NULL.
+            out[f] = None
+            fallback_features.append(f)
+            ledger.record(
+                code=ErrorCode.NORMALISATION_FALLBACK,
+                entity_id=circuit,
+                detail=f"{f} {REASON_NON_FINITE_INPUT} ({xf}); left un-normalised",
+                fallback_used=True,
+            )
+            continue
+        try:
             st = circuit_stats[f]  # type: ignore[index]
-            out[f] = (float(x) - st.mean) / st.std
+            out[f] = (xf - st.mean) / st.std
         except Exception as exc:  # noqa: BLE001 — last resort: NULL it, never propagate (#1)
             out[f] = None  # un-normalisable value -> NULL (typed result stays valid)
             fallback_features.append(f)
@@ -463,12 +544,15 @@ def apply_normalisation(
             )
 
     degraded = used_global or bool(fallback_features)
+    # A DQ-sink failure (ledger.failed) is surfaced on flags, not raised — apply never raises.
+    flags = [ErrorCode.DATA_QUALITY_LOG_UNWRITABLE] if ledger.failed else []
     return NormalisationResult(
         circuit=circuit,
         normalised_vector=out,
         normalised_features=features,
         used_global=used_global,
         fallback_features=fallback_features,
+        flags=flags,
         status=Status.DEGRADED if degraded else Status.OK,
         error_code=ErrorCode.NORMALISATION_FALLBACK if degraded else None,
         logged=ledger.rows > 0,

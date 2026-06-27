@@ -16,9 +16,17 @@ import math
 from hashlib import sha256
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
-from app.contracts.config import NORMALISED_FEATURE_IDS, AppConfig
+import yaml
+from app.contracts.config import (
+    NORMALISED_FEATURE_IDS,
+    AppConfig,
+    ConfigError,
+    NormaliseConfig,
+    load_config,
+)
 from app.contracts.enums import Status
 from app.contracts.errors import ErrorCode
 from app.pipeline import normalise as norm
@@ -29,6 +37,7 @@ from app.pipeline.normalise import (
     fit_normaliser,
     load_normalisation_params,
 )
+from pydantic import ValidationError
 
 from tests.pipeline.conftest import feature_frame, read_dq
 
@@ -213,6 +222,7 @@ def test_unknown_circuit_falls_back_to_global(normalise_config: AppConfig) -> No
     assert out.used_global is True
     assert out.status is Status.DEGRADED
     assert out.error_code is ErrorCode.NORMALISATION_FALLBACK
+    assert out.logged is True
     assert set(out.normalised_vector) == set(FEATURE_IDS)
     rows = read_dq(normalise_config.paths.data_quality_log)
     apply_rows = [r for r in rows if norm.REASON_UNKNOWN_CIRCUIT in r["error_detail"]]
@@ -226,6 +236,7 @@ def test_sub_min_circuit_is_skipped_and_uses_global(normalise_config: AppConfig)
     assert res.skipped_circuits == ["Small"]
     assert res.status is Status.DEGRADED
     assert res.error_code is ErrorCode.NORMALISATION_FALLBACK  # degraded fit names the condition
+    assert res.logged is True
     params = load_normalisation_params(res.artefact_path)
     assert "Big" in params.per_circuit and "Small" not in params.per_circuit
     out = apply_normalisation(
@@ -243,6 +254,9 @@ def test_zero_variance_feature_centres_without_nan(normalise_config: AppConfig) 
     vary = feature_frame({"Hills": 35})  # F09 varies → global F09 std > 0
     df = pd.concat([const, vary], ignore_index=True)
     res = fit_normaliser(df, config=normalise_config)
+    assert res.status is Status.DEGRADED  # zero-variance fallback names the condition
+    assert res.error_code is ErrorCode.NORMALISATION_FALLBACK
+    assert res.logged is True
     params = load_normalisation_params(res.artefact_path)
     stats = params.per_circuit["Flat"]["F09"]
     assert math.isfinite(stats.std) and stats.std > 0  # took global std, not 0
@@ -280,6 +294,7 @@ def test_null_input_feature_passthrough(normalise_config: AppConfig) -> None:
     assert "F13" in out.fallback_features
     assert out.normalised_vector["F13"] is None
     assert out.error_code is ErrorCode.NORMALISATION_FALLBACK
+    assert out.logged is True
     rows = read_dq(normalise_config.paths.data_quality_log)
     assert any(norm.REASON_NULL_INPUT in r["error_detail"] for r in rows)
 
@@ -293,6 +308,16 @@ def test_apply_never_raises_on_non_numeric(normalise_config: AppConfig) -> None:
     out = apply_normalisation(vec, circuit="Bahrain", params=params, config=normalise_config)
     assert "F09" in out.fallback_features
     assert out.error_code is ErrorCode.NORMALISATION_FALLBACK
+    assert out.logged is True
+    # The UNEXPECTED catch must still write the audit row — assert it, so a deleted ledger
+    # call can't silently drop the trail while the type contract still appears to hold.
+    rows = read_dq(normalise_config.paths.data_quality_log)
+    unexpected = [
+        r
+        for r in rows
+        if norm.REASON_UNEXPECTED in r["error_detail"] and "F09" in r["error_detail"]
+    ]
+    assert len(unexpected) == 1 and unexpected[0]["error_code"] == "NORMALISATION_FALLBACK"
 
 
 # ----------------------------------------------------------------------------------
@@ -433,3 +458,129 @@ def test_normalised_features_come_from_config(normalise_config: AppConfig) -> No
     res = fit_normaliser(feature_frame({"Bahrain": 35}), config=normalise_config)
     assert res.normalised_features == list(normalise_config.normalise.features)
     assert tuple(res.normalised_features) == NORMALISED_FEATURE_IDS
+
+
+# ----------------------------------------------------------------------------------
+# Config-load guards for the chokepoint (leakage scope + quarantine list)
+# ----------------------------------------------------------------------------------
+
+
+def test_normalise_features_must_be_in_canonical_order() -> None:
+    """Reordering the six IDs is rejected at config-load: the artefact stores and hashes the
+    feature order, so a reorder would silently change content_hash and break byte-determinism."""
+    reordered = list(reversed(NORMALISED_FEATURE_IDS))
+    with pytest.raises(ValidationError, match="in this order"):
+        NormaliseConfig(
+            features=reordered,
+            grouping_key="circuit",
+            artefact_filename="normalisation.json",
+            ddof=0,
+            min_std=1e-8,
+        )
+
+
+def test_empty_held_out_circuits_is_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    """An empty held_out_circuits would silently disable the train-mask exclusion AND the
+    _assert_no_leakage tripwire — so config-load rejects it (CONFIG_001), never a silent hole."""
+    raw = yaml.safe_load(Path(repo_config_path).read_text(encoding="utf-8"))
+    raw["held_out_circuits"] = []
+    p = tmp_path / "empty_held_out.yaml"
+    p.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ConfigError, match="held_out_circuits"):
+        load_config(p)
+
+
+def _normalise_cfg_kwargs(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "features": list(NORMALISED_FEATURE_IDS),
+        "grouping_key": "circuit",
+        "artefact_filename": "normalisation.json",
+        "ddof": 0,
+        "min_std": 1e-8,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_grouping_key_must_be_circuit() -> None:
+    with pytest.raises(ValidationError, match="grouping_key must be 'circuit'"):
+        NormaliseConfig(**_normalise_cfg_kwargs(grouping_key="driver"))  # type: ignore[arg-type]
+
+
+def test_artefact_filename_must_be_non_empty() -> None:
+    with pytest.raises(ValidationError, match="artefact_filename"):
+        NormaliseConfig(**_normalise_cfg_kwargs(artefact_filename=""))  # type: ignore[arg-type]
+
+
+def test_ddof_must_be_non_negative() -> None:
+    with pytest.raises(ValidationError, match="ddof"):
+        NormaliseConfig(**_normalise_cfg_kwargs(ddof=-1))  # type: ignore[arg-type]
+
+
+def test_min_std_must_be_positive() -> None:
+    with pytest.raises(ValidationError, match="min_std"):
+        NormaliseConfig(**_normalise_cfg_kwargs(min_std=0.0))  # type: ignore[arg-type]
+
+
+# ----------------------------------------------------------------------------------
+# NaN / non-finite safety (fit stores no NaN; apply ships no NaN; null circuit fails loud)
+# ----------------------------------------------------------------------------------
+
+
+def test_all_null_feature_at_circuit_falls_back_to_global_mean(normalise_config: AppConfig) -> None:
+    """A feature entirely NULL at one circuit must NOT store mean=NaN: it falls back to the global
+    mean (finite, since the feature varies elsewhere) and logs NON_FINITE_MEAN. The artefact stays
+    valid JSON (no bare NaN token)."""
+    df = feature_frame({"Bahrain": 35, "Monaco": 35})
+    df.loc[df["circuit"] == "Bahrain", "F09"] = np.nan
+    res = fit_normaliser(df, config=normalise_config)
+    params = load_normalisation_params(res.artefact_path)
+    stats = params.per_circuit["Bahrain"]["F09"]
+    assert math.isfinite(stats.mean) and math.isfinite(stats.std)
+    assert "NaN" not in Path(res.artefact_path).read_text()
+    rows = read_dq(normalise_config.paths.data_quality_log)
+    assert any(
+        norm.REASON_NON_FINITE_MEAN in r["error_detail"] and "F09" in r["error_detail"]
+        for r in rows
+    )
+
+
+def test_globally_all_null_feature_centres_to_zero(normalise_config: AppConfig) -> None:
+    """When a feature is all-NULL across the whole train split, the global mean cannot be computed;
+    it is centred to 0.0 (std 1.0) so the artefact is finite + valid JSON, never NaN."""
+    df = feature_frame({"Bahrain": 35})
+    df["F09"] = np.nan
+    res = fit_normaliser(df, config=normalise_config)
+    params = load_normalisation_params(res.artefact_path)
+    assert params.global_["F09"].mean == 0.0
+    assert params.global_["F09"].std == 1.0
+    assert math.isfinite(params.per_circuit["Bahrain"]["F09"].mean)
+    assert "NaN" not in Path(res.artefact_path).read_text()
+
+
+def test_nan_input_feature_is_treated_as_missing(normalise_config: AppConfig) -> None:
+    """A NaN among the six at apply is NOT normalised to NaN: it is nulled, listed in
+    fallback_features, coded, and logged (NON_FINITE_INPUT) — never shipped to a model."""
+    res = fit_normaliser(feature_frame({"Bahrain": 35}), config=normalise_config)
+    params = load_normalisation_params(res.artefact_path)
+    vec = _full_vector()
+    vec["F11"] = float("nan")
+    out = apply_normalisation(vec, circuit="Bahrain", params=params, config=normalise_config)
+    assert out.normalised_vector["F11"] is None
+    assert "F11" in out.fallback_features
+    assert out.error_code is ErrorCode.NORMALISATION_FALLBACK
+    assert out.logged is True
+    rows = read_dq(normalise_config.paths.data_quality_log)
+    assert any(
+        norm.REASON_NON_FINITE_INPUT in r["error_detail"] and "F11" in r["error_detail"]
+        for r in rows
+    )
+
+
+def test_null_circuit_key_in_fit_raises(normalise_config: AppConfig) -> None:
+    """A training row with a null circuit key would be dropped from the per-circuit fit yet skew
+    global params — fit_normaliser fails loud rather than fit on inconsistent populations."""
+    df = feature_frame({"Bahrain": 35})
+    df.loc[df.index[:3], "circuit"] = np.nan
+    with pytest.raises(NormalisationError, match="null 'circuit' key"):
+        fit_normaliser(df, config=normalise_config)

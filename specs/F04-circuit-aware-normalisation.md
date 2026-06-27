@@ -2,7 +2,7 @@
 
 > One spec, one session. Self-contained: build this from this file + CLAUDE.md only.
 
-**Status:** SPEC WRITTEN
+**Status:** DONE
 **Master spec sections:** §4.3 (Normalisation / circuit-aware scaling), §8.2 (`normalisation.json`
 artefact + `NORMALISATION_FALLBACK`), §3.2 (held-out circuits, per-combination minimum),
 Project Plan Wk 4, Risk Register (normalisation leakage)

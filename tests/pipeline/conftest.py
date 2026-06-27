@@ -13,7 +13,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from app.contracts.config import AppConfig, load_config
+from app.contracts.config import NORMALISED_FEATURE_IDS, AppConfig, load_config
+from app.pipeline.features import FEATURE_IDS
 from app.pipeline.ingest import IngestSourceError, SessionRequest, SessionUnavailableError
 
 # A fixed "now" (epoch seconds) the freshness tests reckon cache age against.
@@ -242,11 +243,11 @@ def validate_config(repo_config_path: Path, tmp_path: Path) -> AppConfig:
 # per acceptance criterion so each test triggers exactly the condition it asserts, and with
 # hand-computable distributions for the six normalised features so (x-mean)/std is checkable.
 
-# The 28 canonical feature IDs (mirrors features.FEATURE_IDS without importing the module).
-_FEATURE_IDS = tuple(f"F{n:02d}" for n in range(1, 29))
-
-# The six F04-normalised IDs (mirrors config.NORMALISED_FEATURE_IDS).
-_NORMALISED_IDS = ("F09", "F11", "F13", "F14", "F19", "F20")
+# Canonical IDs, imported (single source of truth) — never re-declared, so if the 28-key vector
+# or the six-feature normalisation scope ever changes, this fixture follows automatically rather
+# than silently asserting against a stale list.
+_FEATURE_IDS = FEATURE_IDS
+_NORMALISED_IDS = NORMALISED_FEATURE_IDS
 
 
 @pytest.fixture

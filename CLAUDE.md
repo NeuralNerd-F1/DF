@@ -28,15 +28,24 @@ one principle: **no component fails silently.**
    asserts both the happy path and the NULL/error path.
 
 ## Tech stack (versions pinned in pyproject.toml / package.json)
-- Backend: Python 3.11, FastAPI 0.111+, Pydantic v2, SQLAlchemy 2.0 + asyncpg,
+- Backend: Python 3.12+, FastAPI 0.111+, Pydantic v2, SQLAlchemy 2.0 + asyncpg,
   Alembic, Celery 5.x.
-- Data/ML: pandas 2.x, numpy 1.x (all ops vectorised — no per-row Python loops),
+- Data/ML: pandas 3.x, numpy 2.x (all ops vectorised — no per-row Python loops),
   XGBoost 2.x + CalibratedClassifierCV, Optuna 3.x, umap-learn 0.5.x (PCA fallback),
   SHAP 0.45+ (TreeExplainer, exact), MLflow 2.x, FastF1 3.x.
 - Stores: PostgreSQL 15 (Supabase), Redis 7.x (Upstash). Cache is an optimisation,
   never a hard dependency — the system must run with Redis down.
 - Frontend: Next.js 14 (App Router), TypeScript strict (no implicit any), D3.js 7,
   Three.js r128 (D3 2D fallback), Zustand 4, Tailwind 3. Dark theme only.
+
+> **Stack note (migration ratified by F04).** The runtime is **pandas 3.x — copy-on-write is
+> the default** and **numpy 2.x — 1.x type aliases removed, stricter casting** — on **Python
+> 3.12+**. The floor moved off 3.11 because `numpy 2.5.0` declares `Requires-Python >=3.12`;
+> the pinned `numpy`/`pandas` are the only wheels with Python-3.14 support, so installing the
+> deps transitively migrated the whole stack. Write new feature code against pandas-3.x /
+> numpy-2.x semantics, not 1.x/2.x idioms. F01–F03b were authored across that transition and
+> are test-covered, so they are NOT reopened — but the ground shifted under already-merged
+> code: any odd pandas copy-on-write or numpy-alias behaviour downstream traces to here.
 
 ## Repo map
 ```

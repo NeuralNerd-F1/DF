@@ -7,10 +7,14 @@ readme = "CLAUDE.md"
 packages = [{ include = "app" }]
 
 [tool.poetry.dependencies]
-# Constitution pins Python 3.11. Heavy ML/runtime deps (FastAPI, pandas, xgboost,
-# umap-learn, shap, mlflow, fastf1, sqlalchemy, ...) are added by the features that
-# first import them — F00 only needs the contract layer's runtime deps.
-python = "^3.11"
+# Python floor is 3.12: the exactly-pinned data deps require it (numpy 2.5.0 declares
+# Requires-Python >=3.12), and the build env runs Python 3.14. The constitution text
+# (CLAUDE.md) still says "Python 3.11" — that line is stale and tracked separately; the
+# resolver contract lives here. With "^3.11" poetry could not resolve numpy at all.
+# Heavy ML/runtime deps (FastAPI, pandas, xgboost, umap-learn, shap, mlflow, fastf1,
+# sqlalchemy, ...) are added by the features that first import them — F00 only needs the
+# contract layer's runtime deps.
+python = "^3.12"
 pydantic = "^2.7"
 pyyaml = "^6.0"
 # F01 ingestion: telemetry frames + Parquet cache. The constitution pins pandas 2.x /
@@ -34,6 +38,9 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 line-length = 100
+# Lint floor kept at 3.11 (runtime floor is 3.12): bumping to py312 only adds PEP 695
+# "type parameters" rewrite suggestions for already-correct DONE code — a separate
+# modernization, deliberately out of scope for this dependency-resolution fix.
 target-version = "py311"
 src = ["app", "tests"]
 
@@ -41,14 +48,15 @@ src = ["app", "tests"]
 select = ["E", "F", "I", "B", "UP", "N", "W"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 files = ["app"]
 strict = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 
-# numpy 2.x ships stubs that use 3.12+ `type` syntax, unparseable under our 3.11
-# target. We never import numpy directly (only via pandas), so skip following it.
+# We never import numpy directly (only via pandas), so skip following its stubs — this keeps
+# the checked type surface tied to what we actually use and avoids coupling to numpy's stub
+# churn. (Retained from the 3.11 era when those stubs were also unparseable at our target.)
 [[tool.mypy.overrides]]
 module = "numpy.*"
 follow_imports = "skip"

@@ -161,6 +161,19 @@ GEOMETRY_FEATURE_IDS: tuple[str, ...] = ("F19", "F20", "F21", "F25")
 # (F03b). ``valid_ranges`` must cover exactly these 26 IDs.
 RANGE_CHECKED_IDS: tuple[str, ...] = SCALAR_FEATURE_IDS + GEOMETRY_FEATURE_IDS
 
+# The six circuit-dependent feature IDs F04 Z-score normalises **per circuit** (master spec
+# §4.3): the speed-dependent F09/F11/F13/F14 (scalar) and the lateral-G F19/F20 (geometry). All
+# six are members of ``RANGE_CHECKED_IDS``; F04's config validator pins ``normalise.features`` to
+# exactly this tuple so the leakage chokepoint can never be silently widened/narrowed in YAML.
+NORMALISED_FEATURE_IDS: tuple[str, ...] = ("F09", "F11", "F13", "F14", "F19", "F20")
+
+# Load-time invariant: every normalised ID must be range-bearing. This is what lets the F04
+# validator pin `normalise.features` by exact-order equality alone (no separate per-ID range
+# check needed) — and it fails the import loudly if a future edit to the ID tuples breaks it.
+assert set(NORMALISED_FEATURE_IDS) <= set(RANGE_CHECKED_IDS), (
+    "NORMALISED_FEATURE_IDS must be a subset of RANGE_CHECKED_IDS"
+)
+
 
 class FeaturesConfig(BaseModel):
     """Typed view over the ``features:`` block (F03a scalar extraction, §4.1/§4.2/§4.5).
@@ -248,6 +261,62 @@ class FeaturesConfig(BaseModel):
         return self
 
 
+class NormaliseConfig(BaseModel):
+    """Typed view over the ``normalise:`` block (F04 circuit-aware normalisation, §4.3/§8.2).
+
+    Lives here, not in ``app/pipeline/normalise.py`` (standing rule, F01): the feature reads its
+    config through a strictly-validated model. Holds only the constants unique to F04; the
+    per-circuit fit floor it also needs — ``min_clean_laps`` (30) — is read from ``Thresholds`` so
+    this file stays the single source for that value, and the quarantined ``held_out_circuits`` are
+    read from ``AppConfig``. ``features`` is pinned to ``NORMALISED_FEATURE_IDS`` so the leakage
+    chokepoint's scope cannot be silently changed in YAML.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    features: list[str]  # §4.3 — the six circuit-dependent IDs Z-scored per circuit
+    grouping_key: str  # §4.3 — fit mean/std per this key (circuit)
+    artefact_filename: str  # §8.2 — written under paths.artefacts_dir
+    ddof: int  # delta-degrees-of-freedom for std (0 = population std)
+    min_std: float  # std below this -> zero-variance fallback (no division by zero)
+
+    @model_validator(mode="after")
+    def _features_are_the_normalised_ids(self) -> NormaliseConfig:
+        """``normalise.features`` MUST be exactly the six ``NORMALISED_FEATURE_IDS`` **in canonical
+        order**. Pinning the exact *sequence* (not just the set) makes widening, narrowing, *or
+        reordering* the leakage chokepoint a build-breaking ``CONFIG_001`` rather than a silent YAML
+        edit — and since the artefact stores ``normalised_features`` and the determinism hash covers
+        it, a reorder would otherwise silently change ``content_hash`` and break cross-run
+        byte-identity (non-negotiable #2/#3). ``NORMALISED_FEATURE_IDS`` is itself a subset of
+        ``RANGE_CHECKED_IDS`` (asserted at module load below), so equality here also guarantees
+        every ID is range-bearing — no separate check needed."""
+        expected = list(NORMALISED_FEATURE_IDS)
+        if list(self.features) != expected:
+            got = set(self.features)
+            missing = sorted(set(expected) - got)
+            extra = sorted(got - set(expected))
+            raise ValueError(
+                f"normalise.features must be exactly {expected} in this order; "
+                f"missing={missing} unexpected={extra} got={list(self.features)}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> NormaliseConfig:
+        """Guard the grouping key and the numeric constants so a mis-edit fails fast at load
+        rather than producing a silent wrong artefact (e.g. ``min_std <= 0`` re-enabling
+        division by zero, or a non-``circuit`` grouping key)."""
+        if self.grouping_key != "circuit":
+            raise ValueError(f"normalise.grouping_key must be 'circuit', got {self.grouping_key!r}")
+        if not self.artefact_filename:
+            raise ValueError("normalise.artefact_filename must be non-empty")
+        if self.ddof < 0:
+            raise ValueError(f"normalise.ddof must be >= 0, got {self.ddof}")
+        if self.min_std <= 0:
+            raise ValueError(f"normalise.min_std must be > 0, got {self.min_std}")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -271,6 +340,20 @@ class AppConfig(BaseModel):
     # shadowing pydantic's deprecated BaseModel.validate (F02; None until block present).
     lap_validation: ValidateConfig | None = Field(default=None, alias="validate")
     features: FeaturesConfig | None = None  # F03a; None until the features: block is present
+    normalise: NormaliseConfig | None = None  # F04; None until the normalise: block is present
+
+    @model_validator(mode="after")
+    def _held_out_circuits_non_empty(self) -> AppConfig:
+        """The held-out quarantine list is the spine of the F04 leakage chokepoint: an empty list
+        would silently disable *both* the train-mask exclusion and the ``_assert_no_leakage``
+        tripwire (``held_out & present`` is always empty), letting held-out data flow into every
+        ``.fit``. Make an empty list a build-breaking ``CONFIG_001`` rather than a silent hole
+        (non-negotiable #2)."""
+        if not self.held_out_circuits:
+            raise ValueError(
+                "held_out_circuits must be non-empty (it gates the F04 leakage chokepoint)"
+            )
+        return self
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:

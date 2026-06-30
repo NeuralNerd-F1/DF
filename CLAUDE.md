@@ -31,8 +31,8 @@ one principle: **no component fails silently.**
 - Backend: Python 3.12+, FastAPI 0.111+, Pydantic v2, SQLAlchemy 2.0 + asyncpg,
   Alembic, Celery 5.x.
 - Data/ML: pandas 3.x, numpy 2.x (all ops vectorised — no per-row Python loops),
-  XGBoost 2.x + CalibratedClassifierCV, Optuna 3.x, umap-learn 0.5.x (PCA fallback),
-  SHAP 0.45+ (TreeExplainer, exact), MLflow 2.x, FastF1 3.x.
+  XGBoost 3.x + CalibratedClassifierCV (scikit-learn 1.x), Optuna 4.x, umap-learn 0.5.x
+  (PCA fallback), SHAP 0.45+ (TreeExplainer, exact), mlflow-skinny 3.x, FastF1 3.x.
 - Stores: PostgreSQL 15 (Supabase), Redis 7.x (Upstash). Cache is an optimisation,
   never a hard dependency — the system must run with Redis down.
 - Frontend: Next.js 14 (App Router), TypeScript strict (no implicit any), D3.js 7,
@@ -46,6 +46,16 @@ one principle: **no component fails silently.**
 > numpy-2.x semantics, not 1.x/2.x idioms. F01–F03b were authored across that transition and
 > are test-covered, so they are NOT reopened — but the ground shifted under already-merged
 > code: any odd pandas copy-on-write or numpy-alias behaviour downstream traces to here.
+
+> **Stack note (ML deps ratified by F06a).** The ML stack is pinned at the newest releases with
+> Python-3.14 wheels — **XGBoost 3.3, Optuna 4.9, scikit-learn 1.9, mlflow-skinny 3.14** — not the
+> 2.x/3.x/2.x the line above originally named. Full `mlflow` caps `pandas<3`, which would downgrade
+> the F04-ratified pandas-3.x stack, so APEX uses **mlflow-skinny** (the lightweight tracking +
+> registry client, same `mlflow.*` API) on a **sqlite** store — the model registry is unsupported
+> on `file://` stores. scikit-learn ≥1.6 removed `CalibratedClassifierCV(cv="prefit")`, so prefit
+> calibration wraps the base model in `FrozenEstimator`. SHAP / umap-learn (F07 / F08) are not
+> installed yet and will likely migrate similarly when those features land. See
+> `specs/F06a-classifier-training.md` §8/§9 for the full rationale.
 
 ## Repo map
 ```

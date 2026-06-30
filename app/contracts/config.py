@@ -317,6 +317,115 @@ class NormaliseConfig(BaseModel):
         return self
 
 
+_CV_STRATEGY_OPTION_A = "stratified_group_kfold_by_circuit"
+_KNOWN_BASELINES = ("majority", "logistic_regression", "random_forest")
+_CALIBRATION_METHODS = ("isotonic", "sigmoid")
+
+
+class ClassifierConfig(BaseModel):
+    """Typed view over the ``classifier:`` block (F06a driver-classifier training, §5.1/§11.1).
+
+    Lives here, not in ``app/ml/classifier.py`` (standing rule, F01): training reads its config
+    through a strictly-validated model. Holds only the constants unique to F06a; the F06b runtime
+    gates (``confidence_gate``, ``entropy_ambiguous_bits``, ``null_ceiling``) live under
+    ``Thresholds`` and the seeds / ``held_out_circuits`` under ``AppConfig`` — none are re-declared
+    here. The CV-splitter keys are pinned (validators below) so the leakage-clean Option-A wiring
+    cannot be silently swapped in YAML; flipping to the literal-composite fallback is a deliberate
+    spec+config change, not a typo.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cv_folds: int  # §5.1 K-fold count
+    cv_strategy: str  # pinned to Option A (StratifiedGroupKFold grouped by circuit)
+    cv_stratify_by: str  # stratify key (driver)
+    cv_group_by: str  # group key held wholly within one fold (circuit) — true leakage guard
+    optuna_trials: int  # §5.1 minimum trial count (200 in repo config; tests override down)
+    optuna_objective: str  # §5.1 macro-averaged F1 on the validation fold
+    optuna_storage: str  # §9 Optuna SQLite storage URI (trial persistence across restarts)
+    calibration_method: str  # §5.1 CalibratedClassifierCV method
+    calibration_holdout_frac: float  # disjoint calibration split, excluded from fit folds
+    baselines: list[str]  # §5.1/§11.1 comparators logged to MLflow
+    target_macro_f1: float  # §5.1/§11.1 held-out (Belgium, Italy) target
+    per_driver_floor: float  # §11.1 per-driver F1 floor
+    mlflow_tracking_uri: str  # DB-backed store (registry needs non-file://; sqlite ok)
+    mlflow_experiment: str  # MLflow experiment name
+    mlflow_registered_model: str  # champion registry name
+    model_artefact_filename: str  # calibrated champion persisted under paths.artefacts_dir
+
+    @model_validator(mode="after")
+    def _cv_keys_pinned(self) -> ClassifierConfig:
+        """Pin the CV splitter to Option A. ``cv_strategy`` selecting the splitter and the
+        stratify/group keys being ``driver``/``circuit`` is the contract the spec's fold-membership
+        guarantee rests on; a YAML edit here would silently change what "prevent circuit leakage"
+        means, so make it a build-breaking ``CONFIG_001`` (non-negotiable #2)."""
+        if self.cv_strategy != _CV_STRATEGY_OPTION_A:
+            raise ValueError(
+                f"classifier.cv_strategy must be {_CV_STRATEGY_OPTION_A!r} (Option A); "
+                f"got {self.cv_strategy!r}. Flipping to the literal composite is a spec change."
+            )
+        if self.cv_stratify_by != "driver":
+            raise ValueError(
+                f"classifier.cv_stratify_by must be 'driver', got {self.cv_stratify_by!r}"
+            )
+        if self.cv_group_by != "circuit":
+            raise ValueError(
+                f"classifier.cv_group_by must be 'circuit', got {self.cv_group_by!r}"
+            )
+        if self.cv_folds < 2:
+            raise ValueError(f"classifier.cv_folds must be >= 2, got {self.cv_folds}")
+        return self
+
+    @model_validator(mode="after")
+    def _scalars_and_choices_sane(self) -> ClassifierConfig:
+        """Fail fast on out-of-range fractions / unknown enum choices so a mis-edit is a load-time
+        ``CONFIG_001`` rather than a surprise mid-training."""
+        if self.optuna_trials < 1:
+            raise ValueError(f"classifier.optuna_trials must be >= 1, got {self.optuna_trials}")
+        if self.optuna_objective != "macro_f1":
+            raise ValueError(
+                f"classifier.optuna_objective must be 'macro_f1', got {self.optuna_objective!r}"
+            )
+        if self.calibration_method not in _CALIBRATION_METHODS:
+            raise ValueError(
+                f"classifier.calibration_method must be one of {list(_CALIBRATION_METHODS)}, "
+                f"got {self.calibration_method!r}"
+            )
+        if not 0.0 < self.calibration_holdout_frac < 1.0:
+            raise ValueError(
+                "classifier.calibration_holdout_frac must be in (0, 1), "
+                f"got {self.calibration_holdout_frac}"
+            )
+        if not 0.0 < self.target_macro_f1 <= 1.0:
+            raise ValueError(
+                f"classifier.target_macro_f1 must be in (0, 1], got {self.target_macro_f1}"
+            )
+        if not 0.0 < self.per_driver_floor <= 1.0:
+            raise ValueError(
+                f"classifier.per_driver_floor must be in (0, 1], got {self.per_driver_floor}"
+            )
+        if not self.baselines:
+            raise ValueError("classifier.baselines must be non-empty")
+        unknown = [b for b in self.baselines if b not in _KNOWN_BASELINES]
+        if unknown:
+            raise ValueError(
+                f"classifier.baselines has unknown entries {unknown}; "
+                f"known: {list(_KNOWN_BASELINES)}"
+            )
+        if len(set(self.baselines)) != len(self.baselines):
+            raise ValueError(f"classifier.baselines has duplicates: {self.baselines}")
+        for name, val in (
+            ("optuna_storage", self.optuna_storage),
+            ("mlflow_tracking_uri", self.mlflow_tracking_uri),
+            ("mlflow_experiment", self.mlflow_experiment),
+            ("mlflow_registered_model", self.mlflow_registered_model),
+            ("model_artefact_filename", self.model_artefact_filename),
+        ):
+            if not val:
+                raise ValueError(f"classifier.{name} must be non-empty")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -341,6 +450,7 @@ class AppConfig(BaseModel):
     lap_validation: ValidateConfig | None = Field(default=None, alias="validate")
     features: FeaturesConfig | None = None  # F03a; None until the features: block is present
     normalise: NormaliseConfig | None = None  # F04; None until the normalise: block is present
+    classifier: ClassifierConfig | None = None  # F06a; None until the classifier: block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:

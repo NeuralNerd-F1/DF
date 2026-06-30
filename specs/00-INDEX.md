@@ -25,7 +25,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 2 — Machine learning
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | F06a DONE (2026-06-30); F06b TODO |
+| F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | F06a DONE (2026-06-30); F06b SPEC WRITTEN |
 | F07 | SHAP explainability (beeswarm, force, radar, NL templates) | F06 | 7 | TODO |
 | F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | TODO |
 | F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | TODO |
@@ -76,7 +76,17 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   (`LOW_CONFIDENCE`/`AMBIGUOUS`/`INVALID_INPUT`/`PERF_WARN`/`MODEL_NOT_FOUND`) stay with F06b. The
   original combined spec remains at `specs/F06-driver-classifier.md`; F06a is
   `specs/F06a-classifier-training.md`. ml-auditor is the F06a gate (CV-fold leakage). See
-  `specs/F06a-classifier-training.md`.
+  `specs/F06a-classifier-training.md`. **F06a DONE + merged 2026-06-30.**
+- **F06b spec — 2026-06-30 (apex-F06a-classifier-training):** `specs/F06b-classifier-inference.md`
+  written (SPEC WRITTEN), critiqued by a 3-lens adversarial workflow. F06b loads the champion +
+  `normalisation.json` read-only (joblib↔joblib seam), applies the gates, returns a typed
+  `PredictionResult`; **never refits**. Adds **one** new error code `INFERENCE_ERROR` (unexpected-
+  internal backstop, mirrors F02 `VALIDATION_ERROR`); reuses the five §5.1 codes + `HEALTH_FAIL`.
+  Adds config `classifier.confidence_high` (HIGH/MEDIUM split — master pins only the 0.65 LOW gate)
+  + `latency_warn_ms`. **Two open divergences flagged for the supervisor:** (1) the champion is
+  **28-feature**, not §5.1's 34-dim (circuit-type + season one-hot dropped; circuit context enters
+  via F04 normalisation) — **inherited from F06a**; (2) `confidence_high` HIGH/MEDIUM boundary is
+  undefined by the master. See `specs/F06b-classifier-inference.md` §3/§9.
 
 - **F03 split — 2026-06-26 (feature/F03a-scalar-features):** the 28-feature extraction is
   split into **F03a** (the 22 scalar-channel features F01–F18, F22–F24, F26 computable

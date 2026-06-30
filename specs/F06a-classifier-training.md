@@ -302,7 +302,13 @@ with 3.14 wheels — `xgboost==3.3.0`, `optuna==4.9.0`, `scikit-learn==1.9.0`, *
 **sqlite** tracking store. MLflow model logging uses `serialization_format="cloudpickle"` (skinny
 omits the skops default). (7) **`CalibratedClassifierCV` API:** scikit-learn ≥1.6 removed
 `cv="prefit"`; F06a wraps the fitted base model in `FrozenEstimator` and fits the calibrator on the
-disjoint hold-out — identical leakage-safe behaviour to the old prefit mode.
+disjoint hold-out — identical leakage-safe behaviour to the old prefit mode. (8) Input-schema
+divergence (28 vs 34): §5.1 specifies a 34-dim input (28 features + circuit-type one-hot + season
+one-hot); F06a trains a 28-feature champion, encoding circuit context via circuit-aware
+normalisation (F04) rather than as a model input, with season unused. Deliberate, leakage-aware
+design decision (keeps circuit identity out of the model); adding circuit-type + season as inputs
+is held in reserve as risk-register contingency (1) if held-out macro-F1 falls below target.
+Flagged to supervisor alongside the CV-splitter divergence.
 
 ## 10. Risks & mitigations (Risk Register row 1)
 

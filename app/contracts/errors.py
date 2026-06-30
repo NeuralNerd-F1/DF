@@ -71,6 +71,10 @@ class ErrorCode(StrEnum):
     MODEL_NOT_FOUND = "MODEL_NOT_FOUND"  # champion model file absent at startup
     INVALID_INPUT = "INVALID_INPUT"  # > 6 NULLs -> do not call model
     PERF_WARN = "PERF_WARN"  # prediction latency over warn threshold
+    # F06a (training) — build-breaking integrity violations / reported quality findings.
+    # The five codes above are F06b runtime gates; the two below are owned by F06a.
+    TRAIN_LEAKAGE = "TRAIN_LEAKAGE"  # held-out circuit / calib-fit overlap in a fold -> raise
+    MODEL_TRAINING_FAILED = "MODEL_TRAINING_FAILED"  # trial failed/NaN (log) or no champion (raise)
 
     # --- Style space (F08) — §5.2 -------------------------------------------
     SPARSE_PROJECTION = "SPARSE_PROJECTION"  # unknown driver < 30 laps

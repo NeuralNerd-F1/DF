@@ -24,6 +24,17 @@ pyyaml = "^6.0"
 numpy = "2.5.0"
 pandas = "3.0.3"
 pyarrow = "24.0.0"
+# F06a classifier training. Versions pinned EXACTLY (reproducibility, non-negotiable #3) at the
+# newest releases with Python-3.14 wheels. NOTE the constitution pins "XGBoost 2.x / Optuna 3.x /
+# MLflow 2.x"; on Python 3.14 + pandas 3.x that is unbuildable — full `mlflow` caps `pandas<3`
+# and would downgrade the F04-ratified stack. F06a therefore uses **mlflow-skinny** (the
+# lightweight tracking + registry client, same `mlflow.*` API) on a sqlite store. This major-
+# version migration is ratified by F06a, mirroring F04's numpy/pandas migration. SHAP is NOT
+# added here — it is F07's dependency.
+scikit-learn = "1.9.0"
+xgboost = "3.3.0"
+optuna = "4.9.0"
+mlflow-skinny = "3.14.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -61,6 +72,13 @@ warn_redundant_casts = true
 module = "numpy.*"
 follow_imports = "skip"
 follow_imports_for_stubs = true
+
+# F06a ML stack — these ship no type stubs / py.typed marker. We pin exact versions
+# (reproducibility) but ignore their missing stubs so strict mypy stays green on our own code
+# without coupling to third-party stub churn (same rationale as the numpy override above).
+[[tool.mypy.overrides]]
+module = ["joblib.*", "sklearn.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

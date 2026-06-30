@@ -25,7 +25,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 2 — Machine learning
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | TODO |
+| F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | F06a DONE (2026-06-30); F06b TODO |
 | F07 | SHAP explainability (beeswarm, force, radar, NL templates) | F06 | 7 | TODO |
 | F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | TODO |
 | F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | TODO |
@@ -65,6 +65,19 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F06 split — 2026-06-27 (apex-F06a-classifier-training):** F06 (XGBoost classifier) is split
+  into **F06a** (training / Optuna ≥200 trials / `CalibratedClassifierCV` / MLflow champion
+  registration / held-out evaluation) and **F06b** (inference / confidence gates / serving the
+  `PredictionResult` / startup health). **Seam = the registered champion model:** F06a produces +
+  registers it; F06b loads it and never retrains. F06a is also where the real
+  `artefacts/normalisation.json` first materialises (F04 shipped machinery only). F06a adds two new
+  error codes — `TRAIN_LEAKAGE` (build-breaking leakage in a CV/calibration fold) and
+  `MODEL_TRAINING_FAILED` (trial-scope + run-scope). The five runtime gate codes
+  (`LOW_CONFIDENCE`/`AMBIGUOUS`/`INVALID_INPUT`/`PERF_WARN`/`MODEL_NOT_FOUND`) stay with F06b. The
+  original combined spec remains at `specs/F06-driver-classifier.md`; F06a is
+  `specs/F06a-classifier-training.md`. ml-auditor is the F06a gate (CV-fold leakage). See
+  `specs/F06a-classifier-training.md`.
+
 - **F03 split — 2026-06-26 (feature/F03a-scalar-features):** the 28-feature extraction is
   split into **F03a** (the 22 scalar-channel features F01–F18, F22–F24, F26 computable
   directly from validated telemetry, plus the shared infrastructure: the 28-key vector

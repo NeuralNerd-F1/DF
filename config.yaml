@@ -123,3 +123,29 @@ normalise:
   artefact_filename: normalisation.json      # written under paths.artefacts_dir
   ddof: 0                                     # population std (numpy default)
   min_std: 1.0e-8                            # std below this -> zero-variance fallback (no div-by-zero)
+
+# --- F06a classifier training (offline; produces + registers the champion) -------
+# Trains the 8-class XGBoost driver classifier, tunes with Optuna, calibrates, logs every
+# trial to MLflow and registers the champion. The F06b runtime gates (confidence_gate,
+# entropy_ambiguous_bits, null_ceiling) live under thresholds: and are NOT re-declared here;
+# seeds: and held_out_circuits: are referenced, never redefined. CV uses StratifiedGroupKFold
+# grouped by circuit (Option A — see specs/F06a §4 design note): each circuit sits wholly in one
+# fold so the CV objective is leakage-clean. Dep note: full mlflow caps pandas<3, so APEX uses
+# mlflow-skinny on a sqlite-backed store (the model registry does not support file:// stores).
+classifier:
+  cv_folds: 5                        # §5.1 K-fold count
+  cv_strategy: stratified_group_kfold_by_circuit  # StratifiedGroupKFold (see §4 design note)
+  cv_stratify_by: driver             # class balance across folds
+  cv_group_by: circuit               # each circuit held wholly in ONE fold (true leakage guard)
+  optuna_trials: 200                 # §5.1 minimum trial count (do not ship fewer)
+  optuna_objective: macro_f1         # §5.1 macro-averaged F1 on the validation fold
+  optuna_storage: sqlite:///artefacts/optuna_classifier.db  # §9 persistence across restarts
+  calibration_method: isotonic       # §5.1 CalibratedClassifierCV method (isotonic|sigmoid)
+  calibration_holdout_frac: 0.2      # disjoint calibration split (excluded from fit folds)
+  baselines: [majority, logistic_regression, random_forest]  # §5.1 / §11.1 comparators
+  target_macro_f1: 0.78              # §5.1 / §11.1 held-out (Belgium, Italy) target
+  per_driver_floor: 0.70             # §11.1 per-driver F1 floor (below = research finding)
+  mlflow_tracking_uri: sqlite:///artefacts/mlflow.db  # DB-backed store (registry needs non-file://)
+  mlflow_experiment: apex-classifier # MLflow experiment name
+  mlflow_registered_model: apex-driver-classifier  # champion registry name
+  model_artefact_filename: classifier.pkl  # calibrated champion under paths.artefacts_dir (F06b loads)

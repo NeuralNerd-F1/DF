@@ -25,7 +25,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 2 — Machine learning
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | F06a DONE (2026-06-30); F06b SPEC WRITTEN |
+| F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | DONE (F06a 2026-06-30, F06b 2026-07-01) |
 | F07 | SHAP explainability (beeswarm, force, radar, NL templates) | F06 | 7 | TODO |
 | F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | TODO |
 | F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | TODO |
@@ -82,11 +82,19 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   `normalisation.json` read-only (joblib↔joblib seam), applies the gates, returns a typed
   `PredictionResult`; **never refits**. Adds **one** new error code `INFERENCE_ERROR` (unexpected-
   internal backstop, mirrors F02 `VALIDATION_ERROR`); reuses the five §5.1 codes + `HEALTH_FAIL`.
-  Adds config `classifier.confidence_high` (HIGH/MEDIUM split — master pins only the 0.65 LOW gate)
-  + `latency_warn_ms`. **Two open divergences flagged for the supervisor:** (1) the champion is
-  **28-feature**, not §5.1's 34-dim (circuit-type + season one-hot dropped; circuit context enters
-  via F04 normalisation) — **inherited from F06a**; (2) `confidence_high` HIGH/MEDIUM boundary is
-  undefined by the master. See `specs/F06b-classifier-inference.md` §3/§9.
+  Adds config `classifier.confidence_high` (HIGH/MEDIUM split — master pins only the 0.65 LOW gate),
+  `latency_warn_ms`, and `labels_filename`. **Two open divergences flagged for the supervisor:**
+  (1) the champion is **28-feature**, not §5.1's 34-dim (circuit-type + season one-hot dropped;
+  circuit context enters via F04 normalisation) — **inherited from F06a** (back-noted in F06a §9);
+  (2) `confidence_high` HIGH/MEDIUM boundary is undefined by the master. See
+  `specs/F06b-classifier-inference.md` §3/§9.
+- **F06a labels.json seam-completion — 2026-06-30 (feature/F06b-classifier-inference):** F06a's
+  champion is fit on **integer** labels (`classes_ == [0..n-1]`), so the index→driver-name map was
+  unavailable at the seam. F06a's `train_classifier` now also writes `artefacts/labels.json` (the
+  sorted driver names) next to `classifier.pkl` (+ `labels_artefact_path` on the result), and F06b's
+  `load_model` cross-checks it against the champion's class count, refusing to serve (fail-loud
+  `MODEL_NOT_FOUND`) on any mismatch. Additive seam-completion (precedent: F01 `track_status`),
+  built on the F06b branch.
 
 - **F03 split — 2026-06-26 (feature/F03a-scalar-features):** the 28-feature extraction is
   split into **F03a** (the 22 scalar-channel features F01–F18, F22–F24, F26 computable

@@ -44,6 +44,9 @@ F06b).
     fits on real laps").
   - **Champion model** registered in the **MLflow** model registry **and** persisted to
     `artefacts/<classifier.model_artefact_filename>` (the on-disk file F06b loads at startup).
+  - **`artefacts/<classifier.labels_filename>` (`labels.json`)** — the sorted driver-name list the
+    champion's integer `classes_` map to (seam-completion added for F06b; precedent: F01
+    `track_status`). `labels[i]` is the name of class `i`; `labels_artefact_path` is on the result.
   - `ClassifierTrainingResult` (run summary, below), plus the MLflow run/trial ledger
     (params + macro-F1 + per-class F1 + confusion matrix + calibration curve + model artefact
     per the champion run; params + objective per trial; one run per baseline).

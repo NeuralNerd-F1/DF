@@ -352,6 +352,9 @@ class ClassifierConfig(BaseModel):
     mlflow_experiment: str  # MLflow experiment name
     mlflow_registered_model: str  # champion registry name
     model_artefact_filename: str  # calibrated champion persisted under paths.artefacts_dir
+    labels_filename: str  # F06b seam — sorted driver-name list (index->name map for classes_)
+    confidence_high: float  # F06b — max-prob >= this -> HIGH else MEDIUM (cross-checked vs gate)
+    latency_warn_ms: float  # F06b — prediction latency over this -> PERF_WARN flag (§5.1)
 
     @model_validator(mode="after")
     def _cv_keys_pinned(self) -> ClassifierConfig:
@@ -414,12 +417,24 @@ class ClassifierConfig(BaseModel):
             )
         if len(set(self.baselines)) != len(self.baselines):
             raise ValueError(f"classifier.baselines has duplicates: {self.baselines}")
+        # F06b serving scalars. The HIGH/MEDIUM split must sit at/above 0 and not exceed 1; the
+        # cross-field check that it sits ABOVE thresholds.confidence_gate lives on AppConfig (this
+        # sub-model cannot see its sibling `thresholds`).
+        if not 0.0 < self.confidence_high <= 1.0:
+            raise ValueError(
+                f"classifier.confidence_high must be in (0, 1], got {self.confidence_high}"
+            )
+        if self.latency_warn_ms <= 0:
+            raise ValueError(
+                f"classifier.latency_warn_ms must be > 0, got {self.latency_warn_ms}"
+            )
         for name, val in (
             ("optuna_storage", self.optuna_storage),
             ("mlflow_tracking_uri", self.mlflow_tracking_uri),
             ("mlflow_experiment", self.mlflow_experiment),
             ("mlflow_registered_model", self.mlflow_registered_model),
             ("model_artefact_filename", self.model_artefact_filename),
+            ("labels_filename", self.labels_filename),
         ):
             if not val:
                 raise ValueError(f"classifier.{name} must be non-empty")
@@ -462,6 +477,21 @@ class AppConfig(BaseModel):
         if not self.held_out_circuits:
             raise ValueError(
                 "held_out_circuits must be non-empty (it gates the F04 leakage chokepoint)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _confidence_high_above_gate(self) -> AppConfig:
+        """F06b's HIGH/MEDIUM split must sit strictly ABOVE the LOW confidence gate, else the
+        bands are incoherent (a 'HIGH' below the gate is unreachable / contradictory). This is a
+        cross-field check between ``classifier.confidence_high`` and ``thresholds.confidence_gate``,
+        so it lives here on ``AppConfig`` (the sub-model cannot see its sibling ``thresholds``)."""
+        if self.classifier is not None and (
+            self.classifier.confidence_high <= self.thresholds.confidence_gate
+        ):
+            raise ValueError(
+                f"classifier.confidence_high ({self.classifier.confidence_high}) must be > "
+                f"thresholds.confidence_gate ({self.thresholds.confidence_gate})"
             )
         return self
 

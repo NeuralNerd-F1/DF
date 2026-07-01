@@ -36,6 +36,7 @@ unsupported on ``file://`` stores. See ``specs/F06a`` §8/§9.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -155,6 +156,7 @@ class ClassifierTrainingResult(BaseResult):
     mlflow_run_id: str
     model_uri: str
     model_artefact_path: str
+    labels_artefact_path: str = ""  # F06b seam — artefacts/labels.json (index->driver-name map)
     champion_params: dict[str, float | int] = Field(default_factory=dict)
     n_trials: int = 0
     n_trials_failed: int = 0
@@ -565,8 +567,6 @@ def _setup_mlflow(config: AppConfig, *, artefact_dir: Path) -> None:
 
 def _log_json_artifact(payload: dict[str, Any] | list[Any], *, name: str, tmp_dir: Path) -> str:
     """Write a JSON artifact to the active run and return its run-relative path."""
-    import json
-
     tmp_dir.mkdir(parents=True, exist_ok=True)
     p = tmp_dir / name
     p.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -723,6 +723,7 @@ def train_classifier(
     # (sqlite lock, schema/backend error) is surfaced as a typed, logged MODEL_TRAINING_FAILED —
     # never a raw uncoded MLflow exception (spec §6 FM4 "or registration fails").
     model_artefact_path = art_dir / cfg.model_artefact_filename
+    labels_artefact_path = art_dir / cfg.labels_filename
     try:
         with mlflow.start_run(run_name="champion") as run:
             mlflow.log_params({k: v for k, v in best_params.items() if k != "num_class"})
@@ -742,6 +743,12 @@ def train_classifier(
             )
             joblib_dump(champion, model_artefact_path)
             mlflow.log_artifact(str(model_artefact_path))
+            # F06b seam: persist the index->driver-name map. The champion's classes_ are integers
+            # [0..n-1]; `labels` is the sorted driver-name list F06a encoded against, so labels[i]
+            # is the name of class i. Written deterministically (sorted list, no timestamp) next to
+            # classifier.pkl so F06b can map predict_proba columns to driver names offline.
+            labels_artefact_path.write_text(json.dumps(labels), encoding="utf-8")
+            mlflow.log_artifact(str(labels_artefact_path))
             # serialization_format="cloudpickle": mlflow 3.x defaults the sklearn flavor to skops,
             # which is not bundled with mlflow-skinny; cloudpickle ships with skinny and round-trips
             # the CalibratedClassifierCV(FrozenEstimator(XGBClassifier)) champion.
@@ -756,9 +763,10 @@ def train_classifier(
     except ClassifierTrainingError:
         raise
     except Exception as exc:  # noqa: BLE001 - surface ANY registry/log failure as a typed code
-        # Remove the orphan champion pkl so F06b never loads a model from a run we report as failed
-        # (mirrors the leakage / no-champion paths, which leave no model on disk).
+        # Remove the orphan champion pkl + labels sidecar so F06b never loads a model bundle from a
+        # run we report as failed (mirrors the leakage / no-champion paths — no model on disk).
         model_artefact_path.unlink(missing_ok=True)
+        labels_artefact_path.unlink(missing_ok=True)
         ledger.record(
             code=ErrorCode.MODEL_TRAINING_FAILED,
             entity_type="training_run",
@@ -798,6 +806,7 @@ def train_classifier(
         mlflow_run_id=run_id,
         model_uri=model_uri,
         model_artefact_path=str(model_artefact_path),
+        labels_artefact_path=str(labels_artefact_path),
         champion_params={k: v for k, v in study.best_params.items()},
         n_trials=len(trial_records),
         n_trials_failed=n_failed,

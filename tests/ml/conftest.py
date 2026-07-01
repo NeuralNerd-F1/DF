@@ -123,3 +123,86 @@ def trained(tmp_path_factory: pytest.TempPathFactory) -> tuple[Any, AppConfig]:
     matrix = build_matrix()
     result = train_classifier(matrix, config=cfg)
     return result, cfg
+
+
+# ----------------------------------------------------------------------------------
+# F06b inference harness
+# ----------------------------------------------------------------------------------
+
+
+class StubModel:
+    """A minimal sklearn-shaped classifier for pinning F06b gate boundaries deterministically.
+
+    ``predict_proba`` ignores X and returns the caller-supplied row (so a test sets the exact
+    max-prob / entropy / argmax). ``raises=True`` makes it throw, to exercise the INFERENCE_ERROR
+    backstop. ``classes_`` are integers [0..n-1] like the real F06a champion; a spy counter records
+    whether the model was called (for the NULL-gate "model not invoked" assertion)."""
+
+    def __init__(
+        self, proba_row: list[float], *, n_features: int = 28, raises: bool = False
+    ) -> None:
+        self.proba_row = np.asarray(proba_row, dtype=float)
+        self.classes_ = np.arange(len(proba_row))
+        self.n_features_in_ = n_features
+        self.raises = raises
+        self.calls = 0
+
+    def predict_proba(self, x: np.ndarray) -> np.ndarray:
+        self.calls += 1
+        if self.raises:
+            raise RuntimeError("stub predict_proba boom")
+        return np.tile(self.proba_row, (len(x), 1))
+
+
+@pytest.fixture
+def clean_vector() -> Callable[[], dict[str, float]]:
+    """A full 28-key feature vector (all present, no NULLs)."""
+    return lambda: {fid: 1.0 + i for i, fid in enumerate(FEATURE_IDS)}
+
+
+@pytest.fixture
+def norm_params(trained: tuple[Any, AppConfig]) -> Any:
+    """The real NormalisationParams from the F06a `trained` run (so apply_normalisation works)."""
+    from app.pipeline.normalise import load_normalisation_params
+
+    _result, cfg = trained
+    assert cfg.normalise is not None
+    path = Path(cfg.paths.artefacts_dir) / cfg.normalise.artefact_filename
+    return load_normalisation_params(path)
+
+
+@pytest.fixture
+def make_handle(norm_params: Any) -> Callable[..., Any]:
+    """Factory: wrap a StubModel + the real params into a ModelHandle for gate-boundary tests."""
+    from app.ml.inference import ModelHandle
+
+    def _make(
+        proba_row: list[float], *, drivers: list[str] | None = None, raises: bool = False
+    ) -> Any:
+        model = StubModel(proba_row, raises=raises)
+        names = drivers or [f"D{i}" for i in range(len(proba_row))]
+        return ModelHandle(
+            model=model, normalisation_params=norm_params, drivers=names, model_version="test:v1"
+        )
+
+    return _make
+
+
+@pytest.fixture
+def bundle_dir(trained: tuple[Any, AppConfig], tmp_path: Path) -> Path:
+    """A function-scoped COPY of the trained champion bundle (pkl + normalisation.json + labels),
+    so load_model failure tests can mutate/delete files without corrupting the module-scoped run."""
+    import shutil
+
+    _result, cfg = trained
+    src = Path(cfg.paths.artefacts_dir)
+    dst = tmp_path / "bundle"
+    dst.mkdir()
+    assert cfg.classifier is not None and cfg.normalise is not None
+    for name in (
+        cfg.classifier.model_artefact_filename,
+        cfg.normalise.artefact_filename,
+        cfg.classifier.labels_filename,
+    ):
+        shutil.copy(src / name, dst / name)
+    return dst

@@ -52,6 +52,7 @@ EXPECTED_CODES: set[str] = {
     "MODEL_NOT_FOUND",
     "INVALID_INPUT",
     "PERF_WARN",
+    "INFERENCE_ERROR",
     # Classifier training (F06a)
     "TRAIN_LEAKAGE",
     "MODEL_TRAINING_FAILED",

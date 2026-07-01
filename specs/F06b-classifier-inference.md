@@ -37,9 +37,13 @@ serialises — it owns the gating logic, not the HTTP layer. It adds **one** new
     read-only across requests.
   - `artefacts/normalisation.json` via F04 `load_normalisation_params` (once) +
     `apply_normalisation` (per vector). F06b **never** calls `fit_normaliser` / `.fit`.
-  - **Driver label order = `champion.classes_`** (sklearn's `LabelEncoder` sorts to the
-    lexicographically sorted 8 drivers — exactly F06a's `sorted(...)` training labels). F06b reads
-    it from `classes_`; there is **no sidecar** (F06a writes none).
+  - **`artefacts/<classifier.labels_filename>` (`labels.json`)** — the index→driver-name map.
+    F06a's champion is fit on **integer** labels, so `champion.classes_` is `[0..n-1]`, **not**
+    driver names; F06a (seam-completion, this branch) writes `labels.json` = the sorted driver-name
+    list it integer-encoded against, so `labels[i]` is the name of class `i`. **`load_model`
+    cross-checks `len(labels) == len(champion.classes_)` and `classes_ == [0..n-1]` and fails loud
+    (`ModelLoadError`/`MODEL_NOT_FOUND`, logged) on any mismatch** — a stale/wrong `labels.json`
+    refuses to serve rather than silently mislabel. `drivers = labels`.
   - **`model_version`** — derived from the **MLflow registered-model version** of
     `classifier.mlflow_registered_model` when a registry connection is available; otherwise a
     deterministic fallback = `sha256` of the champion artefact bytes (so the `predictions.
@@ -55,9 +59,10 @@ serialises — it owns the gating logic, not the HTTP layer. It adds **one** new
 ## 3. Inputs & outputs (typed)
 - **Load (startup, once):**
   `load_model(*, config: AppConfig, artefact_dir: Path | None = None, log_path: Path | None = None)
-  -> ModelHandle`. A missing/corrupt champion or `normalisation.json` **raises** `ModelLoadError`
-  (`MODEL_NOT_FOUND`) **after** writing a `MODEL_NOT_FOUND` `data_quality_log` row (§5.1 "Log
-  MODEL_NOT_FOUND"); the process must refuse to serve.
+  -> ModelHandle`. A missing/corrupt champion, `normalisation.json`, or `labels.json` — or a
+  labels/class-count or feature-count mismatch — **raises** `ModelLoadError` (`MODEL_NOT_FOUND`)
+  **after** writing a `MODEL_NOT_FOUND` `data_quality_log` row (§5.1 "Log MODEL_NOT_FOUND"); the
+  process must refuse to serve.
 - **Predict (per call, read-only, never raises):**
   `predict(feature_vector: dict[str, float | None], *, circuit: str, handle: ModelHandle,
   config: AppConfig, log_path: Path | None = None) -> PredictionResult`.
@@ -105,8 +110,11 @@ scan asserts no `.fit(` / `fit_normaliser` / `optuna` / training symbol.
 2. `load_normalisation_params(artefact_dir / normalise.artefact_filename)`; its `NormalisationError`
    (missing/corrupt) is logged + wrapped to `ModelLoadError` (`MODEL_NOT_FOUND`) — without params
    the model cannot be served un-normalised.
-3. Record `drivers = list(champion.classes_)`, `model_version` (§2), `ready=True`. Assert
-   `champion.n_features_in_ == len(FEATURE_IDS)` (28) — else `ModelLoadError`.
+3. Load `artefact_dir / classifier.labels_filename` (`labels.json`) → `drivers`. **Fail-loud guards
+   (all → `ModelLoadError`/`MODEL_NOT_FOUND`, logged):** labels file absent/unreadable;
+   `len(drivers) != len(champion.classes_)`; `champion.classes_ != [0..n-1]`;
+   `champion.n_features_in_ != len(FEATURE_IDS)` (28). A stale/mismatched labels file therefore
+   refuses to serve. Then record `model_version` (§2), `ready=True`.
 
 **`health() -> HealthResult`:** returns `ready` + the carried `model_version`; when the champion/
 params are not loaded it reports **`HEALTH_FAIL`** (the existing "critical component down →503"
@@ -152,7 +160,7 @@ canonical member (and the value F12's Alembic ENUM + F13 persist) is **`LOW_CONF
 the master's shorthand. Documented divergence; no per-layer remapping.
 
 ## 5. config.yaml keys this feature adds
-F06b adds **two** keys to the existing `classifier:` block (typed onto `ClassifierConfig`); the
+F06b adds **three** keys to the existing `classifier:` block (typed onto `ClassifierConfig`); the
 gate constants it *applies* (`confidence_gate=0.65`, `entropy_ambiguous_bits=2.9`,
 `null_ceiling=6`) already live under `thresholds:` and are **referenced, never re-declared**. It
 also adds **one error code** `INFERENCE_ERROR` to `app/contracts/errors.py` (+ the canonical-set
@@ -160,13 +168,15 @@ test).
 ```yaml
 classifier:
   # ... F06a training keys unchanged ...
+  labels_filename: labels.json  # F06b seam — sorted driver-name list (index->name for classes_)
   confidence_high: 0.85       # max-prob >= this -> HIGH else MEDIUM (HIGH/MEDIUM split; §8.4 enum,
                               #   master pins only the 0.65 LOW gate -> documented design decision)
   latency_warn_ms: 200        # prediction latency over this -> PERF_WARN flag (§5.1)
 ```
-`ClassifierConfig` validator (cross-field): `thresholds.confidence_gate < confidence_high <= 1.0`
-(HIGH must sit above the LOW gate) and `latency_warn_ms > 0` — a mis-edit is a load-time
-`CONFIG_001`.
+**Validator placement:** the intra-model checks (`0 < confidence_high <= 1.0`, `latency_warn_ms > 0`,
+non-empty `labels_filename`) live on `ClassifierConfig`; the **cross-field** check
+`thresholds.confidence_gate < confidence_high` lives on **`AppConfig`** (the sub-model has
+`extra="forbid"` and cannot see its sibling `thresholds`). A mis-edit is a load-time `CONFIG_001`.
 
 ## 6. Error codes & failure modes (the failsafe contract)
 Inference **never raises** (every fault is a coded `PredictionResult`); only startup model-load
@@ -191,9 +201,13 @@ copy F13 renders; tests assert `error_code` / `confidence_state` / `status`, not
 ## 7. Acceptance criteria (each item mechanically testable by /spec-check)
 - [ ] Output is a calibrated probability vector over **all 8 drivers** summing to 1.0 (±1e-6) plus
       `top_3` on every PREDICTED path (HIGH/MEDIUM/LOW_CONFIDENCE/AMBIGUOUS); not just a label.
-- [ ] **Label-order fidelity:** `probabilities` keys equal `champion.classes_` in order, and
-      `top_prediction == drivers[argmax(predict_proba)]` — tested with a stub whose `predict_proba`
-      peaks on a known column, asserting the correct driver name (guards silent mis-labelling).
+- [ ] **Label-order fidelity:** `drivers` is loaded from `labels.json` (the sorted F06a names);
+      `probabilities` keys equal `drivers` in `classes_` order and `top_prediction ==
+      drivers[argmax(predict_proba)]` — tested with a stub whose `predict_proba` peaks on a known
+      column, asserting the correct driver name (guards silent mis-labelling).
+- [ ] **Stale/mismatched labels refuse to serve:** a `labels.json` whose length ≠ the champion's
+      class count (or absent) makes `load_model` **raise `ModelLoadError` (`MODEL_NOT_FOUND`)** and
+      log a `LABELS_MISMATCH`/`LABELS_ABSENT` DQ row — never serve mislabelled predictions.
 - [ ] **28-feature seam:** `champion.n_features_in_ == 28`; `predict` feeds exactly the 28
       normalised features (no season/circuit-type columns).
 - [ ] **No retrain / no fit:** static source scan — no `.fit(`, `fit_normaliser`, `optuna`,

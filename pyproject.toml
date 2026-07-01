@@ -43,6 +43,13 @@ mlflow-skinny = "3.14.0"
 # which cap numpy<2.5 (see the numpy note above). TreeExplainer over the F06 champion's base
 # XGBoost. Pinned EXACTLY for reproducibility (non-negotiable #3).
 shap = "0.52.0"
+# F08 Model 2 — driver style space (§5.2). Newest releases with Python-3.14 wheels; pinned EXACTLY
+# for reproducibility (#3). umap-learn brings its pynndescent NN backend; scipy (already present via
+# SHAP) is now a direct dependency for scipy.spatial.procrustes (§11.2 stability). No numpy movement
+# — numba already caps numpy<2.5 (satisfied at 2.4.6). Transitive-migration pattern, ratified by F08.
+umap-learn = "0.5.12"
+pynndescent = "0.6.0"
+scipy = "1.18.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -85,7 +92,7 @@ follow_imports_for_stubs = true
 # (reproducibility) but ignore their missing stubs so strict mypy stays green on our own code
 # without coupling to third-party stub churn (same rationale as the numpy override above).
 [[tool.mypy.overrides]]
-module = ["joblib.*", "sklearn.*", "shap.*", "scipy.*"]
+module = ["joblib.*", "sklearn.*", "shap.*", "scipy.*", "umap.*", "pynndescent.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

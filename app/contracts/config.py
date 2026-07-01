@@ -500,6 +500,94 @@ class ShapConfig(BaseModel):
         return self
 
 
+class StyleSpaceConfig(BaseModel):
+    """Typed view over the ``stylespace:`` block (F08 Model 2 — driver style space, §5.2).
+
+    Lives here, not in ``app/ml/stylespace.py`` (standing rule): the style-space module reads
+    its knobs through a strictly-validated model. Holds only the F08 constants; the four §5.2
+    error codes (``SPARSE_PROJECTION`` / ``OUT_OF_DISTRIBUTION`` / ``UMAP_FALLBACK`` /
+    ``PROJECTION_FALLBACK``) are pre-seeded in ``errors.py`` and the sparse floor is
+    ``thresholds.min_clean_laps`` (30) — not re-declared here. F08 reads ITS OWN
+    ``mlflow_tracking_uri`` (never ``classifier.mlflow_tracking_uri``), preserving its
+    independence from the optional ``classifier`` block.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    umap_n_components_5d: int  # §5.2 — 5D fingerprint coordinate dimensionality
+    umap_n_components_2d: int  # §5.2 — 2D visualisation projection dimensionality
+    umap_n_neighbors: int  # §5.2 — UMAP neighbourhood; capped to n_drivers-1 at build
+    umap_min_dist: float  # UMAP layout tightness (design decision)
+    umap_metric: str  # distance on the 56-dim aggregate (design decision)
+    pca_n_components: int  # PCA fallback dims (first 2 == 2D fallback); also the OOD PC basis
+    ood_sd_threshold: float  # §5.2 — |z| on ANY PC above this -> OUT_OF_DISTRIBUTION
+    nearest_neighbours_k: int  # §7.4 — top-N nearest known drivers (cosine, 5D)
+    umap_model_filename: str  # §5.2 — under paths.artefacts_dir (+ .sha256 sidecar)
+    pca_model_filename: str  # §5.2 — under paths.artefacts_dir
+    stability_n_runs: int  # §5.2/§11.2 — UMAP runs (fixed seed sequence) for Procrustes stability
+    stability_variance_threshold: float  # §11.2 — Procrustes-aligned variance target (dissertation)
+    mlflow_tracking_uri: str  # #3 — F08's OWN URI (same store, own experiment)
+    mlflow_experiment: str  # #3 — build run logged here
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> StyleSpaceConfig:
+        """Fail fast on out-of-range constants so a mis-edit is a load-time ``CONFIG_001`` rather
+        than a silent mis-projection (non-negotiable #1). The ``n_drivers``-dependent bounds
+        (``n_neighbors < n_drivers``, ``n_components_5d < n_drivers``) are data-dependent and
+        enforced fail-loud at BUILD time, not here."""
+        if self.umap_n_components_2d < 1:
+            raise ValueError(
+                f"stylespace.umap_n_components_2d must be >= 1, got {self.umap_n_components_2d}"
+            )
+        if self.umap_n_components_5d <= self.umap_n_components_2d:
+            raise ValueError(
+                f"stylespace.umap_n_components_5d ({self.umap_n_components_5d}) must be > "
+                f"umap_n_components_2d ({self.umap_n_components_2d})"
+            )
+        if self.pca_n_components < self.umap_n_components_5d:
+            raise ValueError(
+                f"stylespace.pca_n_components ({self.pca_n_components}) must be >= "
+                f"umap_n_components_5d ({self.umap_n_components_5d}) so PCA serves both fallbacks"
+            )
+        if self.umap_n_neighbors < 2:
+            raise ValueError(
+                f"stylespace.umap_n_neighbors must be >= 2, got {self.umap_n_neighbors}"
+            )
+        if not 0.0 < self.umap_min_dist < 1.0:
+            raise ValueError(
+                f"stylespace.umap_min_dist must be in (0, 1), got {self.umap_min_dist}"
+            )
+        if not self.umap_metric:
+            raise ValueError("stylespace.umap_metric must be non-empty")
+        if self.ood_sd_threshold <= 0.0:
+            raise ValueError(
+                f"stylespace.ood_sd_threshold must be > 0, got {self.ood_sd_threshold}"
+            )
+        if self.nearest_neighbours_k < 1:
+            raise ValueError(
+                f"stylespace.nearest_neighbours_k must be >= 1, got {self.nearest_neighbours_k}"
+            )
+        if not self.umap_model_filename or not self.pca_model_filename:
+            raise ValueError("stylespace.umap_model_filename/pca_model_filename must be non-empty")
+        if self.umap_model_filename == self.pca_model_filename:
+            raise ValueError(
+                "stylespace.umap_model_filename and pca_model_filename must be distinct, "
+                f"both are {self.umap_model_filename!r}"
+            )
+        if self.stability_n_runs < 2:
+            raise ValueError(
+                f"stylespace.stability_n_runs must be >= 2, got {self.stability_n_runs}"
+            )
+        if self.stability_variance_threshold <= 0.0:
+            raise ValueError(
+                "stylespace.stability_variance_threshold must be > 0, "
+                f"got {self.stability_variance_threshold}"
+            )
+        if not self.mlflow_tracking_uri or not self.mlflow_experiment:
+            raise ValueError("stylespace.mlflow_tracking_uri / mlflow_experiment must be non-empty")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -526,6 +614,7 @@ class AppConfig(BaseModel):
     normalise: NormaliseConfig | None = None  # F04; None until the normalise: block is present
     classifier: ClassifierConfig | None = None  # F06a; None until the classifier: block is present
     shap: ShapConfig | None = None  # F07; None until the shap: block is present
+    stylespace: StyleSpaceConfig | None = None  # F08; None until the stylespace: block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:

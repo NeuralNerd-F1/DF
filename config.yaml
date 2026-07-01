@@ -152,3 +152,19 @@ classifier:
   labels_filename: labels.json       # F06b seam — sorted driver-name list (index->name for classes_)
   confidence_high: 0.85              # F06b — max-prob >= this -> HIGH else MEDIUM (must be > confidence_gate)
   latency_warn_ms: 200               # F06b — prediction latency over this -> PERF_WARN flag (§5.1)
+
+# --- F07 SHAP explainability (§6) ----------------------------------------------------------------
+# TreeExplainer (exact) over the F06 champion's base XGBoost. Local force per prediction, global
+# beeswarm artefact, 6-domain radar, top-2 natural-language style, and multi-season Jensen-Shannon
+# stability. Explainability NEVER blocks a prediction: a SHAP fault degrades to SHAP_UNAVAILABLE
+# (both SHAP codes are pre-seeded in errors.py §6.2). The six radar domains + their feature
+# membership are structural (from §4.2) and live in code as explain.DOMAIN_FEATURES, not here.
+shap:
+  consistency_tolerance: 0.01        # §6.2 |base + Σshap - tree_margin| above this -> SHAP_CONSISTENCY_WARN
+  nl_dominance_margin: 0.10          # §6.1/§6.2 all 6 domain scores within this rel. band -> generic desc
+  nl_top_domains: 2                  # §6.1 top-N domains by |magnitude| generate the style sentence
+  single_lap_warn_ms: 50             # §6.1 single-lap SHAP over this -> PERF_WARN ("< 50ms" budget)
+  batch_warn_ms: 2000                # §6.1 batch-of-100 SHAP over this -> PERF_WARN ("< 2 seconds" budget)
+  beeswarm_filename: shap_beeswarm.json  # §6.1 global beeswarm artefact under paths.artefacts_dir
+  stability_js_bins: 20              # §6.1 histogram bins for the per-feature Jensen-Shannon divergence
+  stability_min_seasons: 3           # §8.5 fewer available seasons -> partial stability (F13 -> 206)

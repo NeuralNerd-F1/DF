@@ -62,6 +62,17 @@ def test_repo_config_parses_features_block(repo_config_path: Path) -> None:
     assert cfg.features.min_stint_laps == 8
 
 
+def test_repo_config_parses_shap_block(repo_config_path: Path) -> None:
+    """F07's shap: block validates into the typed ShapConfig sub-model (§6)."""
+    cfg = load_config(repo_config_path)
+    assert cfg.shap is not None
+    assert cfg.shap.consistency_tolerance == 0.01
+    assert cfg.shap.nl_dominance_margin == 0.10
+    assert cfg.shap.nl_top_domains == 2
+    assert cfg.shap.stability_min_seasons == 3
+    assert cfg.shap.beeswarm_filename == "shap_beeswarm.json"
+
+
 def test_zero_lateral_g_peak_top_n_rejected(repo_config_path: Path, tmp_path: Path) -> None:
     """lateral_g_peak_top_n=0 would make the top-N slice return ALL peaks -> rejected at load."""
     text = repo_config_path.read_text(encoding="utf-8").replace(

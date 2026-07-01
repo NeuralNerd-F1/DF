@@ -320,6 +320,10 @@ class NormaliseConfig(BaseModel):
 _CV_STRATEGY_OPTION_A = "stratified_group_kfold_by_circuit"
 _KNOWN_BASELINES = ("majority", "logistic_regression", "random_forest")
 _CALIBRATION_METHODS = ("isotonic", "sigmoid")
+# F07 — the master (§6.1) names exactly six radar domains (throttle, braking, speed, gear, engine,
+# cornering); ``shap.nl_top_domains`` cannot exceed that. The domain->feature membership itself is a
+# structural constant in ``app/ml/explain.py`` (DOMAIN_FEATURES), not config.
+_RADAR_DOMAIN_COUNT = 6
 
 
 class ClassifierConfig(BaseModel):
@@ -441,6 +445,61 @@ class ClassifierConfig(BaseModel):
         return self
 
 
+class ShapConfig(BaseModel):
+    """Typed view over the ``shap:`` block (F07 SHAP explainability, §6).
+
+    Lives here, not in ``app/ml/explain.py`` (standing rule): the explainer reads its
+    thresholds through a strictly-validated model. Holds only the F07 constants; the SHAP error
+    codes (``SHAP_UNAVAILABLE`` / ``SHAP_CONSISTENCY_WARN``) are pre-seeded in ``errors.py`` and the
+    six radar domains + their feature membership are structural (from §4.2) and live in code as
+    ``DOMAIN_FEATURES`` (like ``FEATURE_IDS``), not here — a domain is not a tunable.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    consistency_tolerance: float  # §6.2 — |base+Σshap-margin| above this -> SHAP_CONSISTENCY_WARN
+    nl_dominance_margin: float  # §6.1/§6.2 — 6 domain scores within this rel. band -> generic desc
+    nl_top_domains: int  # §6.1 — top-N domains by |magnitude| generate the style sentence ("Top 2")
+    single_lap_warn_ms: float  # §6.1 — single-lap SHAP over this -> PERF_WARN ("< 50ms" budget)
+    batch_warn_ms: float  # §6.1 — batch-of-100 SHAP over this -> PERF_WARN ("< 2 seconds" budget)
+    beeswarm_filename: str  # §6.1 — global beeswarm artefact under paths.artefacts_dir
+    stability_js_bins: int  # §6.1 — histogram bins for the per-feature Jensen-Shannon divergence
+    stability_min_seasons: int  # §8.5 — fewer available seasons -> partial stability (F13 -> 206)
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> ShapConfig:
+        """Fail fast on out-of-range constants so a mis-edit is a load-time ``CONFIG_001`` rather
+        than a silent mis-explanation (non-negotiable #1)."""
+        if self.consistency_tolerance <= 0.0:
+            raise ValueError(
+                f"shap.consistency_tolerance must be > 0, got {self.consistency_tolerance}"
+            )
+        if not 0.0 < self.nl_dominance_margin < 1.0:
+            raise ValueError(
+                f"shap.nl_dominance_margin must be in (0, 1), got {self.nl_dominance_margin}"
+            )
+        if not 1 <= self.nl_top_domains <= _RADAR_DOMAIN_COUNT:
+            raise ValueError(
+                f"shap.nl_top_domains must be in 1..{_RADAR_DOMAIN_COUNT}, "
+                f"got {self.nl_top_domains}"
+            )
+        if self.single_lap_warn_ms <= 0:
+            raise ValueError(
+                f"shap.single_lap_warn_ms must be > 0, got {self.single_lap_warn_ms}"
+            )
+        if self.batch_warn_ms <= 0:
+            raise ValueError(f"shap.batch_warn_ms must be > 0, got {self.batch_warn_ms}")
+        if self.stability_js_bins < 2:
+            raise ValueError(f"shap.stability_js_bins must be >= 2, got {self.stability_js_bins}")
+        if self.stability_min_seasons < 2:
+            raise ValueError(
+                f"shap.stability_min_seasons must be >= 2, got {self.stability_min_seasons}"
+            )
+        if not self.beeswarm_filename:
+            raise ValueError("shap.beeswarm_filename must be non-empty")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -466,6 +525,7 @@ class AppConfig(BaseModel):
     features: FeaturesConfig | None = None  # F03a; None until the features: block is present
     normalise: NormaliseConfig | None = None  # F04; None until the normalise: block is present
     classifier: ClassifierConfig | None = None  # F06a; None until the classifier: block is present
+    shap: ShapConfig | None = None  # F07; None until the shap: block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:

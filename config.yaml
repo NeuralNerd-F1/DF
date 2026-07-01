@@ -149,3 +149,6 @@ classifier:
   mlflow_experiment: apex-classifier # MLflow experiment name
   mlflow_registered_model: apex-driver-classifier  # champion registry name
   model_artefact_filename: classifier.pkl  # calibrated champion under paths.artefacts_dir (F06b loads)
+  labels_filename: labels.json       # F06b seam — sorted driver-name list (index->name for classes_)
+  confidence_high: 0.85              # F06b — max-prob >= this -> HIGH else MEDIUM (must be > confidence_gate)
+  latency_warn_ms: 200               # F06b — prediction latency over this -> PERF_WARN flag (§5.1)

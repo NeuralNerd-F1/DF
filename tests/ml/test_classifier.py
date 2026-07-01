@@ -102,6 +102,25 @@ def test_baselines_logged(trained: tuple[Any, AppConfig]) -> None:
     assert isinstance(result.beats_all_baselines, bool)
 
 
+def test_labels_json_written_and_matches_classes(trained: tuple[Any, AppConfig]) -> None:
+    # F06b seam: artefacts/labels.json maps the champion's integer classes_ -> driver names.
+    import json
+
+    import joblib
+
+    result, cfg = trained
+    labels_path = Path(result.labels_artefact_path)
+    assert labels_path.is_file()
+    assert labels_path.name == cfg.classifier.labels_filename
+    labels = json.loads(labels_path.read_text(encoding="utf-8"))
+    champion = joblib.load(result.model_artefact_path)
+    # classes_ are integer [0..n-1]; labels[i] is the name of class i, in sorted order.
+    assert len(labels) == len(champion.classes_)
+    assert list(champion.classes_) == list(range(len(labels)))
+    assert labels == sorted(labels)
+    assert sorted(result.held_out_per_driver_f1) == sorted(labels)
+
+
 def test_champion_registered_in_mlflow(trained: tuple[Any, AppConfig]) -> None:
     result, cfg = trained
     import mlflow

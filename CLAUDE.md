@@ -57,6 +57,14 @@ one principle: **no component fails silently.**
 > installed yet and will likely migrate similarly when those features land. See
 > `specs/F06a-classifier-training.md` §8/§9 for the full rationale.
 
+> **Stack note (SHAP + numpy pin moved by F07).** F07 installs **SHAP 0.52** (TreeExplainer, exact)
+> — the newest release with a Python-3.14 wheel. Its `numba` dependency (numba 0.65.1) caps
+> `numpy<2.5`, so the pin moved **numpy 2.5.0 → 2.4.6** (a cp314 wheel exists, still Python 3.14).
+> This is the same kind of transitive migration F04 (pandas/numpy) and F06a (mlflow-skinny) already
+> set; the full F01–F06 suite (351 tests) was re-run **green on numpy 2.4.6 before** any F07 code
+> was written. Write against numpy-2.4.x — behaviour is unchanged vs 2.5 for APEX's usage (both are
+> numpy-2.x / copy-on-write). See `specs/F07-shap-explainability.md` §5/§9.
+
 ## Repo map
 ```
 app/pipeline/    ingest.py validate.py features.py normalise.py

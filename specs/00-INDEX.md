@@ -26,7 +26,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
 | F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | DONE (F06a 2026-06-30, F06b 2026-07-01) |
-| F07 | SHAP explainability (beeswarm, force, radar, NL templates) | F06 | 7 | TODO |
+| F07 | SHAP explainability (beeswarm, force, radar, NL templates) | F06 | 7 | DONE (2026-07-01) |
 | F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | TODO |
 | F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | TODO |
 | F10 | Model 3 — Degradation detector (deviation, rolling mean, alert threshold) | F04, F08 | 11–12 | TODO |
@@ -65,6 +65,18 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F07 DONE — 2026-07-01 (feature/F07-shap-explainability):** `app/ml/explain.py` — TreeExplainer
+  (exact) over the F06 champion's **base XGBoost** (`calibrated_classifiers_[0].estimator.estimator`);
+  local force + 6-domain radar + top-2 NL, global beeswarm artefact, and multi-season Jensen-Shannon
+  stability. Explainability **never blocks a prediction** (SHAP fault → `SHAP_UNAVAILABLE`); reuses
+  the pre-seeded `SHAP_UNAVAILABLE`/`SHAP_CONSISTENCY_WARN` codes — **no new code**. Adds a typed
+  `shap:` block (`ShapConfig`). **Stack movement:** installs **SHAP 0.52**, whose `numba` dep caps
+  `numpy<2.5`, so the pin moved **numpy 2.5.0 → 2.4.6** (cp314 wheel; full F01–F06 suite re-run green
+  on 2.4.6 before any F07 code) — ratified like F04/F06a; back-noted in CLAUDE.md + `pyproject`.
+  Gates: failsafe-auditor + ml-auditor + `/code-review high` all run, findings fixed with regression
+  tests (build-global class-order keyed off `explainer.drivers`; zero-contribution domain never named;
+  all-NaN season → `None` not 0.0; explainer/handle driver-order guard). See
+  `specs/F07-shap-explainability.md`.
 - **F06 split — 2026-06-27 (apex-F06a-classifier-training):** F06 (XGBoost classifier) is split
   into **F06a** (training / Optuna ≥200 trials / `CalibratedClassifierCV` / MLflow champion
   registration / held-out evaluation) and **F06b** (inference / confidence gates / serving the

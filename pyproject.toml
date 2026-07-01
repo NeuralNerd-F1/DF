@@ -21,7 +21,11 @@ pyyaml = "^6.0"
 # numpy 1.x, but the build environment here runs Python 3.14, which has no wheels for
 # those — only pandas 3.x / numpy 2.x. Versions are pinned EXACTLY (not floated) so the
 # run reproduces from the repo (non-negotiable #3). See the handover note on the skew.
-numpy = "2.5.0"
+# NOTE (F07): moved 2.5.0 -> 2.4.6 because SHAP's numba dep (numba 0.65.1) caps `numpy<2.5`.
+# A cp314 wheel for 2.4.6 exists, so it still runs on Python 3.14; the full F01–F06 suite
+# (351 tests) was re-run green on 2.4.6 before F07 was built. Transitive migration, same
+# pattern F04 (pandas/numpy) and F06a (mlflow-skinny) set — ratified by F07.
+numpy = "2.4.6"
 pandas = "3.0.3"
 pyarrow = "24.0.0"
 # F06a classifier training. Versions pinned EXACTLY (reproducibility, non-negotiable #3) at the
@@ -35,6 +39,10 @@ scikit-learn = "1.9.0"
 xgboost = "3.3.0"
 optuna = "4.9.0"
 mlflow-skinny = "3.14.0"
+# F07 SHAP explainability (§6). Newest release with a Python-3.14 wheel; pulls numba/llvmlite,
+# which cap numpy<2.5 (see the numpy note above). TreeExplainer over the F06 champion's base
+# XGBoost. Pinned EXACTLY for reproducibility (non-negotiable #3).
+shap = "0.52.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -77,7 +85,7 @@ follow_imports_for_stubs = true
 # (reproducibility) but ignore their missing stubs so strict mypy stays green on our own code
 # without coupling to third-party stub churn (same rationale as the numpy override above).
 [[tool.mypy.overrides]]
-module = ["joblib.*", "sklearn.*"]
+module = ["joblib.*", "sklearn.*", "shap.*", "scipy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

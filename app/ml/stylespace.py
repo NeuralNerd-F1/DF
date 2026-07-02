@@ -4,9 +4,15 @@ Projects each driver's aggregate 28-feature distribution into one continuous sty
 **5D fingerprint** (consumed by F10/F11) and a **2D visualisation** (Screen 5). The space is fit on
 **normalised training laps only**; an **unknown driver projects in by a forward pass**
 (``umap.transform`` — no retrain). Every projection carries an explicit confidence gate (sparse /
-out-of-distribution) and a **fail-loud fallback chain** (UMAP → PCA → raw-space cosine NN). Like
+out-of-distribution) and a **fail-loud fallback chain** (UMAP → PCA → standardised-aggregate
+cosine NN). Like
 F07, F08 introduces **no new error code** — the four §5.2 codes and the ``OUT_OF_DISTRIBUTION``
 ``ConfidenceState`` are pre-seeded.
+
+The 56-dim aggregate mixes z-scored (~unit-scale) and raw-physical-unit columns spanning ~4 orders
+of magnitude, so both fit sites first rebalance it with a **train-only aggregate StandardScaler**
+(persisted in the PCA bundle, applied read-only at every forward pass; a bundle without it — or a
+UMAP fitted against a different scaler — never serves). A documented master gap-fill (spec §9.7).
 
 There are exactly **two fit sites** — :func:`build_style_space` (the production model) and the
 dissertation-only :func:`stability_report` — both train-only and leakage-guarded.
@@ -34,6 +40,7 @@ from joblib import load as joblib_load
 from pydantic import BaseModel, ConfigDict, Field
 from scipy.spatial import procrustes
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 from app.contracts.config import AppConfig
 from app.contracts.enums import ConfidenceState, Status
@@ -82,6 +89,8 @@ REASON_ZERO_LAPS = "ZERO_CLEAN_LAPS"
 REASON_PCA_ABSENT = "PCA_FALLBACK_ABSENT"
 REASON_PCA_CORRUPT = "PCA_FALLBACK_CORRUPT"
 REASON_PARAMS_UNAVAILABLE = "NORMALISATION_UNAVAILABLE"
+REASON_SCALER_ABSENT = "AGGREGATE_SCALER_ABSENT"
+REASON_BUNDLE_SKEW = "CROSS_BUNDLE_SCALER_MISMATCH"
 REASON_MLFLOW = "MLFLOW_LOGGING_DEGRADED"
 _ENTITY_UNKNOWN = "unknown_driver"
 _ENTITY_MODEL = "model"
@@ -215,6 +224,7 @@ class StyleSpaceHandle:
     umap_5d: Any | None
     umap_2d: Any | None
     pca: Any
+    scaler: Any  # train-only aggregate standardiser (applied read-only at every forward pass)
     drivers: list[str]
     known_aggregate: np.ndarray  # n_drivers × 56 (raw-NN fallback + provenance)
     known_coords_5d: dict[str, np.ndarray]
@@ -272,6 +282,16 @@ def _resolve_min_std(config: AppConfig) -> float:
     return _MIN_STD
 
 
+def _scaler_sha(scaler: Any) -> str:
+    """Deterministic fingerprint of the aggregate scaler's fitted params. Written into the UMAP
+    bundle at build and compared at load, so a UMAP fitted against a DIFFERENT scaler (partial
+    rebuild / pre-scaler artefact) is detected as cross-bundle skew and degraded — its geometry
+    is meaningless in this scaled space and must never serve silently."""
+    mean = np.asarray(scaler.mean_, dtype=float)
+    scale = np.asarray(scaler.scale_, dtype=float)
+    return sha256(mean.tobytes() + scale.tobytes()).hexdigest()
+
+
 # ----------------------------------------------------------------------------------
 # Pure helpers (unit-testable in isolation)
 # ----------------------------------------------------------------------------------
@@ -320,13 +340,21 @@ def nearest_neighbours(
 
 
 def ood_check(
-    aggregate_56: np.ndarray, pca: Any, pc_std: np.ndarray, threshold: float, min_std: float
+    aggregate_56: np.ndarray,
+    pca: Any,
+    pc_std: np.ndarray,
+    threshold: float,
+    min_std: float,
+    *,
+    scaler: Any,
 ) -> tuple[bool, float]:
     """Max over principal components of ``|pc_score_i / pc_std_i|``; ``> threshold`` → out of
-    distribution. ``pc_std`` is floored at ``min_std`` to avoid div-by-zero (F04's idea)."""
-    z = pca.transform(np.asarray(aggregate_56, dtype=float).reshape(1, -1))[0] / np.maximum(
-        np.asarray(pc_std, dtype=float), min_std
-    )
+    distribution. The RAW aggregate is standardised by the train-only ``scaler`` (fitted at build;
+    read-only here) before the PC transform — the PCA basis and ``pc_std`` live in the scaled
+    space, so an unscaled pass would yield meaningless z-scores. ``pc_std`` is floored at
+    ``min_std`` to avoid div-by-zero (F04's idea)."""
+    x = scaler.transform(np.asarray(aggregate_56, dtype=float).reshape(1, -1))
+    z = pca.transform(x)[0] / np.maximum(np.asarray(pc_std, dtype=float), min_std)
     max_abs = float(np.max(np.abs(z))) if z.size else 0.0
     return max_abs > threshold, max_abs
 
@@ -334,6 +362,7 @@ def ood_check(
 def _project_aggregate(
     agg: np.ndarray,
     *,
+    scaler: Any,
     umap_5d: Any | None,
     umap_2d: Any | None,
     pca: Any,
@@ -341,13 +370,15 @@ def _project_aggregate(
     n5: int,
     n2: int,
 ) -> tuple[list[float], list[float]]:
-    """Forward-pass one 56-dim aggregate to ``(coords_5d, coords_2d)`` on the active engine.
+    """Forward-pass one RAW 56-dim aggregate to ``(coords_5d, coords_2d)`` on the active engine.
 
-    The SINGLE forward-pass path shared by ``build_style_space`` (per-season emission),
-    ``load_style_space`` (known/season coord reconstruction) and ``project_unknown`` — so per-season
-    coords are demonstrably a ``transform``, never a new fit.
+    The aggregate is first standardised by the train-only ``scaler`` (fitted at build; read-only
+    here) — every engine was fit in the scaled space. The SINGLE forward-pass path shared by
+    ``build_style_space`` (per-season emission), ``load_style_space`` (known/season coord
+    reconstruction) and ``project_unknown`` — so scaling is applied identically everywhere and
+    per-season coords are demonstrably a ``transform``, never a new fit.
     """
-    x = np.asarray(agg, dtype=float).reshape(1, -1)
+    x = scaler.transform(np.asarray(agg, dtype=float).reshape(1, -1))
     if engine == _ENGINE_UMAP:
         if umap_5d is None or umap_2d is None:  # explicit (not assert — survives `python -O`)
             raise ValueError("engine=='umap' but UMAP models are not loaded")
@@ -428,6 +459,7 @@ def _project_all(
     drivers: list[str],
     season_aggregates: dict[str, dict[str, np.ndarray]],
     *,
+    scaler: Any,
     umap_5d: Any | None,
     umap_2d: Any | None,
     pca: Any,
@@ -440,13 +472,15 @@ def _project_all(
     dict[str, dict[str, list[float]]],
     dict[str, dict[str, list[float]]],
 ]:
-    """Reconstruct known-driver + per-season coords from their persisted aggregates on ``engine``.
-    One source of truth (the aggregates); coords are always a forward-pass ``transform``."""
+    """Reconstruct known-driver + per-season coords from their persisted RAW aggregates on
+    ``engine``. One source of truth (the aggregates, stored unscaled); coords are always a
+    forward-pass ``transform`` through the shared ``scaler``-aware path."""
     known5: dict[str, np.ndarray] = {}
     known2: dict[str, np.ndarray] = {}
     for i, d in enumerate(drivers):
         c5, c2 = _project_aggregate(
             known_aggregate[i],
+            scaler=scaler,
             umap_5d=umap_5d,
             umap_2d=umap_2d,
             pca=pca,
@@ -462,7 +496,14 @@ def _project_all(
         season5[d], season2[d] = {}, {}
         for season, agg in seasons.items():
             c5, c2 = _project_aggregate(
-                agg, umap_5d=umap_5d, umap_2d=umap_2d, pca=pca, engine=engine, n5=n5, n2=n2
+                agg,
+                scaler=scaler,
+                umap_5d=umap_5d,
+                umap_2d=umap_2d,
+                pca=pca,
+                engine=engine,
+                n5=n5,
+                n2=n2,
             )
             season5[d][season] = c5
             season2[d][season] = c2
@@ -511,6 +552,7 @@ def build_style_space(
     log = Path(log_path) if log_path is not None else Path(config.paths.data_quality_log)
     ledger = _DQLedger(log_path=log)
     seed = config.seeds.numpy
+    min_std = _resolve_min_std(config)
     n5, n2 = cfg.umap_n_components_5d, cfg.umap_n_components_2d
 
     def _fail(detail: str, code: ErrorCode) -> StyleSpaceBuildError:
@@ -574,30 +616,40 @@ def build_style_space(
     # failure — so it is deliberately NOT logged as a MODEL_TRAINING_FAILED data-quality row.
     effective_n_neighbors = min(cfg.umap_n_neighbors, n_drivers - 1)
 
-    # 6. Fit (all seeded).
+    # 6. Fit (all seeded). The 56-dim aggregate mixes z-scored (~unit-scale) and raw-physical-unit
+    #    columns spanning ~4 orders of magnitude, so the euclidean UMAP/PCA geometry is first
+    #    rebalanced by a train-only aggregate StandardScaler — a documented master gap-fill (§9.7).
+    #    Train-only by construction: the leakage tripwire ran before the aggregate was built.
+    #    scale_ is floored at min_std so a (near-)constant column cannot explode the transform;
+    #    a NaN reaching the scaler fit becomes a coded MODEL_TRAINING_FAILED, not an untyped crash.
     try:
+        scaler = StandardScaler().fit(known_aggregate)
+        scaler.scale_ = np.maximum(np.asarray(scaler.scale_, dtype=float), min_std)
+        known_scaled = scaler.transform(known_aggregate)
         umap_5d = umap.UMAP(
             n_components=n5,
             n_neighbors=effective_n_neighbors,
             min_dist=cfg.umap_min_dist,
             metric=cfg.umap_metric,
             random_state=seed,
-        ).fit(known_aggregate)
+        ).fit(known_scaled)
         umap_2d = umap.UMAP(
             n_components=n2,
             n_neighbors=effective_n_neighbors,
             min_dist=cfg.umap_min_dist,
             metric=cfg.umap_metric,
             random_state=seed,
-        ).fit(known_aggregate)
+        ).fit(known_scaled)
         pca = PCA(n_components=cfg.pca_n_components, svd_solver="full", random_state=seed).fit(
-            known_aggregate
+            known_scaled
         )
     except Exception as exc:  # noqa: BLE001 - any fit fault is a coded build failure (#1)
         raise _fail(f"UMAP/PCA fit failed: {exc}", ErrorCode.MODEL_TRAINING_FAILED) from exc
 
-    # 7. OOD basis + per-feature stats.
-    pc_scores = pca.transform(known_aggregate)
+    # 7. OOD basis (in the scaled space, like the PCA it standardises) + per-feature stats (RAW —
+    #    consumed by _risk_flags, which z-scores per feature itself and stays interpretable in
+    #    physical units; _raw_nn scales through the handle's scaler at transform time).
+    pc_scores = pca.transform(known_scaled)
     pc_std = pc_scores.std(axis=0, ddof=_AGGREGATE_DDOF)
     feature_mean = known_aggregate.mean(axis=0)
     feature_std = known_aggregate.std(axis=0, ddof=_AGGREGATE_DDOF)
@@ -614,6 +666,7 @@ def build_style_space(
             known_aggregate,
             drivers,
             season_aggregates,
+            scaler=scaler,
             umap_5d=umap_5d,
             umap_2d=umap_2d,
             pca=pca,
@@ -635,6 +688,9 @@ def build_style_space(
             "feature_order": list(FEATURE_IDS),
             "seed": seed,
             "n_neighbors": effective_n_neighbors,
+            # Cross-bundle fingerprint: ties this UMAP to the scaler it was fit against, so a
+            # partial rebuild (old UMAP + new PCA bundle) is detected at load and degraded.
+            "scaler_sha256": _scaler_sha(scaler),
         },
         umap_path,
     )
@@ -643,6 +699,7 @@ def build_style_space(
     joblib_dump(
         {
             "pca": pca,
+            "scaler": scaler,
             "pc_std": pc_std,
             "known_aggregate": known_aggregate,
             "feature_mean": feature_mean,
@@ -751,6 +808,7 @@ def load_style_space(
     umap_2d: Any | None = None
     engine = _ENGINE_PCA
     umap_bytes: bytes | None = None
+    umap_scaler_sha: str | None = None
     if not umap_path.is_file() or not sha_path.is_file():
         ledger.record(
             code=ErrorCode.UMAP_FALLBACK,
@@ -773,7 +831,19 @@ def load_style_space(
         else:
             try:
                 bundle = joblib_load(umap_path)
-                umap_5d, umap_2d = bundle["umap_5d"], bundle["umap_2d"]
+                u5, u2 = bundle["umap_5d"], bundle["umap_2d"]
+                # Dimension check vs the CURRENT config: a stale bundle after a config bump would
+                # otherwise silently serve wrong-length coordinates.
+                if (
+                    getattr(u5, "n_components", None) != n5
+                    or getattr(u2, "n_components", None) != n2
+                ):
+                    raise ValueError(
+                        f"umap bundle dims {getattr(u5, 'n_components', None)}/"
+                        f"{getattr(u2, 'n_components', None)} != config {n5}/{n2}"
+                    )
+                umap_5d, umap_2d = u5, u2
+                umap_scaler_sha = bundle.get("scaler_sha256")
                 engine = _ENGINE_UMAP
                 umap_bytes = raw
             except Exception as exc:  # noqa: BLE001 - corrupt pickle -> PCA fallback, not a crash
@@ -801,6 +871,44 @@ def load_style_space(
     except Exception as exc:  # noqa: BLE001 - corrupt PCA fallback = no usable engine
         raise _load_fail(ledger, f"{REASON_PCA_CORRUPT}: {exc}") from exc
 
+    # PCA dims must match the CURRENT config: a stale bundle after a config bump would otherwise
+    # silently serve truncated PCA-engine coordinates (p[:n5] of a shorter transform).
+    if getattr(pca, "n_components_", None) != cfg.pca_n_components:
+        raise _load_fail(
+            ledger,
+            f"{REASON_PCA_CORRUPT}: pca n_components {getattr(pca, 'n_components_', None)} "
+            f"!= config {cfg.pca_n_components} — stale artefact vs config; rebuild required",
+        )
+
+    # Aggregate scaler — REQUIRED, with its fitted stats. A pre-scaler bundle (or a wrong-width /
+    # stats-less scaler) must never serve: skipping the transform would silently project raw
+    # aggregates through models fit in the scaled space, and a scaler without mean_/scale_ would
+    # escape as an untyped AttributeError in the fingerprint check below.
+    scaler = pca_bundle.get("scaler")
+    if (
+        scaler is None
+        or getattr(scaler, "n_features_in_", None) != _N_FEATURES
+        or getattr(scaler, "mean_", None) is None
+        or getattr(scaler, "scale_", None) is None
+    ):
+        raise _load_fail(
+            ledger,
+            f"{REASON_SCALER_ABSENT}: pca bundle lacks a fitted {_N_FEATURES}-dim aggregate "
+            "scaler (pre-scaler artefact?) — rebuild required",
+        )
+
+    # Cross-bundle skew: a UMAP fitted against a DIFFERENT aggregate scaler (partial rebuild /
+    # pre-scaler umap bundle) has meaningless geometry in this scaled space -> degrade to PCA.
+    if engine == _ENGINE_UMAP and umap_scaler_sha != _scaler_sha(scaler):
+        ledger.record(
+            code=ErrorCode.UMAP_FALLBACK,
+            entity_type=_ENTITY_MODEL,
+            entity_id="startup",
+            detail=f"{REASON_BUNDLE_SKEW}: umap bundle was fitted against a different scaler",
+            fallback_used=True,
+        )
+        engine, umap_5d, umap_2d, umap_bytes = _ENGINE_PCA, None, None, None
+
     # Normalisation — REQUIRED (project_unknown normalises with it).
     try:
         params = load_normalisation_params(art_dir / config.normalise.artefact_filename)
@@ -814,6 +922,7 @@ def load_style_space(
             known_aggregate,
             drivers,
             season_aggregates,
+            scaler=scaler,
             umap_5d=umap_5d,
             umap_2d=umap_2d,
             pca=pca,
@@ -836,6 +945,7 @@ def load_style_space(
                     known_aggregate,
                     drivers,
                     season_aggregates,
+                    scaler=scaler,
                     umap_5d=None,
                     umap_2d=None,
                     pca=pca,
@@ -855,6 +965,7 @@ def load_style_space(
         umap_5d=umap_5d,
         umap_2d=umap_2d,
         pca=pca,
+        scaler=scaler,
         drivers=drivers,
         known_aggregate=known_aggregate,
         known_coords_5d=known5,
@@ -915,9 +1026,15 @@ def _normalise_unknown_laps(
 
 
 def _raw_nn(agg: np.ndarray, handle: StyleSpaceHandle, k: int) -> list[Neighbour]:
-    """Nearest neighbours in the raw 56-dim aggregate space (the PROJECTION_FALLBACK path)."""
-    known = {d: handle.known_aggregate[i] for i, d in enumerate(handle.drivers)}
-    return nearest_neighbours(agg, known, k)
+    """Nearest neighbours by cosine in the standardised 56-dim aggregate space (the
+    PROJECTION_FALLBACK path). Both the query and the known rows go through the handle's
+    train-only scaler read-only — unscaled cosine would be dominated by the largest-magnitude
+    physical-unit columns, the same defect the aggregate scaler fixes for the manifold fit
+    (§9.7 applies to this path too; the ranking IS this path's entire output)."""
+    q = handle.scaler.transform(np.asarray(agg, dtype=float).reshape(1, -1))[0]
+    known_scaled = handle.scaler.transform(np.asarray(handle.known_aggregate, dtype=float))
+    known = {d: known_scaled[i] for i, d in enumerate(handle.drivers)}
+    return nearest_neighbours(q, known, k)
 
 
 def project_unknown(
@@ -938,6 +1055,13 @@ def project_unknown(
         n_input = int(len(laps))
     except Exception:  # noqa: BLE001 - a non-sized laps input -> treated as zero laps
         n_input = 0
+    # Best-effort defaults for the backstop; each is refined as the pipeline progresses so a late
+    # fault reports what was actually established (signal counts, sparsity, normalisation
+    # fallback) instead of fabricated values. Before any lap is processed, nothing was "used".
+    n_used = 0
+    laps_rejected = n_input
+    sparse = False
+    used_global = False
     try:
         if config.stylespace is None:
             raise ValueError("config.stylespace block absent")
@@ -1014,9 +1138,10 @@ def project_unknown(
                 detail=f"{REASON_NON_FINITE_AGGREGATE}: aggregate held a non-finite value",
                 fallback_used=True,
             )
-            nn = _raw_nn(agg, handle, k) if np.all(np.isfinite(handle.known_aggregate)) else []
+            # A non-finite query cannot be ranked: an inf slips past the zero-norm guard and
+            # yields NaN cosine similarities — return no neighbours rather than garbage ones.
             return _projection_fallback(
-                nn=nn,
+                nn=[],
                 ood=False,
                 ood_max=0.0,
                 sparse=n_used < config.thresholds.min_clean_laps,
@@ -1037,8 +1162,10 @@ def project_unknown(
                 fallback_used=False,
             )
 
-        # 4. OOD gate.
-        ood, ood_max = ood_check(agg, handle.pca, handle.pc_std, cfg.ood_sd_threshold, min_std)
+        # 4. OOD gate (the check standardises the raw aggregate through the handle's scaler).
+        ood, ood_max = ood_check(
+            agg, handle.pca, handle.pc_std, cfg.ood_sd_threshold, min_std, scaler=handle.scaler
+        )
         if ood:
             ledger.record(
                 code=ErrorCode.OUT_OF_DISTRIBUTION,
@@ -1052,6 +1179,7 @@ def project_unknown(
         try:
             coords_5d, coords_2d = _project_aggregate(
                 agg,
+                scaler=handle.scaler,
                 umap_5d=handle.umap_5d,
                 umap_2d=handle.umap_2d,
                 pca=handle.pca,
@@ -1078,8 +1206,8 @@ def project_unknown(
                 ood_max=ood_max,
                 sparse=sparse,
                 used_global=used_global,
-                n_laps=n_input,
-                rejected=0,
+                n_laps=n_used,  # honest ledger: signal-carrying laps, not the raw row count
+                rejected=laps_rejected,
                 ledger=ledger,
             )
 
@@ -1149,10 +1277,10 @@ def project_unknown(
             nn=[],
             ood=False,
             ood_max=0.0,
-            sparse=False,
-            used_global=False,
-            n_laps=n_input,  # captured safely above — never re-derefs a possibly-bad `laps`
-            rejected=0,
+            sparse=sparse,  # best-effort values captured above — never re-derefs a bad `laps`,
+            used_global=used_global,  # never contradicts the DQ rows already written
+            n_laps=n_used,
+            rejected=laps_rejected,
             ledger=ledger,
         )
 
@@ -1277,6 +1405,11 @@ def stability_report(
         n_drivers = len(drivers)
         eff = min(cfg.umap_n_neighbors, max(n_drivers - 1, _MIN_UMAP_NEIGHBORS))
 
+        # Same train-only aggregate scaling as build_style_space (in-memory, never persisted) so
+        # the Procrustes evidence measures the geometry the production model actually ships.
+        scaler = StandardScaler().fit(agg)
+        scaler.scale_ = np.maximum(np.asarray(scaler.scale_, dtype=float), _resolve_min_std(config))
+        agg_scaled = scaler.transform(agg)
         embeddings = [
             umap.UMAP(
                 n_components=n5,
@@ -1284,7 +1417,7 @@ def stability_report(
                 min_dist=cfg.umap_min_dist,
                 metric=cfg.umap_metric,
                 random_state=seed + i,
-            ).fit_transform(agg)
+            ).fit_transform(agg_scaled)
             for i in range(cfg.stability_n_runs)
         ]
         disparities = [

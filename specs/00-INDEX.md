@@ -27,7 +27,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 |-----|---------|-----------|----|--------|
 | F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | DONE (F06a 2026-06-30, F06b 2026-07-01) |
 | F07 | SHAP explainability (beeswarm, force, radar, NL templates) | F06 | 7 | DONE (2026-07-01) |
-| F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | DONE (2026-07-01) |
+| F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | DONE (2026-07-02) |
 | F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | TODO |
 | F10 | Model 3 — Degradation detector (deviation, rolling mean, alert threshold) | F04, F08 | 11–12 | TODO |
 | F11 | Car personalisation engine (3 layers: mapping, constraints, confidence) | F07, F08 | 13 | TODO |
@@ -65,6 +65,31 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F08 aggregate scaler (Gate-2 fix) — 2026-07-02 (feature/F08-style-space):** a CONFIRMED code-review
+  finding was fixed on the branch before merge: F04 z-scores only **6 of the 28** features, so the 56-dim
+  driver aggregate mixed ~unit-scale columns with raw physical units spanning ~4 orders of magnitude
+  (F16 gear-hold ms ≤10⁴, F12 speed variance ≤8·10³ vs 0–1 fractions), letting the largest-magnitude
+  features dominate the euclidean UMAP/PCA fit — the style space would have measured unit scale, not
+  style. The master is **silent** on aggregate scale (verified against the PDF: §5.2's "no refit"
+  concerns the UMAP model; §4.3 is per-lap only), so F08 adds a **train-only aggregate `StandardScaler`**
+  (fit inside the leakage-guarded build after the tripwire; `scale_` floored at `normalise.min_std`;
+  persisted in `pca_fallback.pkl`; `scaler_sha256` cross-bundle fingerprint in `umap_model.pkl`; applied
+  read-only at every forward pass via the single `_project_aggregate`/`ood_check` choke points;
+  `stability_report` uses its own in-memory equivalent). Fail-loud: a pre-scaler/wrong-width bundle →
+  `MODEL_NOT_FOUND` (never a silent unscaled load); a fingerprint mismatch → `UMAP_FALLBACK` degrade.
+  **Master gap-fill, flagged to the supervisor as divergence #6** (spec §9.7). Same pass also pinned the
+  previously-untested load-reconstruction degrade chain, the sparse-gate **signal-count** boundary, fixed
+  fallback lap accounting (`n_laps_used`/`laps_rejected` honest on every path), added the
+  `requirements.lock` BOM regression scan, and hardened the fit-site scan to a whole-module inverse scan.
+  No config/error-code changes; aggregates persist RAW; `_risk_flags` deliberately stays in raw space
+  (it z-scores per feature itself); the `PROJECTION_FALLBACK` raw-NN ranking standardises query + known
+  rows through the same scaler (unscaled cosine is magnitude-dominated — §9.7 applies there too, a
+  `/code-review high` catch). The same review added load-time dimension checks vs config (stale umap
+  bundle → `UMAP_FALLBACK`; stale pca bundle → `MODEL_NOT_FOUND`), a stats-less-scaler typed refusal,
+  backstop preservation of `sparse`/`used_global` + honest pre-fault accounting `(0, n_input)`, and
+  empty (never NaN) neighbours on a non-finite query. Coordinates changed vs the raw-space fit; no
+  consumer existed (F10/F11/F13/F16/F18
+  unbuilt, no fitted artefact committed) — migration-free. See `specs/F08-style-space.md` §4/§6/§7/§9.7.
 - **F08 spec — 2026-07-01 (apex-F08-style-space):** `specs/F08-style-space.md` written (SPEC WRITTEN),
   hardened by a 4-lens adversarial workflow (master-fidelity — 0 findings; leakage/reproducibility;
   failsafe; house-convention). **Model 2**: aggregate each driver's clean **normalised training** laps to

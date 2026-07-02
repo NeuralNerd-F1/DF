@@ -289,6 +289,43 @@ class StubUMAP:
         return np.tile(self.out, (len(x), 1))
 
 
+class StubScaler:
+    """A StandardScaler-shaped stub for the mandatory ``StyleSpaceHandle.scaler``.
+
+    Identity by default (``(x - shift) / 1``) so the existing pinned boundary expectations hold;
+    a non-zero ``shift`` proves a serving path really routes through the scaler. Records
+    ``transform_calls`` / ``fit_calls`` so tests can assert serving transforms but NEVER fits."""
+
+    def __init__(
+        self,
+        n: int = 56,
+        *,
+        shift: float = 0.0,
+        scale: Any | None = None,
+        raises: bool = False,
+    ) -> None:
+        self.mean_ = np.full(n, shift, dtype=float)
+        self.scale_ = np.asarray(scale, dtype=float) if scale is not None else np.ones(n)
+        self.n_features_in_ = n
+        self.raises = raises
+        self.transform_calls = 0
+        self.fit_calls = 0
+
+    def transform(self, x: np.ndarray) -> np.ndarray:
+        self.transform_calls += 1
+        if self.raises:
+            raise RuntimeError("stub scaler transform boom")
+        return (np.asarray(x, dtype=float) - self.mean_) / self.scale_
+
+    def fit(self, _x: np.ndarray) -> StubScaler:
+        self.fit_calls += 1
+        return self
+
+    def fit_transform(self, x: np.ndarray) -> np.ndarray:
+        self.fit(x)
+        return self.transform(x)
+
+
 @pytest.fixture
 def make_stub_handle(ss_params: Any) -> Callable[..., Any]:
     """Factory: a StyleSpaceHandle with hand-set pca/pc_std/coords so OOD/NN/sparse/fallback
@@ -307,6 +344,7 @@ def make_stub_handle(ss_params: Any) -> Callable[..., Any]:
         feature_mean: np.ndarray | None = None,
         feature_std: np.ndarray | None = None,
         drivers: list[str] | None = None,
+        scaler: Any | None = None,
     ) -> Any:
         drivers = drivers or ["A", "B", "C"]
         n5 = 5
@@ -322,6 +360,7 @@ def make_stub_handle(ss_params: Any) -> Callable[..., Any]:
             umap_5d=umap5 if engine == "umap" else None,
             umap_2d=umap2 if engine == "umap" else None,
             pca=StubPCA(pca_scores),
+            scaler=scaler if scaler is not None else StubScaler(),  # identity keeps pins stable
             drivers=list(drivers),
             known_aggregate=np.asarray(agg, dtype=float),
             known_coords_5d={d: np.asarray(v, dtype=float) for d, v in known5.items()},

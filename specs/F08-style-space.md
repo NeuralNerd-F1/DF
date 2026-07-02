@@ -106,9 +106,11 @@ UMAP re-fit for the §11.2 Procrustes evidence). **Both** are train-only and gua
   `build_style_space(laps: pd.DataFrame, *, config: AppConfig, artefact_dir: str | Path | None = None,
   log_path: str | Path | None = None) -> StyleSpaceBuildResult`. Steps: validate columns → quarantine
   held-out + non-`train` → `_assert_no_leakage` → apply F04 normalisation (loaded params, **no refit**) →
-  aggregate per driver to 56-dim → fit `umap_5d`, `umap_2d`, `pca_fallback` (all seeded) → compute the OOD
-  stats, known coords, stability + proximity → write both artefacts deterministically → **log the build
-  run to MLflow** (params + metrics + artefacts; non-negotiable #3). **Raises** `StyleSpaceBuildError`
+  aggregate per driver to 56-dim → **fit the train-only aggregate `StandardScaler` and standardise the
+  aggregate matrix (§4 step 6, the §9.7 gap-fill)** → fit `umap_5d`, `umap_2d`, `pca_fallback` on the
+  scaled matrix (all seeded) → compute the OOD stats, known coords, stability + proximity → write both
+  artefacts deterministically (scaler persisted in the PCA bundle; its fingerprint in the UMAP bundle) →
+  **log the build run to MLflow** (params + metrics + artefacts; non-negotiable #3). **Raises** `StyleSpaceBuildError`
   (fail-loud, after logging) on: missing columns, empty training pool, leakage tripwire (`TRAIN_LEAKAGE`),
   fewer than `umap_n_components_5d + 1` drivers, or a UMAP/PCA fit exception (`MODEL_TRAINING_FAILED`).
 - **`StyleSpaceBuildResult(BaseResult)`:**
@@ -129,8 +131,9 @@ UMAP re-fit for the §11.2 Procrustes evidence). **Both** are train-only and gua
   usable projection engine → **raise** `StyleSpaceLoadError` (`MODEL_NOT_FOUND`), after logging (mirrors
   F06b `load_model`: refuse to serve rather than project from nothing). Returns a **ready** handle
   otherwise (`engine ∈ {"umap","pca"}`).
-- **`StyleSpaceHandle`** (frozen dataclass): `{ umap_5d, umap_2d, pca, drivers: list[str],
-  known_coords_5d: dict[str, np.ndarray], known_aggregate: np.ndarray (n_drivers × 56),
+- **`StyleSpaceHandle`** (frozen dataclass): `{ umap_5d, umap_2d, pca, scaler (the train-only aggregate
+  standardiser — REQUIRED, applied read-only at every forward pass), drivers: list[str],
+  known_coords_5d: dict[str, np.ndarray], known_aggregate: np.ndarray (n_drivers × 56, stored RAW),
   pc_std: np.ndarray (per-PC training std, for OOD), feature_mean: np.ndarray, feature_std: np.ndarray
   (per-feature known-driver stats, for risk_flags), normalisation_params: NormalisationParams,
   engine: "umap" | "pca", model_version: str, ready: bool }`.
@@ -180,7 +183,8 @@ UMAP re-fit for the §11.2 Procrustes evidence). **Both** are train-only and gua
 - **Pure helpers (unit-testable in isolation):** `aggregate_driver(feature_rows: pd.DataFrame) ->
   np.ndarray` (56-dim, `[mean(F01..F28), std(F01..F28)]`, population std `ddof=0`);
   `nearest_neighbours(query_5d, known_coords_5d, k) -> list[Neighbour]` (cosine);
-  `ood_check(aggregate_56, pca, pc_std, threshold) -> tuple[bool, float]` (max per-PC |z|).
+  `ood_check(aggregate_56, pca, pc_std, threshold, min_std, *, scaler) -> tuple[bool, float]` (max
+  per-PC |z|; standardises the raw aggregate through the train-only `scaler` before the PC transform).
 - **Exceptions:** serving paths **never raise** — every fault is a coded result / a not-ready-then-
   fallback handle. Only `build_style_space` (`StyleSpaceBuildError`) and `load_style_space`
   (`StyleSpaceLoadError`, only when no engine is usable) raise, and only **after** logging.
@@ -215,18 +219,33 @@ so a NaN never reaches the OOD gate or `transform` (where `NaN > threshold` woul
    `effective_n_neighbors = min(umap_n_neighbors, n_drivers - 1)` (logged if clamped). If
    `n_drivers < umap_n_components_5d + 1` → `StyleSpaceBuildError` (`MODEL_TRAINING_FAILED`) — cannot fit
    a 5D embedding of that few points.
-6. **Fit** (all with `random_state=seeds.numpy`, `n_neighbors=effective_n_neighbors`,
-   `min_dist=umap_min_dist`, `metric=umap_metric`): `umap_5d = UMAP(n_components=umap_n_components_5d)`,
+6. **Scale, then fit** (the §9.7 gap-fill). The 56-dim aggregate mixes the six F04 z-scored features
+   (~unit scale) with 22 raw-physical-unit features spanning ~4 orders of magnitude (F16 gear-hold ms up
+   to 10⁴, F12 speed variance up to 8·10³ vs 0–1 fractions and [−1,1] correlations), so a euclidean
+   UMAP/PCA fit on the raw matrix would be dominated by the largest-magnitude columns rather than
+   driving style. Therefore: `scaler = StandardScaler().fit(A)` (**train-only by construction** — the
+   leakage tripwire already ran; `scale_` floored at `normalise.min_std` so a (near-)constant column
+   cannot explode the transform), `A_scaled = scaler.transform(A)`; then fit (all with
+   `random_state=seeds.numpy`, `n_neighbors=effective_n_neighbors`, `min_dist=umap_min_dist`,
+   `metric=umap_metric`): `umap_5d = UMAP(n_components=umap_n_components_5d)`,
    `umap_2d = UMAP(n_components=umap_n_components_2d)`, `pca = PCA(n_components=pca_n_components,
-   svd_solver="full", random_state=seeds.numpy)`. Any fit exception → `StyleSpaceBuildError`
-   (`MODEL_TRAINING_FAILED`), logged.
-7. **OOD basis:** `pc_scores = pca.transform(A)`; `pc_std = pc_scores.std(axis=0, ddof=0)` (per-PC
-   training spread — the between-driver variance the Mahalanobis/PC check standardises against).
-   `feature_mean`/`feature_std` = per-column mean/std of `A` (for `risk_flags`).
-8. **Known coords:** `coords_5d = umap_5d.embedding_` (or `transform(A)`), `coords_2d = umap_2d.embedding_`.
-9. **Persist:** joblib-dump `umap_model.pkl` (both UMAP models + feature order + seeds) and its sidecar
-   `.sha256`; joblib-dump `pca_fallback.pkl` (pca + pc_std + A + feature stats + drivers). PCA is
-   deterministic; UMAP is **not byte-identical across runs** (documented, §9).
+   svd_solver="full", random_state=seeds.numpy)` — **all on `A_scaled`**. Any fit exception (including a
+   NaN reaching the scaler fit) → `StyleSpaceBuildError` (`MODEL_TRAINING_FAILED`), logged. The scaler is
+   **unconditional** (no config toggle — a toggle would create a scaled/unscaled artefact ambiguity).
+7. **OOD basis:** `pc_scores = pca.transform(A_scaled)`; `pc_std = pc_scores.std(axis=0, ddof=0)` (per-PC
+   training spread — the between-driver variance the Mahalanobis/PC check standardises against; lives in
+   the **scaled** space, like the PCA it standardises). `feature_mean`/`feature_std` = per-column
+   mean/std of the **RAW** `A` (for `risk_flags`, which z-scores per feature itself and stays
+   interpretable in physical units; `_raw_nn` standardises through the handle's scaler at
+   transform time — see step 5 of `project_unknown`).
+8. **Known coords:** via the shared scaler-aware forward pass (`_project_aggregate`) on the RAW
+   aggregates — scaling happens inside the single choke point, identically for build, load, and serving.
+9. **Persist:** joblib-dump `umap_model.pkl` (both UMAP models + feature order + seeds + the
+   **`scaler_sha256` cross-bundle fingerprint** — ties the UMAP to the scaler it was fitted against, so
+   a partial rebuild is detected at load) and its sidecar `.sha256`; joblib-dump `pca_fallback.pkl`
+   (pca + **scaler** + pc_std + **RAW** A + feature stats + drivers). The aggregates are persisted RAW
+   (single source of truth); scaling is applied at transform time. PCA + scaler are deterministic; UMAP
+   is **not byte-identical across runs** (documented, §9).
 10. Compute `stability_report` + `teammate_proximity` (best-effort; failures degrade, do not abort the
     build). **Log to MLflow** (F08's **own** `stylespace.mlflow_tracking_uri` + `stylespace.mlflow_experiment`
     — F08 does **not** read the optional `classifier` block, preserving the §2 independence claim; reading
@@ -236,9 +255,25 @@ so a NaN never reaches the OOD gate or `transform` (where `NaN > threshold` woul
     the build result (flag), it does not abort the artefact write (the pkls are the deliverable).
 
 **`load_style_space` (startup).** Read `umap_model.pkl`; recompute sha256 and compare to the sidecar.
-Missing file / read error / hash mismatch → log `UMAP_FALLBACK`, `engine="pca"`, `umap_5d=umap_2d=None`.
+Missing file / read error / hash mismatch / **n_components mismatch vs the current config** (stale
+bundle after a config bump would silently serve wrong-length coordinates) → log `UMAP_FALLBACK`,
+`engine="pca"`, `umap_5d=umap_2d=None`.
 Load `pca_fallback.pkl` + `normalisation.json`; **either** missing/corrupt → log + raise
-`StyleSpaceLoadError(MODEL_NOT_FOUND)` (no usable engine). `model_version = "sha256:" + digest[:16]` of the
+`StyleSpaceLoadError(MODEL_NOT_FOUND)` (no usable engine). The PCA's `n_components_` must equal
+`pca_n_components` — a stale-vs-config bundle would silently truncate PCA-engine coordinates
+(`p[:n5]` of a shorter transform) → log + raise `StyleSpaceLoadError(MODEL_NOT_FOUND)`. The
+**aggregate scaler is REQUIRED, with fitted stats**: a pca
+bundle lacking a 56-dim scaler with `mean_`/`scale_` (pre-scaler artefact, or a scaler-shaped object
+without the stats the fingerprint needs) → log + raise `StyleSpaceLoadError(MODEL_NOT_FOUND)`
+with an explicit `AGGREGATE_SCALER_ABSENT` detail — **never** a silent skip-scaling load (that would
+project raw aggregates through models fitted in the scaled space) and never an untyped
+`AttributeError`. **Cross-bundle skew check:** if the
+UMAP bundle's `scaler_sha256` does not match the loaded scaler's fingerprint (partial rebuild /
+pre-scaler UMAP), log `UMAP_FALLBACK` (`CROSS_BUNDLE_SCALER_MISMATCH`) and degrade to the PCA engine —
+per-file sidecar hashes cannot detect cross-file inconsistency. Coord reconstruction then runs through
+the shared scaler-aware forward pass; a loaded-but-unusable UMAP (its `transform` raises) degrades to
+PCA (`UMAP_FALLBACK`), and if the PCA retry also fails → `StyleSpaceLoadError(MODEL_NOT_FOUND)`.
+`model_version = "sha256:" + digest[:16]` of the
 governing engine's bytes (UMAP if present, else PCA), mirroring F06b `_resolve_model_version`.
 
 **`project_unknown` (per call) — never raises.**
@@ -248,22 +283,29 @@ governing engine's bytes (UMAP if present, else PCA), mirroring F06b `_resolve_m
 2. `agg = aggregate_driver(normalised laps)` → 56-dim. `n = n_laps_used`.
 2b. **Non-finite guard (defence-in-depth):** if `agg` holds any non-finite value (should be impossible —
    `apply_normalisation` NULLs non-finite inputs and the aggregation is all-null-safe) → log + return a
-   coded `PROJECTION_FALLBACK` result (raw-NN when `known_aggregate` is finite, else empty neighbours),
-   never feeding NaN into the gates below.
+   coded `PROJECTION_FALLBACK` result with **empty neighbours** — a non-finite query cannot be ranked
+   (an `inf` slips past the zero-norm guard and yields NaN cosines), so no ranking is fabricated and
+   NaN never feeds the gates below.
 3. **Sparse gate (§5.2 FM1):** `n < thresholds.min_clean_laps` (30) → `sparse=True`, flag
    `SPARSE_PROJECTION`, `confidence_state=LOW_CONFIDENCE`, `status=DEGRADED` (projection still computed —
    "compute projection but flag confidence as LOW").
-4. **OOD gate (§5.2 FM2):** `(ood, ood_max_pc_sd) = ood_check(agg, pca, pc_std, ood_sd_threshold)` — max
-   over PCs of `|pc_score_i / pc_std_i|`; `> ood_sd_threshold` (3) → `ood=True`,
+4. **OOD gate (§5.2 FM2):** `(ood, ood_max_pc_sd) = ood_check(agg, pca, pc_std, ood_sd_threshold,
+   min_std, scaler=handle.scaler)` — the check standardises the raw aggregate through the handle's
+   scaler (the PC basis lives in the scaled space), then max over PCs of `|pc_score_i / pc_std_i|`;
+   `> ood_sd_threshold` (3) → `ood=True`,
    `error_code=OUT_OF_DISTRIBUTION`, `confidence_state=OUT_OF_DISTRIBUTION`, `status=DEGRADED`
    ("projection computed but marked unreliable").
-5. **Project (§5.2 FM4):** `x = agg.reshape(1, -1)`. `try:` if `engine=="umap"` →
+5. **Project (§5.2 FM4):** `x = scaler.transform(agg.reshape(1, -1))` (inside `_project_aggregate` —
+   the single scaler-aware choke point). `try:` if `engine=="umap"` →
    `coords_5d = umap_5d.transform(x)[0]`, `coords_2d = umap_2d.transform(x)[0]`; else (`engine=="pca"`,
    i.e. `UMAP_FALLBACK` active) → `p = pca.transform(x)[0]`, `coords_5d = p[:5]`, `coords_2d = p[:2]` and
    carry the `UMAP_FALLBACK` flag + `status=DEGRADED`. **On ANY exception** → catch, log
    `PROJECTION_FALLBACK`, `projection_engine="raw_nn"`, `coords_5d=coords_2d=None`, and compute
-   `nearest_neighbours` by **cosine distance in the raw 56-dim `known_aggregate` space** (§5.2 FM4:
-   "nearest-neighbour in raw feature space using cosine distance"). `status=DEGRADED`. When a step-4 OOD
+   `nearest_neighbours` by **cosine in the scaler-standardised 56-dim aggregate space** (§5.2 FM4's
+   "nearest-neighbour in raw feature space using cosine distance", with the §9.7 gap-fill applied to
+   this path too: unscaled cosine is dominated by the largest-magnitude physical-unit columns, and the
+   ranking is this path's entire output — query and `known_aggregate` are standardised identically
+   through the handle's read-only scaler). `status=DEGRADED`. When a step-4 OOD
    was already detected, `PROJECTION_FALLBACK` becomes the **operative `error_code`** (no coordinate was
    produced) and `OUT_OF_DISTRIBUTION` is retained on `flags` with `ood=True` (step 8 precedence).
 6. **Nearest neighbours (§7.4):** on a successful projection, `nearest_neighbours(coords_5d,
@@ -288,9 +330,11 @@ governing engine's bytes (UMAP if present, else PCA), mirroring F06b `_resolve_m
    never a propagated exception. `stability_report` and `teammate_proximity` carry the same backstop
    (which also catches their internal `_assert_no_leakage` tripwire → `DEGRADED`, never a raise).
 
-**`ood_check` (pure).** `z = pca.transform(agg[None, :])[0] / pc_std` (guard `pc_std` ≥ `min_std` to
-avoid div-by-zero, reusing F04's `min_std` idea via a local floor); return `(max|z| > threshold,
-max|z|)`. The **PCA fallback artefact doubles as the OOD detector** — one artefact, two jobs.
+**`ood_check` (pure).** `z = pca.transform(scaler.transform(agg[None, :]))[0] / pc_std` (guard `pc_std`
+≥ `min_std` to avoid div-by-zero, reusing F04's `min_std` idea via a local floor; the raw aggregate is
+standardised through the train-only scaler because the PC basis + `pc_std` live in the scaled space);
+return `(max|z| > threshold, max|z|)`. The **PCA fallback artefact doubles as the OOD detector** — one
+artefact, two jobs.
 
 **`nearest_neighbours` (pure).** Cosine similarity `sim = a·b / (‖a‖‖b‖)`; a zero-norm vector (all-zero
 coord) → similarity 0.0 (never a div-by-zero / NaN neighbour). Return the top-`k` known drivers by `sim`
@@ -298,7 +342,9 @@ desc as `Neighbour(driver, cosine_similarity, distance=1−sim)`.
 
 **`stability_report` (§5.2 "10 seeds + Procrustes", §11.2) — a dissertation-only fit site.**
 **Quarantine** held-out + non-`train` rows and run `_assert_no_leakage` (identical to `build_style_space`
-steps 1–2), **normalise** with the loaded F04 params (**no refit**), aggregate the training frame once;
+steps 1–2), **normalise** with the loaded F04 params (**no refit**), aggregate the training frame once,
+**standardise it with its own in-memory train-only aggregate scaler** (same §4 step 6 recipe, never
+persisted — so the Procrustes evidence measures the geometry the production model actually ships);
 then fit `umap_5d` `stability_n_runs` times with `random_state = seeds.numpy + i` (a **fixed,
 reproducible** seed sequence — this is the one place the seed is deliberately varied, and it is varied
 deterministically, non-negotiable #3). Align each run's `n_drivers × 5` coord matrix to run 0 with
@@ -367,14 +413,14 @@ The four master §5.2 modes are the spine; F08 adds **no new error code**. Servi
 |--------------|-----------|-------------------|-----------------|---------|---------------------|
 | Unknown-driver telemetry too sparse (<30 laps) | lap count before projection (`n < thresholds.min_clean_laps`) | `SPARSE_PROJECTION` (flag), `status=DEGRADED`, `confidence_state=LOW_CONFIDENCE`, `sparse=True` | **compute the projection**, flag confidence LOW (UI shows a wider uncertainty ellipse) | yes | "Projection based on limited data (N laps); confidence is low." |
 | Unknown-driver aggregate outside training distribution | Mahalanobis / PC check: `max_i |pc_i / pc_std_i| > ood_sd_threshold` (3 SD) | `OUT_OF_DISTRIBUTION` (code), `status=DEGRADED`, `confidence_state=OUT_OF_DISTRIBUTION`, `ood=True` | projection computed but **marked unreliable** (UI shows a dashed-outline marker) | yes | "This driver falls outside the known style distribution; projection is approximate." |
-| UMAP model file corrupt or missing | sha256 sidecar hash verify at load | `UMAP_FALLBACK` (flag), `engine="pca"`, `status=DEGRADED` on each PCA-engine projection | **fall back to PCA** (2-component viz / 5-component fingerprint); PCA is always maintained as backup | yes | none (monitoring; UI unaffected — style space still functional) |
-| `transform()` fails for an unknown driver | try/except around the `transform()` call | `PROJECTION_FALLBACK` (operative code even if OOD co-occurs; OOD → `flags`), `projection_engine="raw_nn"`, `coords=None`, `confidence_state=LOW_CONFIDENCE`, `status=DEGRADED` | **fall back to nearest-neighbour in raw 56-dim feature space (cosine distance)**; return the matches, no coordinate | yes | "Could not place this driver on the map; showing closest known drivers instead." |
+| UMAP model file corrupt or missing / fitted against a different aggregate scaler (partial rebuild) / loaded but its `transform` raises at coord reconstruction | sha256 sidecar hash verify + `scaler_sha256` cross-bundle fingerprint check + guarded reconstruction at load | `UMAP_FALLBACK` (flag), `engine="pca"`, `status=DEGRADED` on each PCA-engine projection | **fall back to PCA** (2-component viz / 5-component fingerprint); PCA is always maintained as backup | yes | none (monitoring; UI unaffected — style space still functional) |
+| `transform()` fails for an unknown driver | try/except around the `transform()` call | `PROJECTION_FALLBACK` (operative code even if OOD co-occurs; OOD → `flags`), `projection_engine="raw_nn"`, `coords=None`, `confidence_state=LOW_CONFIDENCE`, `status=DEGRADED` | **fall back to nearest-neighbour cosine in the scaler-standardised 56-dim aggregate space** (§9.7 applies here too — unscaled cosine is magnitude-dominated); return the matches, no coordinate. The backstop preserves the already-established `sparse`/`used_global`/lap-count values — the result never contradicts the DQ rows written upstream | yes | "Could not place this driver on the map; showing closest known drivers instead." |
 | Unknown circuit at normalisation | `apply_normalisation` `used_global` | `NORMALISATION_FALLBACK` (flag, F04-owned), `status=DEGRADED` | normalise with global params (carried from F04) | yes | none (monitoring) |
 | Build: held-out circuit reached the fit | `_assert_no_leakage` tripwire after the exclusion filter | `TRAIN_LEAKAGE` (raise `StyleSpaceBuildError`) | **abort the build; no artefact written** | yes | build-time only |
 | Build: missing required columns / empty training pool / too few drivers / UMAP·PCA fit throws | column + count/shape check + guarded fit | `MODEL_TRAINING_FAILED` (raise `StyleSpaceBuildError`) | abort the build, logged | yes | build-time only |
-| Load: no usable projection engine (PCA **and**/or normalisation missing/corrupt) | file/hash checks at load | `MODEL_NOT_FOUND` (raise `StyleSpaceLoadError`) → F13 `HEALTH_FAIL` (503) | refuse to serve (fail-loud, mirrors F06b) | yes | "Style space unavailable." (503) |
+| Load: no usable projection engine (PCA **and**/or normalisation missing/corrupt; pca bundle lacking the 56-dim aggregate scaler — pre-scaler artefact; PCA coord-reconstruction retry fails) | file/hash/bundle-schema checks + guarded reconstruction at load | `MODEL_NOT_FOUND` (raise `StyleSpaceLoadError`) → F13 `HEALTH_FAIL` (503) | refuse to serve (fail-loud, mirrors F06b — **never** a silent unscaled load) | yes | "Style space unavailable." (503) |
 | DQ-log sink unwritable during any of the above | ledger `failed` counter | `DATA_QUALITY_LOG_UNWRITABLE` (flag) | surface on `flags`, never crash the never-raises path | n/a | none |
-| Stability variance ≥ threshold / intra ≥ inter | Procrustes / proximity result | *(not a system error)* `passes=False`, `status=DEGRADED` | **report as a research finding** (§5.2); UMAP retained for known drivers, PCA available as primary for unknowns | yes | dissertation only |
+| Stability variance ≥ threshold / intra ≥ inter | Procrustes / proximity result | *(not a system error)* `passes=False`, `status=DEGRADED`, `error_code=None` | **report as a research finding** (§5.2); UMAP retained for known drivers, PCA available as primary for unknowns | MLflow metrics at build (`procrustes_variance`, `stability_passes`, `teammate_proximity_pass`) + the typed result — a legitimate research finding is **not** a `data_quality_log` event (that log is for data-quality faults, and repurposing an error code for it would break code discipline) | dissertation only |
 
 The **User-facing message** column is illustrative copy F13/F16 render; tests assert
 `error_code`/`flags`/`status`/`confidence_state`/field values, not prose. Stability / proximity failure
@@ -390,10 +436,13 @@ is explicitly **not** a system failure (§5.2, §11.2) — it is a `passes=False
       std half all-zero (no NaN).
 - [ ] **Train-only fit / held-out never touches `.fit` (non-negotiable #2):** **both** fit sites —
       `build_style_space` and `stability_report` — exclude `held_out_circuits` + non-`train` rows and run
-      `_assert_no_leakage` before any fit. A frame with Belgium/Italy in the `train` split →
-      `build_style_space` raises `StyleSpaceBuildError(TRAIN_LEAKAGE)` and **writes no artefact**;
-      `stability_report` excludes them and (via its backstop) degrades, never fitting on them. Tests assert
-      `_assert_no_leakage` fires in both and the build artefacts are absent afterward.
+      `_assert_no_leakage` before any fit. The quarantine mask filters held-out circuits regardless of
+      their `split` label, so the tripwire is **defence-in-depth** (it can only fire if the filter itself
+      is broken); its raise/no-artefact/DQ-row path is therefore exercised by **simulating a broken
+      filter** (monkeypatched tripwire → `StyleSpaceBuildError(TRAIN_LEAKAGE)`, **no artefact written**;
+      `stability_report` degrades via its backstop, never fitting), and the train-only reach is proven
+      **behaviourally**: the persisted scaler's `mean_` equals the hand-recomputed quarantined training
+      aggregate, so held-out rows provably never entered any fit.
 - [ ] **Normalisation reused, never refit:** `build_style_space`, `project_unknown`, and
       `stability_report` obtain centre/scale via `load_normalisation_params` / `apply_normalisation`, with
       **no `fit_normaliser` / normalisation refit anywhere** in the module; a static source scan finds
@@ -416,7 +465,9 @@ is explicitly **not** a system failure (§5.2, §11.2) — it is a `passes=False
       from PCA (`coords_2d == pca first 2 comps`).
 - [ ] **transform→raw-NN fallback (§5.2 FM4):** a handle whose `transform` raises → `project_unknown`
       returns `PROJECTION_FALLBACK`, `projection_engine=="raw_nn"`, `coords_5d is None`,
-      `nearest_neighbours` computed by **cosine in raw 56-dim space**, `status=DEGRADED`, **no exception**.
+      `nearest_neighbours` computed by **cosine in the scaler-standardised 56-dim aggregate space**
+      (a rebalancing scaler demonstrably reshapes the ranking — unscaled cosine would not),
+      `status=DEGRADED`, **no exception**.
       With a co-occurring OOD, `error_code == PROJECTION_FALLBACK` and `OUT_OF_DISTRIBUTION` is on `flags`.
 - [ ] **Never a NaN coordinate / `confidence_state` always set:** an unknown that is all-NULL on one
       feature aggregates to a **finite** 56-dim (that feature `mean=std=0.0`, not NaN); a forced non-finite
@@ -457,6 +508,34 @@ is explicitly **not** a system failure (§5.2, §11.2) — it is a `passes=False
       `UMAP_FALLBACK`, `PROJECTION_FALLBACK`, `NORMALISATION_FALLBACK`, `TRAIN_LEAKAGE`,
       `MODEL_TRAINING_FAILED`, `MODEL_NOT_FOUND`) `result.logged`/the raise is preceded by a
       `data_quality_log` row with the matching code (asserted against a tmp log).
+- [ ] **Aggregate scaler — train-only fit, read-only serving (§4 step 6 / §9.7):** the persisted
+      scaler's `mean_` equals the hand-recomputed mean of the leakage-quarantined training aggregate
+      (held-out rows provably absent from its fit); serving calls `scaler.transform` only, never
+      `fit`/`fit_transform` (recording-stub asserted); `scale_ ≥ normalise.min_std` everywhere (a
+      zero-variance feature builds and projects finite); `ood_check` demonstrably standardises its
+      input through the scaler (a shifted stub scaler flips the OOD verdict).
+- [ ] **Scaler artefact contract:** `pca_fallback.pkl` carries the scaler (`n_features_in_ == 56`,
+      fitted `mean_`/`scale_` present); the UMAP bundle carries its `scaler_sha256` fingerprint.
+      Loading a bundle **without** the scaler (or with a wrong-width or stats-less scaler) →
+      `StyleSpaceLoadError(MODEL_NOT_FOUND)` with an
+      `AGGREGATE_SCALER_ABSENT` detail — never a silent unscaled load, never an untyped
+      `AttributeError`. A fingerprint mismatch
+      (partial rebuild) → `UMAP_FALLBACK` degrade to the PCA engine. **Dimension checks vs config:**
+      a umap bundle whose `n_components` mismatch the config → `UMAP_FALLBACK` degrade; a pca bundle
+      whose `n_components_` mismatch → `MODEL_NOT_FOUND` (a stale bundle never silently serves
+      wrong-length or truncated coordinates).
+- [ ] **Build/load coord parity:** `load_style_space`-reconstructed known + per-season coords equal the
+      build's emitted coords within tolerance — the scaler is provably applied identically at every
+      `_project_all` site. The load-time reconstruction degrade chain is pinned: a valid-hash UMAP whose
+      `transform` raises → PCA engine + `UMAP_FALLBACK` logged; PCA retry also failing →
+      `StyleSpaceLoadError(MODEL_NOT_FOUND)`.
+- [ ] **Honest projection accounting:** the sparse gate counts **signal-carrying** laps (boundary
+      asserted with mixed all-NULL rows: 29-of-31 sparse vs 30-of-32 not), and every fallback result —
+      including the transform-failure raw-NN path and the never-raises backstop — reports the
+      best-effort `n_laps_used`/`laps_rejected`, never `(raw row count, 0)` after laps were rejected;
+      a pre-processing fault reports `(0, n_input)`, never claiming unprocessed rows were "used". The
+      backstop also preserves the already-established `sparse`/`used_global` flags, so the result
+      never contradicts the `SPARSE_PROJECTION`/`NORMALISATION_FALLBACK` DQ rows written upstream.
 - [ ] Every error code / flag above has a unit test that triggers it and asserts the result.
 
 ## 8. Test plan
@@ -481,12 +560,25 @@ is explicitly **not** a system failure (§5.2, §11.2) — it is a `passes=False
 - **Stability / proximity (pure-ish):** identical seeds→variance 0.0; divergent aggregates→higher;
   intra<inter passes, intra≥inter `passes=False` (not an error); single-driver team; no comparable pair
   → `None`. `scipy.spatial.procrustes` disparity ∈ [0,1].
-- **Reproducibility:** two builds → byte-identical `pca_fallback.pkl`; UMAP coords equal within tolerance.
+- **Reproducibility:** two builds → byte-identical `pca_fallback.pkl` (scaler included); UMAP coords
+  equal within tolerance.
+- **Aggregate scaler:** persisted scaler + fingerprint in the bundles; hand-recomputed train-only
+  `mean_`; build/load coord parity; zero-variance feature (floored `scale_`, finite projection);
+  pre-scaler / wrong-width bundle → fail-loud `MODEL_NOT_FOUND`; fingerprint mismatch → PCA degrade;
+  recording stub proves serving transforms but never fits; shifted stub proves `ood_check` scales;
+  a raising scaler lands in the typed `PROJECTION_FALLBACK` backstop.
+- **Load reconstruction chain:** UMAP absent but PCA good → working `pca` handle; valid-hash UMAP whose
+  `transform` raises → PCA degrade + `UMAP_FALLBACK`; both engines failing reconstruction →
+  `MODEL_NOT_FOUND`.
+- **Accounting:** signal-count sparse boundary with mixed all-NULL rows; fallback results report
+  `n_laps_used`/`laps_rejected` honestly.
 - **Static scans:** no `.fit(` / `.fit_transform(` in the five serving bodies (`project_unknown`,
   `load_style_space`, `get_style_space`, `health`, `teammate_proximity`); no `fit_normaliser` /
-  normalisation refit **anywhere** in the module; a held-out-poisoned frame is caught by
+  normalisation refit **anywhere** in the module; the inverse whole-module scan (module minus the two
+  sanctioned fit sites contains no fit call); both fit sites contain the aggregate-scaler step; a
+  held-out-poisoned frame is caught by
   `_assert_no_leakage` in **both** fit sites (`build_style_space` raises, `stability_report` degrades);
-  threshold-literal scan for `5`/`2`/`7`/`3.0`/`0.05`/`30`.
+  threshold-literal scan for `5`/`2`/`7`/`3.0`/`0.05`/`30`; `requirements.lock` is BOM-free.
 - **Config validator:** assert `AppConfig` rejects each bad `stylespace:` value above.
 
 ## 9. Definition of done
@@ -517,6 +609,21 @@ full Mahalanobis distance reported alongside. (5) **The <5-lap hard reject (HTTP
 marker are F13's mapping**, not F08's — F08 always computes + flags (precedent: F07's 206). (6)
 **Stability & teammate-proximity are dissertation evidence** produced here but formally evaluated in
 **F20** on the held-out circuits; a failure of either is a research finding, not a system failure (§5.2).
+(7) **Train-only aggregate scaler — a master gap-fill (supervisor divergence #6).** The master §5.2
+specifies Model 2's input in one sentence ("mean and std of each of the 28 features … 8 drivers × 56
+values") and is **silent** on the scale of that aggregate; §4.3's normalisation covers only the six
+circuit-dependent per-lap features. Taken literally, the 56-dim matrix mixes ~unit-scale z-scored
+columns with raw physical units spanning ~4 orders of magnitude (F16 gear-hold ms ≤10⁴, F12 speed
+variance ≤8·10³, F18 RPM std ≤5·10³ vs 0–1 fractions and [−1,1] correlations), so a euclidean UMAP/PCA
+fit would measure variation of the large-unit features, not driving style — corrupting the continuous
+style space RQ4/Contribution-3 depend on and every downstream consumer (F10/F11/F18/F20). F08 therefore
+standardises the aggregate with a **train-only `StandardScaler`** (fit inside the leakage-guarded build,
+persisted in the PCA bundle, applied read-only at every forward pass — the exact §4.3/F04 contract
+shape, one stage up; `scale_` floored at `normalise.min_std`). This **fills a gap the master never
+reasoned about rather than contradicting a mandate** (the §5.2 "no refit" sentence concerns the UMAP
+model itself); it is nonetheless flagged to the supervisor as divergence #6, alongside the F06a/F06b
+divergences. Coordinates changed relative to a raw-space fit; no consumer existed at the time
+(F10/F11/F13/F16/F18 unbuilt, no fitted artefact committed), so the change is migration-free.
 
 ## 10. Risks & mitigations (from master risk register where relevant)
 - **UMAP projection unstable for unknown drivers (risk register, prob Low / impact Medium):** the PCA

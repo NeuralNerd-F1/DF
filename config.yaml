@@ -168,3 +168,26 @@ shap:
   beeswarm_filename: shap_beeswarm.json  # §6.1 global beeswarm artefact under paths.artefacts_dir
   stability_js_bins: 20              # §6.1 histogram bins for the per-feature Jensen-Shannon divergence
   stability_min_seasons: 3           # §8.5 fewer available seasons -> partial stability (F13 -> 206)
+
+# --- F08 Model 2 — driver style space (UMAP + PCA fallback + unknown-driver projection, §5.2) -----
+# Aggregates each driver's clean NORMALISED training laps to a 56-dim distribution (mean+std of the
+# 28 features), fits UMAP -> 5D fingerprint + 2D viz and a PCA fallback. Unknown drivers project by a
+# forward pass (umap.transform, no retrain), gated for sparsity (SPARSE_PROJECTION, <30 laps reuses
+# thresholds.min_clean_laps) and out-of-distribution (OUT_OF_DISTRIBUTION, Mahalanobis > 3 SD). The
+# four §5.2 codes are pre-seeded; no new error code. min_std for the OOD/risk floor is read from
+# normalise.min_std. F08 reads its OWN mlflow_tracking_uri (same store, own experiment).
+stylespace:
+  umap_n_components_5d: 5             # §5.2 — the fingerprint coordinate dimensionality
+  umap_n_components_2d: 2             # §5.2 — the visualisation projection dimensionality
+  umap_n_neighbors: 7                # §5.2 — UMAP neighbourhood; capped to n_drivers-1 at build (8 -> 7)
+  umap_min_dist: 0.1                 # UMAP layout tightness (design decision; umap-learn default)
+  umap_metric: euclidean             # distance on the 56-dim aggregate (design decision)
+  pca_n_components: 5                # PCA fallback dims (first 2 == 2D fallback); also the OOD PC basis
+  ood_sd_threshold: 3.0              # §5.2 — |z| on ANY principal component above this -> OUT_OF_DISTRIBUTION
+  nearest_neighbours_k: 3            # §7.4 — top-N nearest known drivers (cosine, 5D)
+  umap_model_filename: umap_model.pkl    # §5.2 — under paths.artefacts_dir (+ .sha256 sidecar)
+  pca_model_filename: pca_fallback.pkl   # §5.2 — under paths.artefacts_dir
+  stability_n_runs: 10               # §5.2/§11.2 — UMAP runs (fixed seed sequence) for Procrustes stability
+  stability_variance_threshold: 0.05 # §11.2 — Procrustes-aligned variance target (dissertation)
+  mlflow_tracking_uri: sqlite:///artefacts/mlflow.db  # #3 — F08's OWN URI (same store as F06a, own experiment)
+  mlflow_experiment: apex-stylespace # #3 — build run logged here

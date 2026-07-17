@@ -60,11 +60,11 @@ spec, and says so on every output. It is a dissertation-Contribution-3 consumer 
     (§7.1) is definable; F11 declares its own `_REQUIRED_COLUMNS` superset.
 - **Produces:**
   - `artefacts/personalisation.pkl` — the champion bundle: **10 fitted XGBoost regressors** (one per
-    parameter), their per-parameter **reliability scores** (§4.0-c) and **SHAP explainers**, the
-    training **circuit-type vocabulary + FIA-bound table + approximation-heuristic config snapshot**,
-    a `content_hash`, and `model_version`. Written by `train_personalisation` and nothing else.
-    (Joblib bundle, F08 precedent — not canonical JSON, because it carries fitted sklearn/xgboost
-    objects; a sha256 over the pickled bytes gives `model_version`.)
+    parameter), their per-parameter **reliability scores** (§4.0-c), the **circuit-type vocabulary +
+    FIA-bound table + `input_dim`** and `schema_version`. Written by `train_personalisation` and
+    nothing else. (Joblib bundle, F08 precedent — not canonical JSON, because it carries fitted
+    xgboost objects; a sha256 over the pickled bytes gives `model_version` at load. SHAP explainers
+    are **not** persisted — they are rebuilt best-effort at load, F07 precedent.)
   - Typed results: `SetupRecommendation` (per driver × circuit — the 10-parameter vector + confidence
     vector + constraint flags + SHAP + the mandatory approximation disclaimer),
     `SetupParameter` (one parameter's value/range/confidence/rating/attribution), `OnboardingPackage`
@@ -164,9 +164,10 @@ class PersonalisationHealthResult(BaseResult):   # mirrors F06b/F08/F10 health
 ```
 
 `PersonalisationHandle` is a frozen dataclass (mirrors `StyleSpaceHandle`/`MonitorHandle`): the 10
-fitted regressors, their per-parameter reliability + SHAP explainers, the FIA-bound table, the
-circuit-type vocabulary, the approximation-heuristic snapshot, `normalisation_params`,
-`model_version` (bundle content hash), `ready: bool`.
+fitted regressors, their per-parameter reliability, the SHAP explainers (rebuilt best-effort at
+load), the FIA-bound table, the circuit-type vocabulary, the `input_dim`, `model_version` (sha256 of
+the bundle bytes), `ready: bool`. It carries **no** `normalisation_params` — serving is F04-free
+(the regressor input is the F08 5D coord).
 
 **Errors raised (only at build/load):** `PersonalisationTrainingError` (carries `TRAIN_LEAKAGE` or
 `MODEL_TRAINING_FAILED`) from `train_personalisation`; `PersonalisationLoadError` (`MODEL_NOT_FOUND`)
@@ -198,12 +199,16 @@ not import F08's internal model), consistent with the module-owns-its-results co
   the honest core approximation (§15.2) — stated on every output via `approximation_disclaimer`.
 - **(c) Per-parameter regression confidence (§7.2 "confidence < 0.5") — divergence #17.** XGBoost
   regression has no native confidence. F11 defines per-parameter **reliability** `r_p ∈ [0,1] =
-  max(0, 1 − nRMSE_p)` where `nRMSE_p` is the **train-only, grouped-CV** normalised RMSE of regressor
-  `p` (RMSE ÷ target range; `StratifiedGroupKFold` by driver so a driver never spans folds — the same
-  leakage guard F06a uses). `r_p` is stored in the bundle. A serve-time prediction's confidence is
-  `c_p = r_p × ood_attenuation` where `ood_attenuation ∈ [ood_floor, 1]` shrinks toward `ood_floor`
-  as the input 5D fingerprint's distance from the training-fingerprint centroid exceeds
-  `ood_sd_threshold` SD (reusing F08's OOD idea; an OOD unknown driver is honestly less certain).
+  max(0, 1 − nRMSE_p)` where `nRMSE_p` is the **train-only** normalised RMSE of regressor `p` (RMSE ÷
+  the parameter's FIA range) under **`GroupKFold` grouped by driver** — regression has no
+  stratification class, so plain `GroupKFold` (not F06a's `StratifiedGroupKFold`), and the grouping
+  is by **driver** (F11's input is driver-level, so this measures driver-generalization; unlike
+  F06a's by-circuit grouping) with `n_splits` clamped to the driver count so no driver ever spans
+  folds. `r_p` is stored in the bundle. A serve-time prediction's confidence is `c_p = r_p ×
+  ood_attenuation`. For a **known** driver the 5D coord is in-distribution by construction →
+  `ood_attenuation = 1.0` (`c_p = r_p`); only **onboarding** attenuates, deriving `ood_attenuation ∈
+  [ood_floor, 1]` from the F08 `ProjectionResult.ood_max_pc_sd` (shrinking toward `ood_floor` once it
+  exceeds `ood_sd_threshold` — reusing F08's own OOD computation, no separate `ood_check` call).
   `c_p < confidence_floor` (0.5) → `WIDE` (§4.0-d). Rating bands: `≥ confidence_high` → HIGH,
   `≥ confidence_medium` → MEDIUM, `≥ confidence_floor` → LOW, else WIDE (config-driven).
 - **(d) WIDE range (§7.2 "Range = ±15% of predicted value").** When `c_p < confidence_floor`, `value`
@@ -270,10 +275,12 @@ per season live in `personalisation.fia_bounds` (§5).
       consistency_front_wing_deg` (10) AND `brake_bias < consistency_brake_bias_pct` (54) →
       `consistency_warning=True`, `CONSISTENCY_WARNING` flag + DQ row (a **response flag**, never a
       value change — "flag for engineer review").
-5. **SHAP** (§6.1): for each parameter, `TreeExplainer(regressor_p)` on `X` → `shap_top_features`
-   (top-`shap_top_k` of the 8 input dims mapped to fingerprint-domain names); a SHAP fault →
-   `shap_available=False` + `SHAP_UNAVAILABLE` DQ row, **recommendation still returned** (F07
-   precedent — never blocks).
+5. **SHAP** (§6.1): for each parameter, `TreeExplainer(regressor_p)` (exact, copied per regressor
+   from F07) on `X` → `shap_top_features` = the top-`shap_top_k` of the regressor's **own 8 input
+   dims**, labelled as the 5 fingerprint axes (`fp1..fp5`) + the drop-first circuit dummies
+   (`circuit:<type>`) — the model never sees raw F01..F28, so SHAP explains what it actually
+   consumes, not the §7.3 "driving features". A SHAP fault → `shap_available=False` +
+   `SHAP_UNAVAILABLE` DQ row, **recommendation still returned** (F07 precedent — never blocks).
 6. **Assemble** the 10 `SetupParameter`s (canonical order — always 10, never a silent partial), the
    `approximation_disclaimer`, `model_version`, and the overall status: `OK` only when no flag on any
    parameter and no warning; else `DEGRADED`. Backstop `except` → a 10-param all-`WIDE`
@@ -286,8 +293,11 @@ pre-normalised frame). Build the package: **style-match** = `snapshot.nearest_ne
 **setup sheet** = `recommend_setup` run on the projected `coords_5d` (a `coords_5d=None`
 `PROJECTION_FALLBACK` → the whole sheet is `WIDE`, honestly, never a crash); **radar** = the embedded
 `ProjectionResult`; **risk flags** = `snapshot.risk_flags`; **data-quality summary** = `n_laps_used`
-/ `n_laps_rejected` / `imputed_features` (from the projection + normalisation). `fingerprint_available
-= snapshot is not None and snapshot.coords_5d is not None`. Every F08 flag is carried opaquely.
+/ `n_laps_rejected` (from the `ProjectionResult`). `imputed_features` is a **passthrough** field —
+F08's `ProjectionResult` does not surface per-feature imputation, so F11 leaves it empty unless the
+upstream pipeline supplies it (the imputation itself happens in F03a, upstream of onboarding).
+`fingerprint_available = snapshot is not None and snapshot.coords_5d is not None`. Every F08 flag is
+carried opaquely.
 
 ### 4.4 Training — `train_personalisation` (the ONLY fit site) — fail-loud
 
@@ -301,13 +311,16 @@ pre-normalised frame). Build the package: **style-match** = `snapshot.nearest_ne
 4. **Build the training table**: one row per `(driver, circuit)` cell → `X = [5D coord ‖ circuit
    one-hot]`, `y_p = target heuristic` (§4.1) for each of the 10 parameters. All targets derived from
    the **quarantined** aggregates only.
-5. **Fit** 10 XGBoost regressors (seeds from `config.seeds.xgboost`; `objective=reg:squarederror`;
-   Optuna optional, `optuna_trials` from config, sampler seed 42). Compute per-parameter reliability
-   `r_p` via `StratifiedGroupKFold`-by-driver CV nRMSE (§4.0-c). No held-out data in any fold.
-6. **Fit SHAP explainers** (`TreeExplainer`, exact) per regressor on the training `X`.
-7. **Persist** `personalisation.pkl` (joblib): regressors, `r_p`, explainers, FIA-bound table,
-   circuit-type vocab, approximation snapshot, `content_hash` (sha256 of the pickled bytes),
-   `model_version`. Deterministic given fixed seeds (XGBoost/Optuna 42) — reproducible per §3 of the
+5. **Fit** 10 XGBoost regressors with **fixed, seeded params** (`config.seeds.xgboost`,
+   `objective=reg:squarederror`, `n_jobs=1` for float-order reproducibility). No Optuna HPO — the
+   approximated targets (§4.0-b) do not warrant it, and fixed params keep the fit deterministic.
+   Compute per-parameter reliability `r_p` via **`GroupKFold`-by-driver** CV nRMSE (§4.0-c). No
+   held-out data in any fold (they were quarantined in step 2).
+6. (SHAP explainers are NOT persisted — rebuilt best-effort at load, F07 precedent.)
+7. **Persist** `personalisation.pkl` (joblib): regressors, `r_p`, FIA-bound table, circuit-type
+   vocab, `input_dim`, `schema_version` + a `personalisation.pkl.sha256` **integrity sidecar**
+   (sha256 of the pkl bytes; verified at load, F08 precedent; also the `model_version` source).
+   Deterministic given fixed seeds (XGBoost 42) — reproducible per §3 of the
    constitution.
 8. **MLflow**: log params (the `personalisation:` block), metrics (per-parameter `r_p`, `n_reliable`,
    `n_train_cells`), and the artefact to experiment `apex-personalisation` (own URI key). An MLflow
@@ -317,13 +330,16 @@ pre-normalised frame). Build the package: **style-match** = `snapshot.nearest_ne
 
 ### 4.5 Load & health — `load_personalisation` / `health`
 
-`load_personalisation` reads `personalisation.pkl` (schema + content-hash validated) and
-`normalisation.json` (F04 loader). Missing / corrupt / hash-mismatch / **wrong regressor count**
-(≠ 10) / **missing reliability or explainer** → DQ-log then **raise** `PersonalisationLoadError(
-MODEL_NOT_FOUND)`; the process refuses to serve (F06b/F08/F10 precedent). A **config-mismatch** on the
-FIA-bound table or circuit-type vocab (artefact vs live) → **raise** (`MODEL_NOT_FOUND`; the targets
-were built under different bounds — recalibrate). `health(handle)` → not-ready reports `HEALTH_FAIL`
-with `MODEL_NOT_FOUND` reason (F13 → 503).
+`load_personalisation` reads `personalisation.pkl` (schema validated). Missing / corrupt /
+schema-mismatch / **wrong regressor count** (≠ 10) / **missing reliability** → DQ-log then **raise**
+`PersonalisationLoadError(MODEL_NOT_FOUND)`; the process refuses to serve (F06b/F08/F10 precedent). A
+**config-mismatch** on the FIA-bound table or circuit-type vocab (artefact vs live) → **raise**
+(`MODEL_NOT_FOUND`; the targets were built under different bounds — recalibrate). The SHAP explainers
+are **rebuilt best-effort at load** (F07 precedent — a `TreeExplainer` build fault degrades that
+parameter's SHAP to `shap_available=False`, it never refuses to serve; SHAP never blocks a
+recommendation). F11 serving is **F04-free** — the regressor input is the F08 5D coord, so
+`normalisation.json` is not loaded at serve (only at train, to build the target aggregates).
+`health(handle)` → not-ready reports `HEALTH_FAIL` with `MODEL_NOT_FOUND` reason (F13 → 503).
 
 ## 5. config.yaml keys this feature adds
 
@@ -347,8 +363,7 @@ personalisation:                       # F11 §7 — car personalisation engine
   consistency_brake_bias_pct: 54.0     # §7.2 — very-low brake bias threshold
   monaco_circuit: Monaco               # §7.2 — the hard max-downforce override circuit
   shap_top_k: 3                        # §6.1 — top fingerprint drivers per parameter (Screen 2 panel)
-  optuna_trials: 30                    # per-regressor HPO budget (0 = defaults, fast tests)
-  cv_folds: 5                          # StratifiedGroupKFold-by-driver reliability CV (div #17)
+  cv_folds: 5                          # GroupKFold-by-driver reliability CV (div #17)
   model_artefact_filename: personalisation.pkl   # under paths.artefacts_dir
   mlflow_tracking_uri: sqlite:///artefacts/mlflow.db   # F11's OWN URI (same store, own experiment)
   mlflow_experiment: apex-personalisation
@@ -403,7 +418,8 @@ outcomes; confidence is **never NULL** (§8.4).
 | SHAP raises for a parameter | `except` around `TreeExplainer` | `SHAP_UNAVAILABLE` (flag) | `shap_available=False`; recommendation still returned (F07) | yes | — (SHAP panel hidden) |
 | Unforeseen internal serving fault | Backstop `except` at the boundary | `INFERENCE_ERROR` (error_code) | Best-effort DQ log → 10-param all-`WIDE` `FAILED` result; **never raises** | best-effort | "Recommendation unavailable — internal error." |
 | Malformed serve input (missing driver/circuit) | Input gate | `INVALID_INPUT` (error_code) | `status=FAILED`, nothing scored | yes | "Request malformed." |
-| `personalisation.pkl` missing / corrupt / hash mismatch / wrong regressor count / missing reliability|explainer | Load-time validation | `MODEL_NOT_FOUND` | DQ-log then **raise** `PersonalisationLoadError` — refuse to serve | yes | 503 via F13 |
+| `personalisation.pkl` missing / corrupt / schema mismatch / wrong regressor count / missing reliability | Load-time validation | `MODEL_NOT_FOUND` | DQ-log then **raise** `PersonalisationLoadError` — refuse to serve | yes | 503 via F13 |
+| SHAP explainer build fault at load | Best-effort `TreeExplainer` build | `SHAP_UNAVAILABLE` (DQ row) | That parameter's SHAP degrades (`shap_available=False`); load succeeds — SHAP never blocks (F07) | yes | — (SHAP panel hidden) |
 | FIA-bound / circuit-vocab mismatch (artefact vs live) | Load-time comparison | `MODEL_NOT_FOUND` | **Raise** — targets stale, recalibrate | yes | 503 via F13 ("recalibrate") |
 | Detector not loaded at health check | `health()` | `HEALTH_FAIL` (reason `MODEL_NOT_FOUND`) | `ready=False` | yes | 503 from `GET /health` |
 | Thin `(driver, circuit)` cell at train | < `min_clean_laps` clean laps | `DATA_INSUFFICIENT` (flag) | Cell dropped from training; `status=DEGRADED` | yes | build log |
@@ -438,7 +454,8 @@ outcomes; confidence is **never NULL** (§8.4).
       backstop `INFERENCE_ERROR` path (all-`WIDE`).
 - [ ] **Reliability drives the §14 finding.** `PersonalisationFitResult.reliability` has a value per
       parameter and `n_reliable` counts those ≥ `confidence_medium`; the CV is
-      `StratifiedGroupKFold`-by-driver (no driver spans folds).
+      `GroupKFold`-by-driver (no driver spans folds), with the targets recomputed **fold-locally**
+      (train-fold min/max only, so a validation fold's labels never use its own extrema).
 - [ ] **SHAP per recommendation (§6.1).** Each parameter carries `shap_top_features` of size
       `shap_top_k` and `shap_available=True` on the happy path; a SHAP fault → `shap_available=False`
       + `SHAP_UNAVAILABLE`, recommendation still returned (never blocked).
@@ -454,8 +471,10 @@ outcomes; confidence is **never NULL** (§8.4).
       reduction**; a poisoned matrix raises `TRAIN_LEAKAGE` and writes **no artefact**; a static scan
       asserts no `.fit(` in the serving path (`load_personalisation` / `recommend_setup` /
       `onboard_unknown` / `health`).
-- [ ] **Reproducibility.** Two training runs on the same matrix + seeds produce an artefact with equal
-      per-parameter reliability (to 1e-9) and equal `content_hash`; all seeds from `config.seeds`.
+- [ ] **Reproducibility.** Two training runs on the same style handle + matrix + seeds produce
+      **equal per-parameter reliability** (to 1e-9) — metric-equality, not byte-identical pickle
+      (XGBoost joblib bytes are not guaranteed identical, F06a precedent); all seeds from
+      `config.seeds`.
 - [ ] **MLflow-logged** to `apex-personalisation`; an MLflow fault → `status=DEGRADED` + DQ row
       (`MODEL_TRAINING_FAILED`), `mlflow_run_id=None`, artefact still written.
 - [ ] **Load refuses** (`MODEL_NOT_FOUND`, after a DQ row) on missing / corrupt / hash-mismatch /
@@ -495,7 +514,8 @@ outcomes; confidence is **never NULL** (§8.4).
 - **Never-raises**: monkeypatch a regressor / SHAP / `project_unknown` to throw → typed
   `INFERENCE_ERROR` / degraded result, no exception; confidence still non-NULL.
 - **Leakage & reproducibility**: Belgium row → `TRAIN_LEAKAGE` raise + no file; empty post-quarantine
-  → `MODEL_TRAINING_FAILED`; two runs → equal reliability + equal `content_hash`; static no-`.fit`
+  → `MODEL_TRAINING_FAILED`; two runs on the same style handle + matrix → equal per-parameter
+  reliability (metric-equal, not byte-identical pkl); static no-`.fit`
   scan of the serving path; behavioural proof that targets were computed on quarantined training rows
   only.
 - **Load & health**: corrupt/absent/hash-tampered/wrong-count/reliability-less/vocab-mismatch bundle →

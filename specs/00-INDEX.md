@@ -30,7 +30,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | DONE (2026-07-02) |
 | F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | TODO |
 | F10 | Model 3 — Degradation detector (deviation, rolling mean, alert threshold) | F04, F08 | 11–12 | DONE (2026-07-17) |
-| F11 | Car personalisation engine (3 layers: mapping, constraints, confidence) | F07, F08 | 13 | SPEC WRITTEN (2026-07-17) |
+| F11 | Car personalisation engine (3 layers: mapping, constraints, confidence) | F07, F08 | 13 | DONE (2026-07-17) |
 
 ## Layer 3 — Platform
 | ID  | Feature | Depends on | Wk | Status |

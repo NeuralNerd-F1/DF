@@ -22,6 +22,10 @@ paths:
 # Quarantined from F00 onward; any .fit() that sees these is a build-breaking bug.
 held_out_circuits: [Belgium, Italy]
 
+# Circuit-type vocabulary (master §8.4 ENUM). F11's personalisation one-hot is DROP-FIRST over this
+# list (4 types -> 3 dummies, `street` the reference), giving the master's "3D one-hot" (§7.1).
+circuit_types: [street, high_speed, technical, mixed]
+
 # The named numeric constants the constitution requires live in config.
 # Canonical home for each value — feature blocks reference these, never re-declare.
 thresholds:
@@ -216,3 +220,37 @@ monitoring:
   variation_artefact_filename: stint_variation.json   # §5.3 /artefacts/stint_variation.json
   mlflow_tracking_uri: sqlite:///artefacts/mlflow.db  # F10's OWN URI (same store, own experiment)
   mlflow_experiment: apex-degradation                 # calibration runs logged here
+
+# --- F11 Model 4 — car personalisation engine (3 layers: mapping, constraints, confidence, §7) ----
+# One XGBoost regressor per setup parameter (input = F08 5D fingerprint + drop-first circuit one-hot);
+# a constraint layer (FIA clip / Monaco override / consistency flag / <0.5 confidence -> WIDE range);
+# a confidence layer (per-parameter reliability = 1 - CV-nRMSE, OOD-attenuated, never NULL). Setup
+# TARGETS are approximated from telemetry, never measured (§15.2). The four §7 codes are pre-seeded in
+# errors.py; no new error code. F11 reads its OWN mlflow_tracking_uri (same store, own experiment).
+personalisation:
+  top_quartile_pct: 0.25             # §7.1 "best-performing stints" = fastest-quartile clean laps (div #14)
+  confidence_floor: 0.5              # §7.2 — reliability < this per parameter -> WIDE range, not a point
+  confidence_medium: 0.65           # rating band: r >= this -> MEDIUM (master-silent, div #17)
+  confidence_high: 0.80             # rating band: r >= this -> HIGH  (master-silent, div #17)
+  wide_range_pct: 0.15              # §7.2 — WIDE range = ±N of the predicted value
+  ood_sd_threshold: 3.0             # §4.0-c — onboarding OOD attenuation onset (PC-SD)
+  ood_floor: 0.3                    # §4.0-c — confidence-attenuation floor for a fully-OOD unknown driver
+  consistency_front_wing_deg: 10.0  # §7.2 — extreme front-wing threshold for the consistency check
+  consistency_brake_bias_pct: 54.0  # §7.2 — very-low brake-bias threshold
+  monaco_circuit: Monaco            # §7.2 — the hard max-downforce override circuit
+  shap_top_k: 3                     # §6.1 — top fingerprint drivers per parameter (Screen 2 panel)
+  cv_folds: 5                       # GroupKFold-by-driver reliability CV (div #17)
+  model_artefact_filename: personalisation.pkl        # under paths.artefacts_dir
+  mlflow_tracking_uri: sqlite:///artefacts/mlflow.db  # F11's OWN URI (same store, own experiment)
+  mlflow_experiment: apex-personalisation             # training runs logged here
+  fia_bounds:                        # §7.3 per-parameter legal (min, max)
+    front_wing_angle: [0.0, 12.0]
+    rear_wing_angle: [0.0, 15.0]
+    brake_bias: [52.0, 62.0]
+    differential_ramp_entry: [1.0, 10.0]
+    differential_ramp_exit: [1.0, 10.0]
+    throttle_map_curve: [1.0, 9.0]
+    suspension_stiffness_front: [0.0, 2.0]
+    suspension_stiffness_rear: [0.0, 2.0]
+    tyre_warmup_laps: [1.0, 5.0]
+    brake_duct_aperture: [30.0, 100.0]

@@ -30,7 +30,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | DONE (2026-07-02) |
 | F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | TODO |
 | F10 | Model 3 — Degradation detector (deviation, rolling mean, alert threshold) | F04, F08 | 11–12 | DONE (2026-07-17) |
-| F11 | Car personalisation engine (3 layers: mapping, constraints, confidence) | F07, F08 | 13 | TODO |
+| F11 | Car personalisation engine (3 layers: mapping, constraints, confidence) | F07, F08 | 13 | SPEC WRITTEN (2026-07-17) |
 
 ## Layer 3 — Platform
 | ID  | Feature | Depends on | Wk | Status |
@@ -65,6 +65,24 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F11 spec — 2026-07-17 (feature/F11-personalisation):** `specs/F11-personalisation.md` written
+  (SPEC WRITTEN). Model 4 (personalisation, §7) is a **3-layer engine**: Layer 1 learned mapping (one
+  XGBoost regressor per setup parameter; input = F08 **5D fingerprint** ‖ drop-first circuit one-hot),
+  Layer 2 constraint engine (FIA-bound clip → `CONSTRAINT_CLIPPED`; Monaco max-downforce override →
+  `CIRCUIT_OVERRIDE_MONACO`; front-wing>10°+brake<54% → `CONSISTENCY_WARNING` flag-only; confidence
+  floor <0.5 → `WIDE_CONFIDENCE` ±15 % range), Layer 3 confidence scoring (per-parameter reliability =
+  `1 − CV-nRMSE`, OOD-attenuated, never-NULL). Produces the **10-parameter setup vector** (§7.3), a
+  SHAP decomposition per recommendation (§6.1, F07 reuse), and the §7.4 unknown-driver onboarding
+  package (style-match top-3 + radar + risk flags + data-quality summary, F08 `project_unknown`
+  reuse). **No new error code** — the four §7 codes were pre-seeded in `errors.py:99–102`; reuses
+  `INVALID_INPUT`/`MODEL_NOT_FOUND`/`SHAP_UNAVAILABLE`/`FALLBACK_THRESHOLD`/`INFERENCE_ERROR`/etc.
+  Champion bundle `artefacts/personalisation.pkl` (10 regressors + reliability + explainers), MLflow
+  experiment `apex-personalisation`, F06a leakage-quarantine + reproducibility discipline.
+  **Divergences #13–#17** (setup-target approximation heuristic; "best-performing" = fastest-quartile
+  clean laps; categorical suspension via ordinal regression; drop-first circuit one-hot;
+  regression-confidence = `1 − CV-nRMSE`) + the §14 "only ~5 parameters reliably inferrable" finding
+  reported honestly (never silently narrowed). Depends on F08 (5D fingerprints) + F07 (SHAP) + F06a
+  (training pattern) + F04 (aggregates). See `specs/F11-personalisation.md` §4.0/§9. **Next: build.**
 - **F10 BUILT — 2026-07-17 (feature/F10-degradation-detector):** `app/monitoring/detector.py` implements
   Model 3 in full — `calibrate_stint_variation` (the one train-only fit site: quarantine → tripwire →
   26-dim standardiser → Pass A slope stats / Pass B μ-σ / Pass C pit-window medians → deterministic

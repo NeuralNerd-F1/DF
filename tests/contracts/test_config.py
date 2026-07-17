@@ -159,3 +159,74 @@ def test_invalid_yaml_raises(tmp_path: Path) -> None:
     p.write_text("seeds: [unbalanced\n", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(p)
+
+
+# --- F10 monitoring: block (MonitoringConfig) -----------------------------------------
+
+
+def test_repo_config_parses_monitoring_block(repo_config_path: Path) -> None:
+    """F10's monitoring: block validates into the typed MonitoringConfig sub-model (§5)."""
+    cfg = load_config(repo_config_path)
+    assert cfg.monitoring is not None
+    assert cfg.monitoring.baseline_laps == 3
+    assert cfg.monitoring.baseline_window_extended == 5
+    assert cfg.monitoring.rolling_window == 3
+    assert cfg.monitoring.alert_threshold_sd == 2.0
+    assert cfg.monitoring.alert_confirm_laps == 2
+    assert cfg.monitoring.max_consecutive_nan == 3
+    assert cfg.monitoring.slope_weight == 0.25
+    assert cfg.monitoring.confidence_medium_sd == 2.5
+    assert cfg.monitoring.confidence_high_sd == 3.0
+    assert cfg.monitoring.min_calibration_stints == 3
+    assert cfg.monitoring.attribution_top_k == 3
+    assert cfg.monitoring.sensitivity_grid_sd == [1.0, 1.5, 2.0, 2.5]
+    assert cfg.monitoring.variation_artefact_filename == "stint_variation.json"
+    assert cfg.monitoring.mlflow_experiment == "apex-degradation"
+
+
+def test_monitoring_band_ordering_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    """confidence_medium_sd must sit strictly above alert_threshold_sd (bands must be coherent)."""
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "confidence_medium_sd: 2.5", "confidence_medium_sd: 1.5"
+    )
+    p = tmp_path / "bad_bands.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_monitoring_baseline_window_below_baseline_rejected(
+    repo_config_path: Path, tmp_path: Path
+) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "baseline_window_extended: 5", "baseline_window_extended: 2"
+    )
+    p = tmp_path / "bad_window.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_monitoring_empty_sensitivity_grid_rejected(
+    repo_config_path: Path, tmp_path: Path
+) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "sensitivity_grid_sd: [1.0, 1.5, 2.0, 2.5]", "sensitivity_grid_sd: []"
+    )
+    p = tmp_path / "bad_grid.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_monitoring_requires_sibling_blocks(repo_config_path: Path, tmp_path: Path) -> None:
+    """A monitoring: block without features/validate/normalise (whose keys F10 reads) is a
+    build-breaking CONFIG_001 — the detector would otherwise crash at first use."""
+    import yaml
+
+    raw = yaml.safe_load(repo_config_path.read_text(encoding="utf-8"))
+    del raw["features"]  # remove a required sibling block
+    p = tmp_path / "no_sibling.yaml"
+    p.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)

@@ -191,3 +191,28 @@ stylespace:
   stability_variance_threshold: 0.05 # §11.2 — Procrustes-aligned variance target (dissertation)
   mlflow_tracking_uri: sqlite:///artefacts/mlflow.db  # #3 — F08's OWN URI (same store as F06a, own experiment)
   mlflow_experiment: apex-stylespace # #3 — build run logged here
+
+# --- F10 Model 3 — tyre degradation detector (statistical, within-stint, §5.3) --------------------
+# Per-lap cosine deviation (F04-normalised then F10 train-only-standardised 26-dim space; F27/F28
+# excluded from the cosine core, entering via the live-window slope component) vs a first-3-clean-laps
+# baseline, 3-lap rolling mean, τ = μ + alert_threshold_sd·σ per driver per circuit type from
+# artefacts/stint_variation.json (train-only, content-hashed, timestamp-free). The activation/slope
+# floor is features.min_stint_laps, the exclusion set is validate.degradation_features, and the σ
+# floor is normalise.min_std — referenced, never re-declared. The six §5.3 codes are pre-seeded in
+# errors.py; no new error code. F10 reads its OWN mlflow_tracking_uri (same store, own experiment).
+monitoring:
+  baseline_laps: 3                   # §5.3 — baseline fingerprint = first N clean laps of stint
+  baseline_window_extended: 5        # §5.3 failure table — candidate window when <N clean in first N
+  rolling_window: 3                  # §5.3 — N-lap rolling mean of cosine distance
+  alert_threshold_sd: 2.0            # §5.3 — τ = μ + N·σ of historical intra-stint variation
+  alert_confirm_laps: 2              # §5.3 — consecutive laps above τ before the alert fires
+  max_consecutive_nan: 3             # §5.3 failure table — N consecutive NaN distances -> MONITOR_ERROR
+  slope_weight: 0.25                 # §5.3 weighted F27/F28 component — value master-silent (divergence #8)
+  confidence_medium_sd: 2.5          # alert band: s >= μ + N·σ -> MEDIUM (master-silent, divergence #9)
+  confidence_high_sd: 3.0            # alert band: s >= μ + N·σ -> HIGH  (master-silent, divergence #9)
+  min_calibration_stints: 3          # cell usable only with >= N training stints (master-silent, divergence #12)
+  attribution_top_k: 3               # alert banner "feature drivers" count (§10.7)
+  sensitivity_grid_sd: [1.0, 1.5, 2.0, 2.5]   # §11.3 threshold sensitivity grid (verbatim)
+  variation_artefact_filename: stint_variation.json   # §5.3 /artefacts/stint_variation.json
+  mlflow_tracking_uri: sqlite:///artefacts/mlflow.db  # F10's OWN URI (same store, own experiment)
+  mlflow_experiment: apex-degradation                 # calibration runs logged here

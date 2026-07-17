@@ -588,6 +588,93 @@ class StyleSpaceConfig(BaseModel):
         return self
 
 
+class MonitoringConfig(BaseModel):
+    """Typed view over the ``monitoring:`` block (F10 Model 3 — tyre degradation detector, §5.3).
+
+    Lives here, not in ``app/monitoring/detector.py`` (standing rule): the detector reads its
+    knobs through a strictly-validated model. Holds only the F10 constants; the six §5.3 error
+    codes (``MONITOR_INACTIVE`` … ``MONITOR_ERROR``) are pre-seeded in ``errors.py``, the
+    activation/slope floor is ``features.min_stint_laps`` (8), the cosine-core exclusion set is
+    ``validate.degradation_features``, and the std floor is ``normalise.min_std`` — all
+    referenced, never re-declared. F10 reads ITS OWN ``mlflow_tracking_uri`` (never the
+    classifier's), preserving independence from the optional ``classifier`` block.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    baseline_laps: int  # §5.3 — baseline fingerprint = first N clean laps of stint
+    baseline_window_extended: int  # §5.3 failure table — candidate window when < N clean in first N
+    rolling_window: int  # §5.3 — N-lap rolling mean of cosine distance
+    alert_threshold_sd: float  # §5.3 — τ = μ + N·σ of historical intra-stint variation
+    alert_confirm_laps: int  # §5.3 — consecutive laps above τ before the alert fires
+    max_consecutive_nan: int  # §5.3 failure table — N consecutive NaN distances -> MONITOR_ERROR
+    slope_weight: float  # §5.3 weighted F27/F28 component (master-silent value, divergence #8)
+    confidence_medium_sd: float  # alert band: s >= μ + N·σ -> MEDIUM (master-silent, divergence #9)
+    confidence_high_sd: float  # alert band: s >= μ + N·σ -> HIGH (master-silent, divergence #9)
+    min_calibration_stints: int  # cell usable only with >= N training stints (divergence #12)
+    attribution_top_k: int  # alert banner "feature drivers" count (§10.7)
+    sensitivity_grid_sd: list[float]  # §11.3 threshold sensitivity grid (verbatim)
+    variation_artefact_filename: str  # §5.3 — /artefacts/stint_variation.json
+    mlflow_tracking_uri: str  # F10's OWN URI (same store, own experiment)
+    mlflow_experiment: str  # calibration runs logged here
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> MonitoringConfig:
+        """Fail fast on out-of-range constants so a mis-edit is a load-time ``CONFIG_001`` rather
+        than a silent mis-detection (non-negotiable #1). The band ordering guard keeps the
+        LOW/MEDIUM/HIGH alert bands coherent with the τ multiplier (spec §5)."""
+        if self.baseline_laps < 1:
+            raise ValueError(f"monitoring.baseline_laps must be >= 1, got {self.baseline_laps}")
+        if self.baseline_window_extended < self.baseline_laps:
+            raise ValueError(
+                f"monitoring.baseline_window_extended ({self.baseline_window_extended}) must be "
+                f">= baseline_laps ({self.baseline_laps})"
+            )
+        if self.rolling_window < 1:
+            raise ValueError(f"monitoring.rolling_window must be >= 1, got {self.rolling_window}")
+        if self.alert_confirm_laps < 1:
+            raise ValueError(
+                f"monitoring.alert_confirm_laps must be >= 1, got {self.alert_confirm_laps}"
+            )
+        if self.max_consecutive_nan < 1:
+            raise ValueError(
+                f"monitoring.max_consecutive_nan must be >= 1, got {self.max_consecutive_nan}"
+            )
+        if self.alert_threshold_sd <= 0.0:
+            raise ValueError(
+                f"monitoring.alert_threshold_sd must be > 0, got {self.alert_threshold_sd}"
+            )
+        if self.slope_weight < 0.0:
+            raise ValueError(f"monitoring.slope_weight must be >= 0, got {self.slope_weight}")
+        if not self.alert_threshold_sd < self.confidence_medium_sd < self.confidence_high_sd:
+            raise ValueError(
+                "monitoring alert bands must satisfy alert_threshold_sd < confidence_medium_sd "
+                f"< confidence_high_sd, got {self.alert_threshold_sd} / "
+                f"{self.confidence_medium_sd} / {self.confidence_high_sd}"
+            )
+        if self.min_calibration_stints < 1:
+            raise ValueError(
+                f"monitoring.min_calibration_stints must be >= 1, got "
+                f"{self.min_calibration_stints}"
+            )
+        if self.attribution_top_k < 1:
+            raise ValueError(
+                f"monitoring.attribution_top_k must be >= 1, got {self.attribution_top_k}"
+            )
+        if not self.sensitivity_grid_sd:
+            raise ValueError("monitoring.sensitivity_grid_sd must be non-empty (§11.3)")
+        for grid_sd in self.sensitivity_grid_sd:
+            if grid_sd <= 0.0:
+                raise ValueError(
+                    f"monitoring.sensitivity_grid_sd entries must be > 0, got {grid_sd}"
+                )
+        if not self.variation_artefact_filename:
+            raise ValueError("monitoring.variation_artefact_filename must be non-empty")
+        if not self.mlflow_tracking_uri or not self.mlflow_experiment:
+            raise ValueError("monitoring.mlflow_tracking_uri / mlflow_experiment must be non-empty")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -615,6 +702,7 @@ class AppConfig(BaseModel):
     classifier: ClassifierConfig | None = None  # F06a; None until the classifier: block is present
     shap: ShapConfig | None = None  # F07; None until the shap: block is present
     stylespace: StyleSpaceConfig | None = None  # F08; None until the stylespace: block is present
+    monitoring: MonitoringConfig | None = None  # F10; None until the monitoring: block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:
@@ -641,6 +729,30 @@ class AppConfig(BaseModel):
             raise ValueError(
                 f"classifier.confidence_high ({self.classifier.confidence_high}) must be > "
                 f"thresholds.confidence_gate ({self.thresholds.confidence_gate})"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _monitoring_requires_sibling_blocks(self) -> AppConfig:
+        """F10 reads ``features.min_stint_laps`` (activation/slope floor),
+        ``validate.degradation_features`` (cosine-core exclusion set), and
+        ``normalise.min_std`` (σ/scaler floor) — a ``monitoring:`` block without those
+        siblings would crash the detector at first use instead of at config load. Cross-block,
+        so it lives here on ``AppConfig`` (spec §5 validator placement)."""
+        if self.monitoring is not None and (
+            self.features is None or self.lap_validation is None or self.normalise is None
+        ):
+            missing = [
+                name
+                for name, block in (
+                    ("features", self.features),
+                    ("validate", self.lap_validation),
+                    ("normalise", self.normalise),
+                )
+                if block is None
+            ]
+            raise ValueError(
+                f"monitoring: requires the {missing} block(s) — F10 references their keys"
             )
         return self
 

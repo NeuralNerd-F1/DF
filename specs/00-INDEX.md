@@ -29,7 +29,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F07 | SHAP explainability (beeswarm, force, radar, NL templates) | F06 | 7 | DONE (2026-07-01) |
 | F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | DONE (2026-07-02) |
 | F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | TODO |
-| F10 | Model 3 — Degradation detector (deviation, rolling mean, alert threshold) | F04, F08 | 11–12 | TODO |
+| F10 | Model 3 — Degradation detector (deviation, rolling mean, alert threshold) | F04, F08 | 11–12 | DONE (2026-07-17) |
 | F11 | Car personalisation engine (3 layers: mapping, constraints, confidence) | F07, F08 | 13 | TODO |
 
 ## Layer 3 — Platform
@@ -65,6 +65,47 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F10 BUILT — 2026-07-17 (feature/F10-degradation-detector):** `app/monitoring/detector.py` implements
+  Model 3 in full — `calibrate_stint_variation` (the one train-only fit site: quarantine → tripwire →
+  26-dim standardiser → Pass A slope stats / Pass B μ-σ / Pass C pit-window medians → deterministic
+  content-hashed artefact → MLflow), `load_detector` (schema/hash/empty-thresholds/scaler-width/
+  structural-knob refusals; crossing-knob mismatch → `pit_window_valid=False`), `monitor_stint`
+  (never-raises; baseline → 26-dim cosine → 3-lap rolling → live-window F27/F28 slope → strict-`>`
+  2-consecutive alert → exact 28-key attribution), `health`, and `lead_time_report` (§11.3). A shared
+  pure `_score_stint_core` gives calibration/serving parity by construction. **72 tests** in
+  `tests/monitoring/` + 5 `MonitoringConfig` tests; full suite green (**~554**), `mypy app` + `ruff`
+  clean. `ml-auditor` + `failsafe-auditor` run on `app/monitoring/`; all high/medium findings fixed +
+  test-covered (calibration write-fault → typed `MODEL_TRAINING_FAILED`; NaN-safe baseline `b_vec`;
+  `_standardise_lap` floors at `normalise.min_std` not the module constant; never-raises pre-try escape
+  on a `None` handle; per-candidate `LAP_001` rows on the `BASELINE_INSUFFICIENT` path). Two
+  code-placement refinements folded into the spec (§5/§6/§7 + divergence #12): the slope-inactive DQ row
+  reuses **`LAP_PARTIAL`** (keeps F03b's `FEATURE_001` count at zero, §7-11), and a single-lap `WATCH`
+  crossing is the **persisted per-lap state**, not a mis-coded DQ row. `/spec-check F10` → DONE.
+  See `specs/F10-degradation-detector.md`.
+- **F10 spec — 2026-07-03 (apex-F10-degradation-detector):** `specs/F10-degradation-detector.md` written
+  (SPEC WRITTEN), hardened by a 4-lens adversarial workflow (master-fidelity re-read of the PDF,
+  leakage/reproducibility, failsafe, upstream-seams — 33 findings triaged, 2 blockers + all majors fixed).
+  **Model 3 is a statistical deviation detector, not an ML model** (§5.3): per-lap cosine distance of the
+  F04-normalised **then train-only-standardised** 26-feature vector (F27/F28 excluded — broadcast columns
+  would double-count and leak future laps into replay) vs a first-3-clean-laps baseline (window extends
+  to 5), 3-lap rolling mean, τ = μ + 2σ per driver per **circuit type** from
+  `artefacts/stint_variation.json` (train-only, `_assert_no_leakage`-guarded, content-hashed,
+  deterministic — **no timestamp in the artefact**), 2-consecutive-lap confirmation, F27/F28 live-window
+  slopes as the §5.3 weighted component (F03b `compute_degradation_slopes` reused via a `StintLap`
+  adapter, never invoked on prefixes it would NULL — no `FEATURE_001` flood). Alert payload: exact
+  cosine-decomposition attribution (`1−cosθ = ½‖x̂−b̂‖²`, sums to the score), LOW/MEDIUM/HIGH band,
+  pit-window median. **No new error code** — the six §5.3 codes were pre-seeded in `errors.py`; reuses
+  `LAP_001` (baseline-exclusion/skip flag), `INVALID_INPUT`, `MODEL_NOT_FOUND`, `TRAIN_LEAKAGE`, etc.
+  Review blocker fixed: F04 z-scores only 6/28 features, so a raw cosine would measure unit scale — F10
+  fits a **train-only 26-dim standardiser** persisted inside the content-hashed artefact
+  (**divergence #7**, the F08-#6 twin); further divergences **#8–#12** (slope formula/weight 0.25,
+  confidence bands 2.5σ/3.0σ, pit-window method + stint-end proxy, SHAP-as-exact-decomposition,
+  hygiene knobs + the structural-vs-crossing config-mismatch load policy). Depends on F04 + F08 — the
+  deviation does **not** run in the 5D space (F08 §2's "5D baseline coordinate" paraphrase corrected:
+  F08 supplies only the displayed `fingerprint_snapshot`, sparse-by-design under 30 laps). Ships
+  `lead_time_report` (§11.3 in full, incl. per-circuit-type optimal threshold + FN/FP characterisation;
+  Week-11 deliverable = read-only run over 2022 val-split stints), formally evaluated in F20.
+  See `specs/F10-degradation-detector.md` §4.0/§9.
 - **F08 aggregate scaler (Gate-2 fix) — 2026-07-02 (feature/F08-style-space):** a CONFIRMED code-review
   finding was fixed on the branch before merge: F04 z-scores only **6 of the 28** features, so the 56-dim
   driver aggregate mixed ~unit-scale columns with raw physical units spanning ~4 orders of magnitude

@@ -230,3 +230,75 @@ def test_monitoring_requires_sibling_blocks(repo_config_path: Path, tmp_path: Pa
     p.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(p)
+
+
+# --- F11 personalisation: block (PersonalisationConfig) --------------------------------
+
+
+def test_repo_config_parses_personalisation_block(repo_config_path: Path) -> None:
+    """F11's personalisation: block validates into the typed PersonalisationConfig sub-model (§7)."""
+    cfg = load_config(repo_config_path)
+    assert cfg.personalisation is not None
+    assert cfg.circuit_types == ["street", "high_speed", "technical", "mixed"]
+    assert cfg.personalisation.top_quartile_pct == 0.25
+    assert cfg.personalisation.confidence_floor == 0.5
+    assert cfg.personalisation.confidence_medium == 0.65
+    assert cfg.personalisation.confidence_high == 0.80
+    assert cfg.personalisation.wide_range_pct == 0.15
+    assert cfg.personalisation.monaco_circuit == "Monaco"
+    assert cfg.personalisation.mlflow_experiment == "apex-personalisation"
+    assert len(cfg.personalisation.fia_bounds) == 10
+    assert cfg.personalisation.fia_bounds["brake_bias"] == (52.0, 62.0)
+
+
+def test_personalisation_band_ordering_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "confidence_medium: 0.65", "confidence_medium: 0.4"  # ≤ confidence_floor 0.5
+    )
+    p = tmp_path / "bad_pers_bands.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_personalisation_wide_range_pct_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "wide_range_pct: 0.15", "wide_range_pct: 1.5"
+    )
+    p = tmp_path / "bad_wide.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_personalisation_cv_folds_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "cv_folds: 5                       # GroupKFold", "cv_folds: 1                       # GroupKFold"
+    )
+    p = tmp_path / "bad_pers_folds.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_personalisation_missing_fia_bound_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    import yaml
+
+    raw = yaml.safe_load(repo_config_path.read_text(encoding="utf-8"))
+    del raw["personalisation"]["fia_bounds"]["brake_bias"]  # must cover exactly the 10 params
+    p = tmp_path / "bad_fia.yaml"
+    p.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_personalisation_requires_circuit_types(repo_config_path: Path, tmp_path: Path) -> None:
+    """A personalisation: block with an empty circuit_types (the one-hot vocab) → CONFIG_001."""
+    import yaml
+
+    raw = yaml.safe_load(repo_config_path.read_text(encoding="utf-8"))
+    raw["circuit_types"] = []
+    p = tmp_path / "no_circuit_types.yaml"
+    p.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)

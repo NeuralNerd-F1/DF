@@ -675,6 +675,108 @@ class MonitoringConfig(BaseModel):
         return self
 
 
+# The 10 setup parameters F11 recommends (master §7.3), canonical order. Declared here so the
+# ``PersonalisationConfig`` validator can pin ``fia_bounds`` to exactly these keys; the owning
+# feature (``app/personalisation/engine.py``) carries the full table (kind + fingerprint basis).
+_PERSONALISATION_PARAM_KEYS: tuple[str, ...] = (
+    "front_wing_angle",
+    "rear_wing_angle",
+    "brake_bias",
+    "differential_ramp_entry",
+    "differential_ramp_exit",
+    "throttle_map_curve",
+    "suspension_stiffness_front",
+    "suspension_stiffness_rear",
+    "tyre_warmup_laps",
+    "brake_duct_aperture",
+)
+
+
+class PersonalisationConfig(BaseModel):
+    """Typed view over the ``personalisation:`` block (F11 car-setup engine, master §7).
+
+    Lives here, not in ``app/personalisation/engine.py`` (standing rule): the engine reads its knobs
+    through a strictly-validated model. Holds only the F11 constants; the four §7 error codes
+    (``CONSTRAINT_CLIPPED`` … ``WIDE_CONFIDENCE``) are pre-seeded in ``errors.py``, seeds live on
+    ``AppConfig``, ``held_out_circuits`` / ``thresholds.min_clean_laps`` / ``normalise.min_std`` are
+    referenced not re-declared, and F11 reads its OWN ``mlflow_tracking_uri``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    top_quartile_pct: float  # §7.1 "best-performing stints" = fastest-quartile clean laps (div #14)
+    confidence_floor: float  # §7.2 — per-parameter reliability < this → WIDE range
+    confidence_medium: float  # rating band: r ≥ this → MEDIUM (master-silent, div #17)
+    confidence_high: float  # rating band: r ≥ this → HIGH (master-silent, div #17)
+    wide_range_pct: float  # §7.2 — WIDE range = ±N of the predicted value
+    ood_sd_threshold: float  # §4.0-c — onboarding OOD attenuation onset (PC-SD)
+    ood_floor: float  # §4.0-c — confidence-attenuation floor for a fully-OOD unknown driver
+    consistency_front_wing_deg: float  # §7.2 — extreme front-wing threshold for consistency
+    consistency_brake_bias_pct: float  # §7.2 — very-low brake-bias threshold
+    monaco_circuit: str  # §7.2 — the hard max-downforce override circuit
+    shap_top_k: int  # §6.1 — top fingerprint drivers per parameter (Screen 2 panel)
+    cv_folds: int  # GroupKFold-by-driver reliability CV (div #17)
+    model_artefact_filename: str  # under paths.artefacts_dir
+    mlflow_tracking_uri: str  # F11's OWN URI (same store, own experiment)
+    mlflow_experiment: str  # training runs logged here
+    fia_bounds: dict[str, tuple[float, float]]  # §7.3 per-parameter legal (min, max)
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> PersonalisationConfig:
+        """Fail fast on out-of-range constants so a mis-edit is a load-time ``CONFIG_001`` rather
+        than a silent mis-recommendation (non-negotiable #1). The band-ordering guard keeps the
+        HIGH/MEDIUM/LOW/WIDE ratings coherent with the confidence floor (§7.2)."""
+        if not 0.0 < self.top_quartile_pct <= 1.0:
+            raise ValueError(
+                f"personalisation.top_quartile_pct must be in (0, 1], got {self.top_quartile_pct}"
+            )
+        if not 0.0 < self.confidence_floor < self.confidence_medium < self.confidence_high <= 1.0:
+            raise ValueError(
+                "personalisation confidence bands must satisfy 0 < confidence_floor < "
+                f"confidence_medium < confidence_high <= 1, got {self.confidence_floor} / "
+                f"{self.confidence_medium} / {self.confidence_high}"
+            )
+        if not 0.0 < self.wide_range_pct < 1.0:
+            raise ValueError(
+                f"personalisation.wide_range_pct must be in (0, 1), got {self.wide_range_pct}"
+            )
+        if self.ood_sd_threshold <= 0.0:
+            raise ValueError(
+                f"personalisation.ood_sd_threshold must be > 0, got {self.ood_sd_threshold}"
+            )
+        if not 0.0 <= self.ood_floor <= 1.0:
+            raise ValueError(
+                f"personalisation.ood_floor must be in [0, 1], got {self.ood_floor}"
+            )
+        if self.consistency_front_wing_deg <= 0.0 or self.consistency_brake_bias_pct <= 0.0:
+            raise ValueError("personalisation consistency thresholds must be > 0")
+        if self.shap_top_k < 1:
+            raise ValueError(f"personalisation.shap_top_k must be >= 1, got {self.shap_top_k}")
+        if self.cv_folds < 2:
+            raise ValueError(f"personalisation.cv_folds must be >= 2, got {self.cv_folds}")
+        for name, val in (
+            ("monaco_circuit", self.monaco_circuit),
+            ("model_artefact_filename", self.model_artefact_filename),
+            ("mlflow_tracking_uri", self.mlflow_tracking_uri),
+            ("mlflow_experiment", self.mlflow_experiment),
+        ):
+            if not val:
+                raise ValueError(f"personalisation.{name} must be non-empty")
+        missing = sorted(set(_PERSONALISATION_PARAM_KEYS) - set(self.fia_bounds))
+        extra = sorted(set(self.fia_bounds) - set(_PERSONALISATION_PARAM_KEYS))
+        if missing or extra:
+            raise ValueError(
+                f"personalisation.fia_bounds must cover exactly the 10 setup parameters; "
+                f"missing={missing}, unexpected={extra}"
+            )
+        for key, bound in self.fia_bounds.items():
+            if bound[0] >= bound[1]:
+                raise ValueError(
+                    f"personalisation.fia_bounds[{key}] must have min < max, got {bound}"
+                )
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -693,6 +795,7 @@ class AppConfig(BaseModel):
     paths: Paths
     held_out_circuits: list[str]  # quarantined from all training (§3.2)
     thresholds: Thresholds
+    circuit_types: list[str] = Field(default_factory=list)  # §8.4 ENUM; F11 one-hot vocabulary
     ingest: IngestConfig | None = None  # F01; None until the ingest: block is present
     # YAML key is `validate:`; the Python attribute is `lap_validation` to avoid
     # shadowing pydantic's deprecated BaseModel.validate (F02; None until block present).
@@ -703,6 +806,7 @@ class AppConfig(BaseModel):
     shap: ShapConfig | None = None  # F07; None until the shap: block is present
     stylespace: StyleSpaceConfig | None = None  # F08; None until the stylespace: block is present
     monitoring: MonitoringConfig | None = None  # F10; None until the monitoring: block is present
+    personalisation: PersonalisationConfig | None = None  # F11; None until the block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:
@@ -754,6 +858,28 @@ class AppConfig(BaseModel):
             raise ValueError(
                 f"monitoring: requires the {missing} block(s) — F10 references their keys"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _personalisation_requires_sibling_blocks(self) -> AppConfig:
+        """F11 reads ``normalise`` (to build the setup-target aggregates), ``features`` (the F27/…
+        feature-id contract), and a non-empty ``circuit_types`` (the drop-first one-hot vocab) —
+        a ``personalisation:`` block without those would crash the engine at first use rather than
+        at config load. Cross-block, so it lives here on ``AppConfig`` (spec §5 placement)."""
+        if self.personalisation is not None:
+            missing = [
+                name
+                for name, present in (
+                    ("normalise", self.normalise is not None),
+                    ("features", self.features is not None),
+                    ("circuit_types", bool(self.circuit_types)),
+                )
+                if not present
+            ]
+            if missing:
+                raise ValueError(
+                    f"personalisation: requires {missing} — F11 references them (§5)"
+                )
         return self
 
 

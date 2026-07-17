@@ -28,7 +28,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | DONE (F06a 2026-06-30, F06b 2026-07-01) |
 | F07 | SHAP explainability (beeswarm, force, radar, NL templates) | F06 | 7 | DONE (2026-07-01) |
 | F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | DONE (2026-07-02) |
-| F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | TODO |
+| F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | SPEC WRITTEN (2026-07-17) |
 | F10 | Model 3 — Degradation detector (deviation, rolling mean, alert threshold) | F04, F08 | 11–12 | DONE (2026-07-17) |
 | F11 | Car personalisation engine (3 layers: mapping, constraints, confidence) | F07, F08 | 13 | DONE (2026-07-17) |
 
@@ -65,6 +65,22 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F09 spec — 2026-07-17 (feature/F09-corner-decomposition):** `specs/F09-corner-decomposition.md`
+  written (SPEC WRITTEN). Corner-type decomposition (§4.4): each lap's corners are segmented into
+  **slow (<100 m) / medium (100–200 m) / high-speed (>200 m)** by **apex radius `r = 1/max(κ)`**,
+  reusing F03b's curvature primitive (`_signed_lateral_g`) + F03a's `_corner_indices` corner windows
+  (so a "corner" is identical to F25's). Each corner type yields a 5-feature sub-vector
+  (`apex_speed`, `lateral_g`, `throttle`, `brake`, `steering_reversal_rate`), aggregated per
+  `(driver, corner_type)` into the Screen-2 **sub-fingerprints** (`corner_subfingerprints.json`,
+  content-hashed/timestamp-free). Headline deliverable = the **ablation** (§13/§15 "does corner-type
+  info improve the classifier?"): a self-contained F06a-CV comparison of **base (28) vs expanded
+  (28 + 15)** matrices → macro-F1 delta + `IMPROVES/NEUTRAL/DEGRADES` finding (NEUTRAL/DEGRADES is a
+  legitimate result), logged to `apex-ablation`; does NOT retrain the champion. **No new error code**
+  — `CORNER_001` is pre-seeded (`errors.py:59`) for the X/Y-unavailable **skip** (F03b's exact
+  behaviour, lap continues); reuses `FEATURE_001`/`DATA_INSUFFICIENT`/`TRAIN_LEAKAGE`/etc.
+  **Divergences #18–#22** (per-corner classification; the 5 sub-features; `min_corners_per_type`;
+  self-contained ablation; radius units tied to F03b's curvature). Target `app/ml/corners.py`;
+  depends on F03a/F03b (geometry) + F06a (CV) + F04 (aggregate scale). See §4.0/§9. **Next: build.**
 - **F11 spec — 2026-07-17 (feature/F11-personalisation):** `specs/F11-personalisation.md` written
   (SPEC WRITTEN). Model 4 (personalisation, §7) is a **3-layer engine**: Layer 1 learned mapping (one
   XGBoost regressor per setup parameter; input = F08 **5D fingerprint** ‖ drop-first circuit one-hot),

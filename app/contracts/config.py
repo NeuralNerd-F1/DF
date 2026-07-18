@@ -777,6 +777,57 @@ class PersonalisationConfig(BaseModel):
         return self
 
 
+class CornersConfig(BaseModel):
+    """Typed view over the ``corners:`` block (F09 corner-type decomposition + ablation, §4.4).
+
+    Lives here, not in ``app/ml/corners.py`` (standing rule): the feature reads its knobs through a
+    strictly-validated model. Holds only the F09 constants; ``CORNER_001`` is pre-seeded in
+    ``errors.py``, the curvature/corner-segmentation machinery + ``min_xy_finite_fraction`` are
+    ``features``' (referenced, never re-declared), the ablation CV seed is ``seeds.xgboost``, and
+    F09 reads its OWN ``mlflow_tracking_uri``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    radius_slow_max: float  # §4.4 — apex radius (m) below this → SLOW corner
+    radius_medium_max: float  # §4.4 — below this → MEDIUM; at/above → HIGH_SPEED
+    min_corners_per_type: int  # sub-fingerprint cell needs ≥ N corners of the type (div #20)
+    ablation_margin: float  # macro-F1 delta band for IMPROVES/NEUTRAL/DEGRADES (div #21)
+    cv_folds: int  # ablation CV (mirrors classifier.cv_folds)
+    subfingerprint_artefact_filename: str  # §4.2 — under paths.artefacts_dir
+    mlflow_tracking_uri: str  # F09's OWN URI (same store, own experiment)
+    mlflow_experiment: str  # sub-fingerprint build + ablation runs logged here
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> CornersConfig:
+        """Fail fast on out-of-range constants so a mis-edit is a load-time ``CONFIG_001`` rather
+        than a silent mis-classification (non-negotiable #1). The radius ordering guard keeps the
+        slow < medium < high-speed bands coherent (spec §4.4)."""
+        if not 0.0 < self.radius_slow_max < self.radius_medium_max:
+            raise ValueError(
+                "corners radius bands must satisfy 0 < radius_slow_max < radius_medium_max, got "
+                f"{self.radius_slow_max} / {self.radius_medium_max}"
+            )
+        if self.min_corners_per_type < 1:
+            raise ValueError(
+                f"corners.min_corners_per_type must be >= 1, got {self.min_corners_per_type}"
+            )
+        if not 0.0 < self.ablation_margin < 1.0:
+            raise ValueError(
+                f"corners.ablation_margin must be in (0, 1), got {self.ablation_margin}"
+            )
+        if self.cv_folds < 2:
+            raise ValueError(f"corners.cv_folds must be >= 2, got {self.cv_folds}")
+        for name, val in (
+            ("subfingerprint_artefact_filename", self.subfingerprint_artefact_filename),
+            ("mlflow_tracking_uri", self.mlflow_tracking_uri),
+            ("mlflow_experiment", self.mlflow_experiment),
+        ):
+            if not val:
+                raise ValueError(f"corners.{name} must be non-empty")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -807,6 +858,7 @@ class AppConfig(BaseModel):
     stylespace: StyleSpaceConfig | None = None  # F08; None until the stylespace: block is present
     monitoring: MonitoringConfig | None = None  # F10; None until the monitoring: block is present
     personalisation: PersonalisationConfig | None = None  # F11; None until the block is present
+    corners: CornersConfig | None = None  # F09; None until the corners: block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:
@@ -880,6 +932,15 @@ class AppConfig(BaseModel):
                 raise ValueError(
                     f"personalisation: requires {missing} — F11 references them (§5)"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _corners_requires_features_block(self) -> AppConfig:
+        """F09 reads ``features``' curvature / ``_corner_indices`` / ``min_xy_finite_fraction``
+        machinery — a ``corners:`` block without the ``features:`` block would crash the
+        decomposition at first use instead of at config load. Cross-block, so it lives here."""
+        if self.corners is not None and self.features is None:
+            raise ValueError("corners: requires the features: block — F09 reads its keys (§5)")
         return self
 
 

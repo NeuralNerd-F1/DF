@@ -15,8 +15,9 @@ register — "X/Y position data unavailable for corner decomposition"), §15 (di
 **Layer / Week:** ML / Wk 9
 **Depends on:** F03a (`_corner_indices` speed-minima apices, the telemetry channels + `_DQLedger`),
 F03b (the curvature primitive `_signed_lateral_g` / `_xy_available` — X/Y → κ → lateral G),
-F06a (`train_classifier` / the CV machinery the ablation reuses), F04 (normalisation artefact,
-read-only — for the sub-fingerprint aggregate), F02/F01 (accepted clean-lap telemetry frames)
+F06a (`train_classifier` / the CV machinery the ablation reuses), F02/F01 (accepted clean-lap
+telemetry frames). **F04-free** (divergence #23): the 5 corner sub-features are new derived
+quantities F04 never scaled, so there is no `normalisation.json` entry to apply — see §4.0-f.
 
 ## 1. Purpose (one paragraph)
 
@@ -45,9 +46,13 @@ trace is unavailable it **skips decomposition, logs `CORNER_001`, and the pipeli
     segmentation is **exactly** F03b/F25's, so a "corner" means the same thing everywhere. Also the
     per-lap telemetry channels (`X`, `Y`, `Speed`, `Brake`, `Throttle`), `_DQLedger`, `_numeric`,
     `_finite`.
-  - **F04** → `artefacts/normalisation.json` via `load_normalisation_params` / `apply_normalisation`
-    (read-only, never re-fits) — used only to build the sub-fingerprint aggregate on a comparable
-    scale (the six F04 features z-scored, the rest raw; identical to F08's reuse).
+  - **F04** → NOT consumed (divergence #23). The original plan z-scored the aggregate via
+    `normalisation.json`, but the 5 corner sub-features (apex speed, lateral G, throttle, brake,
+    reversal rate) are **new derived quantities F04 never saw** — `normalisation.json` holds no
+    params for them, so there is nothing to apply. The ablation scores via XGBoost (scale-invariant)
+    and the Screen-2 radar is min-max-scaled per axis at render (F19), so no consumer needs the
+    aggregate pre-scaled. F09 stores the raw sub-vector only; there is no `NORMALISATION_FALLBACK`
+    path.
   - **F06a** → `train_classifier` / the CV machinery (`app/ml/classifier.py`) — the ablation reuses
     the **StratifiedGroupKFold-by-circuit** CV + `_base_xgb_params` (seed `config.seeds.xgboost`,
     `n_jobs=1`) to score **base vs expanded** feature matrices (§4.4-c). Leakage-quarantined
@@ -146,8 +151,9 @@ class CornerHealthResult(BaseResult):              # mirrors F06b/F08/F10/F11 he
 ```
 
 `CornerHandle` is a frozen dataclass (mirrors the loaded-artefact handles): the parsed
-`corner_subfingerprints.json` (per-`(driver, corner_type)` cells), `normalisation_params`,
-`model_version` (artefact content hash), `ready`.
+`corner_subfingerprints.json` (per-`(driver, corner_type)` cells), `sub_features`,
+`model_version` (artefact content hash), `ready`. **F04-free** — no `normalisation_params`
+(divergence #23).
 
 **Errors raised (only at build/load):** `SubFingerprintBuildError` (`TRAIN_LEAKAGE` /
 `MODEL_TRAINING_FAILED`) from `build_sub_fingerprints`; `CornerLoadError` (`MODEL_NOT_FOUND`) from
@@ -162,11 +168,13 @@ class CornerHealthResult(BaseResult):              # mirrors F06b/F08/F10/F11 he
 
 - **(a) Corner classification is per-CORNER by apex radius — divergence #18.** §4.4 says "laps are
   segmented into three corner-type categories using curvature." F09 classifies each **corner** (from
-  `_corner_indices`), not each sample: a corner's **radius `r = 1 / max(κ over its window)`** (κ is
-  maximal, r minimal, at the apex — the corner's defining tightness). `r < radius_slow_max` → SLOW,
+  `_corner_indices`), not each sample: a corner's **radius `r = 1 / κ at the apex`** — the apex (the
+  speed-minimum sample) is the corner's defining tightest point, and a mid-window central-difference
+  κ is **robust** to the boundary/window transition artefacts that dominate `max(κ)` (a fall-back to
+  `1/max(κ over the window)` covers a non-finite apex κ). `r < radius_slow_max` → SLOW,
   `< radius_medium_max` → MEDIUM, else HIGH_SPEED. Per-sample classification would shatter a single
-  corner across bands; per-corner keeps a corner whole (and matches the master's examples, which name
-  whole corners). A corner whose `max κ ≤ 0` (a straight mis-flagged as an apex) is not a corner →
+  corner across bands; per-corner keeps a corner whole (and matches the master's whole-corner
+  examples). A corner with no real curvature at the apex (a straight mis-flagged as an apex) is
   excluded.
 - **(b) Corner windows are F03b/F25's exact segmentation.** F09 reuses `_corner_indices` + the speed-
   maxima bracketing (`features.py:923`) so "a corner" is identical to F25's. Each corner's window is
@@ -187,11 +195,12 @@ class CornerHealthResult(BaseResult):              # mirrors F06b/F08/F10/F11 he
   rejection. A per-lap DQ row (`CORNER_001`) is written (reusing F03b's code — same meaning).
 - **(e) Statelessness / never-raises.** `decompose_lap` is a pure function of the lap frame;
   `run_ablation`/`health` never raise (typed result on any fault, F06b/F08/F10/F11 precedent).
-- **(f) Sub-fingerprint scale (divergence #20).** The sub-features mix units (km/h apex speed, G,
-  0–1 fractions, rate). Like F08's aggregate, the sub-fingerprint is built on the **F04-normalised**
-  frame where applicable so a cosine/UMAP consumer (F19 radar / a future style space) is not
-  dominated by unit scale; the raw sub-features are also retained for display. (The radar itself is
-  min-max scaled per axis at render, F19's concern.)
+- **(f) Sub-fingerprint scale — F04-free (divergences #20 + #23).** The sub-features mix units
+  (km/h apex speed, G, 0–1 fractions, rate), but F09 stores them **raw**, not F04-normalised: the
+  5 corner sub-features are new derived quantities F04 never scaled (`normalisation.json` holds no
+  params for them), the ablation scores via scale-invariant XGBoost, and the Screen-2 radar is
+  min-max scaled per axis at render (F19's concern). A future cosine/UMAP consumer would scale at
+  its own boundary. There is **no `NORMALISATION_FALLBACK` path** in F09.
 
 ### 4.1 Per-lap decomposition — `decompose_lap`
 
@@ -199,7 +208,8 @@ class CornerHealthResult(BaseResult):              # mirrors F06b/F08/F10/F11 he
    error_code=CORNER_001, xy_available=False, sub_vectors={all 3 → CornerSubVector(n_corners=0,
    features=all-None)})` + one `CORNER_001` DQ row. Continue (the lap's F01–F26 are F03's, untouched).
 2. **Curvature + corners**: κ per sample via F03b's formula; `corners = _corner_indices(speed, cfg)`;
-   per corner, window `[left_max, right_max)`, `r = 1 / max(κ[window])` (skip if `max κ ≤ 0`).
+   per corner, window `[left_max, right_max)`, `r = 1 / κ[apex]` (fall back to `1/max(κ[window])` if
+   the apex κ is non-finite; skip the corner if neither is a real curvature).
 3. **Classify** each corner → `CornerType` by `r` vs `radius_slow_max` / `radius_medium_max`.
 4. **Per-type sub-features** (§4.1 `CORNER_SUB_FEATURES`), over the union of that type's windows:
    `apex_speed_mean` (mean of the apex-sample speeds), `lateral_g_mean` (mean |signed G|),
@@ -215,18 +225,19 @@ class CornerHealthResult(BaseResult):              # mirrors F06b/F08/F10/F11 he
 
 Group the per-lap decompositions by `(driver, corner_type)`; **quarantine held-out + non-train rows
 first** (F04/F06a/F08/F10/F11 pattern; `_assert_no_leakage` tripwire → `TRAIN_LEAKAGE`, no artefact);
-per cell take the **mean sub-vector** over the driver's corners of that type (F04-normalised where
-applicable, §4.0-f), require ≥ `min_corners_per_type` corners else the cell is NULL + `DATA_INSUFFICIENT`.
-Write `corner_subfingerprints.json` — canonical JSON (sorted keys, no timestamp, embedded
-`content_hash`, byte-identical on re-run, F04/F10 precedent). MLflow-log (degrade-don't-die). No
-usable cells → `SubFingerprintBuildError(MODEL_TRAINING_FAILED)`.
+per cell take the corner-count-weighted **mean sub-vector** over the driver's corners of that type
+(raw sub-features, §4.0-f), require ≥ `min_corners_per_type` corners else the cell is **dropped +
+`DATA_INSUFFICIENT`** and the build result goes `DEGRADED` (surfaced on the typed result, not only
+in the DQ log). Write `corner_subfingerprints.json` — canonical JSON (sorted keys, no timestamp,
+embedded `content_hash`, byte-identical on re-run, F04/F10 precedent). MLflow-log (degrade-don't-die).
+No usable cells → `SubFingerprintBuildError(MODEL_TRAINING_FAILED)`.
 
 ### 4.3 Ablation — `run_ablation` (§4.4-c, read-only, never raises)
 
 Quarantine (held-out + non-train dropped before any fit). Build **base** (28 `FEATURE_IDS`) and
-**expanded** (base ‖ the 15 per-lap corner sub-features, median-imputed per F04.5's ≤6-NULL policy
-spirit) matrices. Score both with the **F06a CV** (`StratifiedGroupKFold(cv_folds, seed=42)`, macro-
-F1). `delta = expanded − base`; `finding` by `ablation_margin`. Log to `apex-ablation`. Malformed
+**expanded** (base ‖ the 15 per-lap corner sub-features) matrices; a corner type absent from a lap
+leaves its columns NaN and XGBoost consumes NaN natively (no imputation). Score both with the **F06a
+CV** (`StratifiedGroupKFold(cv_folds, seed=42)`, macro-F1). `delta = expanded − base`; `finding` by `ablation_margin`. Log to `apex-ablation`. Malformed
 input → typed `INVALID_INPUT` `AblationReport`. **Held-out circuits enter only via F20's invocation.**
 
 ### 4.4 Load & health — `load_sub_fingerprints` / `health`
@@ -255,18 +266,19 @@ corners:                             # F09 §4.4 — corner-type decomposition +
 
 **Referenced, not re-declared** (house rule): `features.min_xy_finite_fraction` + the F03b geometry
 keys (`gravity_m_s2`, `steering_g_deadband`, the `_corner_indices` machinery), `held_out_circuits`,
-`normalise.min_std` / `normalise.artefact_filename`, `seeds.xgboost` (ablation CV),
-`thresholds.min_clean_laps`, `paths.artefacts_dir` / `paths.data_quality_log`.
+`seeds.xgboost` (ablation CV), `paths.artefacts_dir` / `paths.data_quality_log`. (F09 is F04-free —
+it references **no** `normalise.*` key; divergence #23.)
 
 **Validator placement** (F08/F10/F11 precedent): scalar sanity on `CornersConfig`
 (`0 < radius_slow_max < radius_medium_max`; `min_corners_per_type ≥ 1`; `0 < ablation_margin < 1`;
 `cv_folds ≥ 2`; filenames + mlflow keys non-empty); cross-block on `AppConfig` (`corners` present
-requires `features` + `normalise`). All violations → load-time `CONFIG_001`.
+requires `features` — the curvature / `_corner_indices` keys F09 reads). All violations →
+load-time `CONFIG_001`.
 
 **No new error code.** `CORNER_001` is already seeded (`app/contracts/errors.py:59`, "curvature / X-Y
 unavailable → skip decomposition"); F09 reuses `FEATURE_001` (per-feature NULL), `DATA_INSUFFICIENT`
 (thin cell), `INVALID_INPUT`, `MODEL_NOT_FOUND`, `HEALTH_FAIL`, `TRAIN_LEAKAGE`,
-`MODEL_TRAINING_FAILED`, `NORMALISATION_FALLBACK`, `DATA_QUALITY_LOG_UNWRITABLE`.
+`MODEL_TRAINING_FAILED`, `DATA_QUALITY_LOG_UNWRITABLE`.
 
 ## 6. Error codes & failure modes (the failsafe contract)
 
@@ -281,7 +293,6 @@ on the non-scoring DEGRADED outcome `CORNER_001`; `flags` on scored-but-degraded
 | Thin `(driver, corner_type)` cell at build | < `min_corners_per_type` | `DATA_INSUFFICIENT` (flag) | Cell NULL / dropped; `status=DEGRADED` | yes | build log |
 | Malformed lap frame (missing X/Y columns) | Same `_xy_available` gate | `CORNER_001` (error_code) | Treated as X/Y-unavailable skip | yes | as above |
 | Malformed ablation matrix (missing feature columns) | Input gate | `INVALID_INPUT` (error_code) | Typed `AblationReport` `FAILED`; never raises | yes | — (build/eval tooling) |
-| Unknown circuit at sub-fingerprint normalisation | F04 `used_global` | `NORMALISATION_FALLBACK` (flag) | Global params; `status=DEGRADED` | yes (by F04) | "Circuit not in calibration — global normalisation used." |
 | `corner_subfingerprints.json` missing / corrupt / hash or schema mismatch / empty cells | Load-time validation | `MODEL_NOT_FOUND` | DQ-log then **raise** `CornerLoadError` — refuse to serve | yes | 503 via F13 |
 | Detector not loaded at health check | `health()` | `HEALTH_FAIL` (reason `MODEL_NOT_FOUND`) | `ready=False` | yes | 503 from `GET /health` |
 | Held-out/non-train row survives quarantine | `_assert_no_leakage` tripwire | `TRAIN_LEAKAGE` | **Raise**; no artefact | yes | build log (CI-breaking) |
@@ -292,19 +303,21 @@ on the non-scoring DEGRADED outcome `CORNER_001`; `flags` on scored-but-degraded
 
 ## 7. Acceptance criteria (each mechanically testable by /spec-check)
 
-- [ ] **Three corner types by apex radius** (§4.4): each corner classified by `r = 1/max(κ)` over its
-      window — `< radius_slow_max` (100) → SLOW, `< radius_medium_max` (200) → MEDIUM, else HIGH_SPEED;
-      a straight (max κ ≤ 0) is not a corner. Corner segmentation is F03b/F25's `_corner_indices` +
-      speed-maxima windows (a mutation test: the same corners F25 uses).
+- [ ] **Three corner types by apex radius** (§4.4): each corner classified by `r = 1/κ[apex]` —
+      `< radius_slow_max` (100) → SLOW, `< radius_medium_max` (200) → MEDIUM, else HIGH_SPEED; a
+      straight (no real apex curvature) is not a corner. Corner segmentation is F03b/F25's
+      `_corner_indices` + speed-maxima windows (a parity test: the same corners F25 uses).
 - [ ] **Every lap yields all three `CornerType` sub-vectors** (never a silent missing key); a type
       with 0 corners → NULL sub-vector (`n_corners=0`), `status=DEGRADED`.
 - [ ] **Sub-features = `CORNER_SUB_FEATURES`** computed over ONLY that corner type's windows (a lap
       with corners only in one band leaves the other two NULL — behavioural proof).
 - [ ] **X/Y unavailable → `CORNER_001`** (operative `error_code`, `status=DEGRADED`), all 3 NULL, one
       DQ row, lap continues; `decompose_lap` never raises (fault injection → `CORNER_001` result).
-- [ ] **Sub-fingerprints**: per-`(driver, corner_type)` mean sub-vector; a cell with
-      < `min_corners_per_type` corners → NULL + `DATA_INSUFFICIENT`; artefact byte-identical on
-      re-run (no timestamp; content hash equal); built on the F04-normalised frame (behavioural proof).
+- [ ] **Sub-fingerprints**: per-`(driver, corner_type)` corner-count-weighted mean sub-vector; a cell
+      with < `min_corners_per_type` corners → dropped + `DATA_INSUFFICIENT` + the build result goes
+      `DEGRADED` (surfaced on the typed `SubFingerprintFitResult`, not only the DQ log); artefact
+      byte-identical on re-run (no timestamp; content hash equal); raw sub-features, F04-free
+      (divergence #23 — no `NORMALISATION_FALLBACK` path).
 - [ ] **Leakage**: `build_sub_fingerprints` / `run_ablation` quarantine held-out + non-train **before
       any reduction/fit**; a poisoned matrix raises `TRAIN_LEAKAGE` with no artefact; a static scan
       asserts no `.fit(` in the serving path (`decompose_lap`/`load_sub_fingerprints`/`health`).
@@ -319,8 +332,7 @@ on the non-scoring DEGRADED outcome `CORNER_001`; `flags` on scored-but-degraded
       schema-mismatch / empty-cell-table; `health(None)` → `HEALTH_FAIL` with reason `MODEL_NOT_FOUND`.
 - [ ] **Every §6 code path** has a test that triggers it and asserts the typed result + code
       placement (`CORNER_001`, `FEATURE_001`, `DATA_INSUFFICIENT`, `INVALID_INPUT`, `MODEL_NOT_FOUND`,
-      `HEALTH_FAIL`, `TRAIN_LEAKAGE`, `MODEL_TRAINING_FAILED`, `NORMALISATION_FALLBACK`,
-      `DATA_QUALITY_LOG_UNWRITABLE`).
+      `HEALTH_FAIL`, `TRAIN_LEAKAGE`, `MODEL_TRAINING_FAILED`, `DATA_QUALITY_LOG_UNWRITABLE`).
 - [ ] **All thresholds/filenames from `config.yaml`** (`corners:` + referenced keys); no magic numbers
       in `app/ml/corners.py`; `CornersConfig` `extra="forbid"` with the §5 validators (→ `CONFIG_001`).
 - [ ] INDEX row updated to DONE only when all of the above pass.
@@ -370,12 +382,21 @@ list continues; F11 ended at #17):**
    is not a fingerprint).
 4. **Divergence #21 — ablation method.** A self-contained F06a-CV comparison of base vs expanded
    matrices reporting a macro-F1 delta + finding; it does NOT retrain the shipped champion. Cheap,
-   honest, non-perturbing.
+   honest, non-perturbing. The expanded matrix is **not imputed** — a lap with no corners of a type
+   leaves those columns NaN and XGBoost consumes NaN natively (the original spec's "median-imputed"
+   step is dropped; a test exercises the NaN-bearing production shape).
 5. **Divergence #22 — radius units.** `r = 1/κ` reuses F03b's curvature (validated to keep lateral G
    in 0–6 G), so `r` is in the same length unit as F03b's X/Y; the 100 m / 200 m thresholds are
    config-tunable if a session's X/Y scale differs. The classification is internally consistent with
    F03b regardless.
-6. **Limitation — corner decomposition depends on X/Y quality** (§14): sessions without a usable X/Y
+6. **Divergence #23 — F04-free aggregate (supersedes the spec's original F04-normalised plan).** The
+   5 corner sub-features are new derived quantities F04 never scaled, so `normalisation.json` holds no
+   params for them — there is nothing to apply. The ablation scores via scale-invariant XGBoost and
+   the Screen-2 radar min-max-scales per axis at render (F19), so no consumer needs a pre-scaled
+   aggregate. F09 drops the F04 dependency and the `NORMALISATION_FALLBACK` path entirely, stores the
+   raw sub-vector, and `CornerHandle` carries no `normalisation_params`; the cross-block validator
+   requires only `features`.
+7. **Limitation — corner decomposition depends on X/Y quality** (§14): sessions without a usable X/Y
    trace get no sub-fingerprints (`CORNER_001`), reported honestly per session; the ablation is run on
    the subset with X/Y.
 

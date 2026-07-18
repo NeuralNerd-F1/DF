@@ -28,7 +28,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F06 | Model 1 — XGBoost classifier + confidence gate + calibration + Optuna + MLflow | F04 | 5–6 | DONE (F06a 2026-06-30, F06b 2026-07-01) |
 | F07 | SHAP explainability (beeswarm, force, radar, NL templates) | F06 | 7 | DONE (2026-07-01) |
 | F08 | Model 2 — UMAP style space + PCA fallback + unknown-driver projection | F04 | 8 | DONE (2026-07-02) |
-| F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | SPEC WRITTEN (2026-07-17) |
+| F09 | Corner-type decomposition + sub-fingerprints (ablation) | F03a, F03b | 9 | DONE (2026-07-18) |
 | F10 | Model 3 — Degradation detector (deviation, rolling mean, alert threshold) | F04, F08 | 11–12 | DONE (2026-07-17) |
 | F11 | Car personalisation engine (3 layers: mapping, constraints, confidence) | F07, F08 | 13 | DONE (2026-07-17) |
 
@@ -80,7 +80,18 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   behaviour, lap continues); reuses `FEATURE_001`/`DATA_INSUFFICIENT`/`TRAIN_LEAKAGE`/etc.
   **Divergences #18–#22** (per-corner classification; the 5 sub-features; `min_corners_per_type`;
   self-contained ablation; radius units tied to F03b's curvature). Target `app/ml/corners.py`;
-  depends on F03a/F03b (geometry) + F06a (CV) + F04 (aggregate scale). See §4.0/§9. **Next: build.**
+  depends on F03a/F03b (geometry) + F06a (CV) + F04 (aggregate scale). See §4.0/§9.
+- **F09 build — 2026-07-18 (feature/F09-corner-decomposition): DONE.** `app/ml/corners.py` +
+  `tests/ml/test_corners.py` (36 tests; full suite **650 green**, mypy + ruff clean; ml-auditor +
+  failsafe-auditor folded). Two build-time refinements to the spec: (a) apex radius is `r = 1/κ[apex]`
+  (the speed-minimum sample's central-difference κ, robust to the boundary artefacts that dominate
+  `1/max(κ)`), fallback to `1/max(κ[window])`; (b) **divergence #23 — F09 is F04-free**: the 5 corner
+  sub-features are new derived quantities F04 never scaled (`normalisation.json` has no params for
+  them), the ablation scores via scale-invariant XGBoost, and F19 min-max-scales the radar at render —
+  so the `NORMALISATION_FALLBACK` path was dropped, `CornerHandle` carries no `normalisation_params`,
+  and the cross-block validator requires only `features`. Thin cells now surface `DEGRADED` +
+  `DATA_INSUFFICIENT` on the typed result; the expanded ablation matrix is NaN-native (no imputation).
+  **Divergences #18–#23.**
 - **F11 spec — 2026-07-17 (feature/F11-personalisation):** `specs/F11-personalisation.md` written
   (SPEC WRITTEN). Model 4 (personalisation, §7) is a **3-layer engine**: Layer 1 learned mapping (one
   XGBoost regressor per setup parameter; input = F08 **5D fingerprint** ‖ drop-first circuit one-hot),

@@ -236,7 +236,7 @@ def test_monitoring_requires_sibling_blocks(repo_config_path: Path, tmp_path: Pa
 
 
 def test_repo_config_parses_personalisation_block(repo_config_path: Path) -> None:
-    """F11's personalisation: block validates into the typed PersonalisationConfig sub-model (§7)."""
+    """F11 personalisation: block validates into the typed PersonalisationConfig sub-model (§7)."""
     cfg = load_config(repo_config_path)
     assert cfg.personalisation is not None
     assert cfg.circuit_types == ["street", "high_speed", "technical", "mixed"]
@@ -273,7 +273,8 @@ def test_personalisation_wide_range_pct_rejected(repo_config_path: Path, tmp_pat
 
 def test_personalisation_cv_folds_rejected(repo_config_path: Path, tmp_path: Path) -> None:
     text = repo_config_path.read_text(encoding="utf-8").replace(
-        "cv_folds: 5                       # GroupKFold", "cv_folds: 1                       # GroupKFold"
+        "cv_folds: 5                       # GroupKFold",
+        "cv_folds: 1                       # GroupKFold",
     )
     p = tmp_path / "bad_pers_folds.yaml"
     p.write_text(text, encoding="utf-8")
@@ -299,6 +300,54 @@ def test_personalisation_requires_circuit_types(repo_config_path: Path, tmp_path
     raw = yaml.safe_load(repo_config_path.read_text(encoding="utf-8"))
     raw["circuit_types"] = []
     p = tmp_path / "no_circuit_types.yaml"
+    p.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+# --- F09 corners: block (CornersConfig) ------------------------------------------------
+
+
+def test_repo_config_parses_corners_block(repo_config_path: Path) -> None:
+    """F09's corners: block validates into the typed CornersConfig sub-model (§4.4)."""
+    cfg = load_config(repo_config_path)
+    assert cfg.corners is not None
+    assert cfg.corners.radius_slow_max == 100.0
+    assert cfg.corners.radius_medium_max == 200.0
+    assert cfg.corners.min_corners_per_type == 5
+    assert cfg.corners.ablation_margin == 0.01
+    assert cfg.corners.cv_folds == 5
+    assert cfg.corners.subfingerprint_artefact_filename == "corner_subfingerprints.json"
+    assert cfg.corners.mlflow_experiment == "apex-ablation"
+
+
+def test_corners_radius_ordering_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "radius_slow_max: 100.0", "radius_slow_max: 250.0"  # ≥ radius_medium_max 200
+    )
+    p = tmp_path / "bad_radius.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_corners_ablation_margin_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "ablation_margin: 0.01", "ablation_margin: 1.5"
+    )
+    p = tmp_path / "bad_margin.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_corners_requires_features_block(repo_config_path: Path, tmp_path: Path) -> None:
+    """A corners: block without features: (whose curvature keys F09 reads) → CONFIG_001."""
+    import yaml
+
+    raw = yaml.safe_load(repo_config_path.read_text(encoding="utf-8"))
+    del raw["features"]
+    p = tmp_path / "corners_no_features.yaml"
     p.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(p)

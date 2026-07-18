@@ -254,3 +254,20 @@ personalisation:
     suspension_stiffness_rear: [0.0, 2.0]
     tyre_warmup_laps: [1.0, 5.0]
     brake_duct_aperture: [30.0, 100.0]
+
+# --- F09 corner-type decomposition + sub-fingerprints (ablation, §4.4) ----------------------------
+# Each lap's corners (F03a _corner_indices apices + F25 speed-maxima windows) are classified by apex
+# radius r = 1/max(curvature) — reusing F03b's curvature primitive — into slow/medium/high-speed, and
+# each type yields a 5-feature sub-vector aggregated per (driver, corner_type) into the Screen-2
+# sub-fingerprints. The ablation compares base (28) vs expanded (28+15) classifier macro-F1. X/Y
+# unavailable -> CORNER_001 skip (F03b's behaviour; lap continues). CORNER_001 is pre-seeded; no new
+# error code. The curvature/segmentation knobs + min_xy_finite_fraction live under features: above.
+corners:
+  radius_slow_max: 100.0             # §4.4 — apex radius (m) below this -> SLOW corner
+  radius_medium_max: 200.0           # §4.4 — below this -> MEDIUM; at/above -> HIGH_SPEED
+  min_corners_per_type: 5            # sub-fingerprint cell needs >= N corners of the type (div #20)
+  ablation_margin: 0.01              # macro-F1 delta band for IMPROVES/NEUTRAL/DEGRADES (div #21)
+  cv_folds: 5                        # ablation CV (mirrors classifier.cv_folds)
+  subfingerprint_artefact_filename: corner_subfingerprints.json  # under paths.artefacts_dir
+  mlflow_tracking_uri: sqlite:///artefacts/mlflow.db  # F09's OWN URI (same store, own experiment)
+  mlflow_experiment: apex-ablation                    # sub-fingerprint build + ablation runs

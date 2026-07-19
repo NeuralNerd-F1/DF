@@ -85,6 +85,7 @@ EXPECTED_CODES: set[str] = {
     # Database / platform (F12, F13)
     "DB_UNAVAILABLE",
     "HEALTH_FAIL",
+    "DB_INTEGRITY",
 }
 
 

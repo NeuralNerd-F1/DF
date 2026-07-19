@@ -65,6 +65,16 @@ one principle: **no component fails silently.**
 > was written. Write against numpy-2.4.x — behaviour is unchanged vs 2.5 for APEX's usage (both are
 > numpy-2.x / copy-on-write). See `specs/F07-shap-explainability.md` §5/§9.
 
+> **Stack note (DB driver ratified by F12).** F12 adds the persistence layer: **SQLAlchemy 2.0.51 +
+> Alembic 1.18.5** (async ORM + migrations). The master §9 names **asyncpg** as the Postgres driver,
+> but asyncpg ships **no Python-3.14 (cp314) wheel** and needs MSVC to build from source (unavailable
+> here), so F12 uses **psycopg v3 (`psycopg[binary]` 3.3.4, `postgresql+psycopg://`)** — a cp314
+> binary wheel exists. Same ratified transitive-migration pattern as F04/F06a/F07. The whole DB test
+> suite runs **offline on aiosqlite** (driver-independent) via portable `.with_variant` column types;
+> a `@pytest.mark.postgres` test exercises the real migration when `APEX_TEST_DATABASE_URL` is set.
+> The DSN is **env-only** (`APEX_DATABASE_URL`; config.yaml stores only the var name). See
+> `specs/F12-postgres-schema.md` §10.
+
 ## Repo map
 ```
 app/pipeline/    ingest.py validate.py features.py normalise.py

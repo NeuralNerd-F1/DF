@@ -112,3 +112,4 @@ class ErrorCode(StrEnum):
     # --- Database / platform (F12, F13) — §8.3, §8.5 ------------------------
     DB_UNAVAILABLE = "DB_UNAVAILABLE"  # Postgres breaker open -> API 503
     HEALTH_FAIL = "HEALTH_FAIL"  # critical component down at startup -> 503
+    DB_INTEGRITY = "DB_INTEGRITY"  # F12 — constraint / app-invariant violation on write (div #24)

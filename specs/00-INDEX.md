@@ -35,7 +35,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 3 — Platform
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F12 | PostgreSQL schema + Alembic migrations | F00 | 15 | TODO |
+| F12 | PostgreSQL schema + Alembic migrations | F00 | 15 | DONE (2026-07-19) |
 | F13 | FastAPI endpoints + Pydantic contracts + health check | F06–F11, F12 | 15–16 | TODO |
 | F14 | Redis cache + Celery queue + replay engine | F13 | 16 | TODO |
 | F15 | Failsafe evaluation harness (RQ5 — 7 tests) | F13, F14 | 14 | TODO |
@@ -65,6 +65,47 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F12 BUILT — 2026-07-19 (master): DONE.** `app/db/` (`base` · `models` · `results` · `breaker` ·
+  `session` · `repository` · `health`) + `alembic.ini` + `migrations/` (async `env.py` +
+  `0001_initial_schema.py`) + `.env.example`. The 10 §8.4 tables as SQLAlchemy-2.0 async ORM models
+  with portable `.with_variant` types (native JSONB/ENUM/UUID/TEXT[] on Postgres; JSON/VARCHAR-CHECK/
+  CHAR on SQLite), the clean-lap CHECK, the §8.3 async circuit breaker (`DB_UNAVAILABLE`), never-raising
+  `check_database` (`HEALTH_FAIL`), the `data_quality_log` JSONL→Postgres sink (append-only), and the
+  `DatabaseConfig` block (DSN **env-only**). **One new code `DB_INTEGRITY`.** **53 `tests/db` tests**
+  (1 `@pytest.mark.postgres` skipped offline); full suite **710 passed / 1 skipped**, `mypy app` +
+  `ruff` clean. `failsafe-auditor` run on `app/db/` — 4 findings fixed with regression tests
+  (unguarded `session.close()` masking the typed error; breaker missing `sqlalchemy.exc.TimeoutError`
+  in its retryable set; no client-side `connect_timeout` on the write path; `render_as_batch` for
+  SQLite). **Build-time refinements (divergences #26/#27):** driver is **psycopg v3**
+  (`psycopg[binary]` 3.3.4 — asyncpg has no cp314 wheel, ratified like F04/F06a/F07); the async breaker
+  **reimplements** F01's §8.3 state machine rather than importing it (F01's `ingest.py` pulls pandas +
+  a backwards `app.db→app.pipeline` dep); the baseline migration materialises `Base.metadata` via
+  **`create_all`/`drop_all`** (drift-free by construction; `alembic check` clean) rather than
+  hand-written DDL — offline `--sql` mode unsupported. Divergences **#24** (`DB_INTEGRITY` code) and
+  **#25** (DB ENUM domains = the code enums, drift-guarded). Next consumers: F13 (endpoints + `/health`
+  + 503 mapping) / F14 (replay + live log routing) / F15+F20 (RQ5 DB-outage failsafe). See
+  `specs/F12-postgres-schema.md`.
+- **F12 spec — 2026-07-19 (master):** `specs/F12-postgres-schema.md` written (SPEC WRITTEN). The
+  **persistence layer**: the 10 master-§8.4 tables as SQLAlchemy-2.0 async ORM models
+  (`app/db/models.py`), the initial Alembic migration (`migrations/versions/0001_initial_schema.py`)
+  that materialises them, the async engine/session + **§8.3 Supabase-PostgreSQL circuit breaker**
+  (`timeout 5s / 3 retries / 1-2-4s backoff / open after 3-in-30s`, reusing F01's `BreakerConfig` +
+  `call_with_breaker` → `DB_UNAVAILABLE`), the never-raising `check_database` health probe, and the
+  `data_quality_log` **JSONL→Postgres drop-in sink** the F00 logger was built to accept. Portable
+  `.with_variant` column types (JSONB/ARRAY/UUID/ENUM) let the whole unit suite run **offline on
+  aiosqlite** (`create_all`) with a separate `@pytest.mark.postgres` migration-round-trip +
+  no-autogenerate-drift test against docker-compose Postgres. **One new error code — `DB_INTEGRITY`**
+  (constraint / app-invariant violation on write; `null_count == count(nulls)` and the clean-lap
+  CHECK are the worked invariants); reuses the pre-seeded `DB_UNAVAILABLE`/`HEALTH_FAIL`/
+  `DATA_QUALITY_LOG_UNWRITABLE`/`CONFIG_001`. DSN is **env-only** (`database.dsn_env_var`), never in
+  YAML. **Divergences #24** (the `DB_INTEGRITY` code string — master-silent) and **#25** (DB ENUM
+  domains follow the CODE enums — `confidence_state` = 5-value `ConfidenceState` incl.
+  `LOW_CONFIDENCE`+`OUT_OF_DISTRIBUTION` — not §8.4's `HIGH/MEDIUM/LOW/AMBIGUOUS` paraphrase;
+  precedented by F06b/F08). New typed `DatabaseConfig` block. Depends on F00 only; consumed by
+  F13 (`/health` + route persistence) / F14 (replay + live log routing) / F15+F20 (RQ5 DB-outage
+  failsafe test). **Top risk:** `asyncpg` may lack a Python-3.14 wheel → `psycopg[psycopg]` v3 async
+  fallback (ratified-migration pattern); the offline suite is driver-independent. See
+  `specs/F12-postgres-schema.md` §4.0/§6/§10. **Next: build.**
 - **F09 spec — 2026-07-17 (feature/F09-corner-decomposition):** `specs/F09-corner-decomposition.md`
   written (SPEC WRITTEN). Corner-type decomposition (§4.4): each lap's corners are segmented into
   **slow (<100 m) / medium (100–200 m) / high-speed (>200 m)** by **apex radius `r = 1/max(κ)`**,

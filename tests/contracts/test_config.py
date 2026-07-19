@@ -351,3 +351,83 @@ def test_corners_requires_features_block(repo_config_path: Path, tmp_path: Path)
     p.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(p)
+
+
+# --- F12 database: block (DatabaseConfig) ----------------------------------------------
+
+
+def test_repo_config_parses_database_block(repo_config_path: Path) -> None:
+    """F12's database: block validates into the typed DatabaseConfig sub-model (§8.3/§8.4)."""
+    cfg = load_config(repo_config_path)
+    assert cfg.database is not None
+    assert cfg.database.dsn_env_var == "APEX_DATABASE_URL"
+    assert cfg.database.test_dsn_env_var == "APEX_TEST_DATABASE_URL"
+    assert cfg.database.schema_name is None  # null in YAML -> default schema
+    assert cfg.database.migrations_path == "migrations"
+    assert cfg.database.pool_size == 5
+    assert cfg.database.max_overflow == 10
+    assert cfg.database.pool_timeout_s == 30
+    assert cfg.database.statement_timeout_s == 5
+    assert cfg.database.echo is False
+    # §8.3 Supabase-PostgreSQL breaker policy, verbatim.
+    assert cfg.database.breaker.timeout_s == 5
+    assert cfg.database.breaker.retries == 3
+    assert cfg.database.breaker.backoff_s == [1, 2, 4]
+    assert cfg.database.breaker.open_after == 3
+    assert cfg.database.breaker.window_s == 30
+
+
+def test_database_dsn_is_env_only_never_a_literal_dsn(repo_config_path: Path) -> None:
+    """Secret hygiene (§9 RLS): the block carries only the env-var NAME, never a real DSN string."""
+    cfg = load_config(repo_config_path)
+    assert cfg.database is not None
+    assert "://" not in cfg.database.dsn_env_var  # a URL would mean a secret leaked into YAML
+    assert "://" not in cfg.database.test_dsn_env_var
+
+
+def test_database_empty_dsn_env_var_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    """An empty dsn_env_var (no env source for the DSN) is a build-breaking CONFIG_001."""
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "dsn_env_var: APEX_DATABASE_URL", 'dsn_env_var: ""'
+    )
+    p = tmp_path / "bad_dsn_var.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_database_non_positive_pool_size_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace("pool_size: 5", "pool_size: 0")
+    p = tmp_path / "bad_pool.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_database_non_positive_statement_timeout_rejected(
+    repo_config_path: Path, tmp_path: Path
+) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "statement_timeout_s: 5", "statement_timeout_s: 0"
+    )
+    p = tmp_path / "bad_stmt_timeout.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_database_breaker_zero_timeout_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    """The async driver wraps each attempt in asyncio.wait_for(timeout_s) — 0 would never wait."""
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "breaker: { timeout_s: 5,", "breaker: { timeout_s: 0,"
+    )
+    p = tmp_path / "bad_breaker_timeout.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_database_block_absent_is_none(valid_config_file: Path) -> None:
+    """The minimal foundation config has no database: block -> AppConfig.database is None."""
+    cfg = load_config(valid_config_file)
+    assert cfg.database is None

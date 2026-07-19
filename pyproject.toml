@@ -50,6 +50,15 @@ shap = "0.52.0"
 umap-learn = "0.5.12"
 pynndescent = "0.6.0"
 scipy = "1.18.0"
+# F12 persistence layer (§8.3/§8.4/§9). SQLAlchemy 2.0 async ORM + Alembic migrations, pinned EXACTLY
+# for reproducibility (#3). greenlet (SQLAlchemy's async bridge) is transitive. NOTE the master §9
+# names **asyncpg** as the driver; it ships NO Python-3.14 (cp314) wheel and needs MSVC to build from
+# source (unavailable in this env), so F12 uses **psycopg v3 async** (postgresql+psycopg://) — a cp314
+# binary wheel exists. Same ratified transitive-migration pattern F04 (pandas/numpy), F06a
+# (mlflow-skinny) and F07 (numpy pin) set. The offline test suite is driver-independent (aiosqlite).
+sqlalchemy = "2.0.51"
+alembic = "1.18.5"
+psycopg = { version = "3.3.4", extras = ["binary"] }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -57,6 +66,10 @@ ruff = "^0.5"
 mypy = "^1.10"
 types-pyyaml = "^6.0"
 pandas-stubs = "3.0.3.260530"
+# F12 — the offline DB test suite runs on aiosqlite (no Postgres needed); async tests via
+# pytest-asyncio (asyncio_mode="auto"). Pinned EXACTLY (#3).
+aiosqlite = "0.22.1"
+pytest-asyncio = "1.4.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -95,7 +108,20 @@ follow_imports_for_stubs = true
 module = ["joblib.*", "sklearn.*", "shap.*", "scipy.*", "umap.*", "pynndescent.*"]
 ignore_missing_imports = true
 
+# F12 — aiosqlite ships no py.typed marker (used only as a test driver, never imported by app code).
+# SQLAlchemy / Alembic / psycopg all ship py.typed, so they stay under strict checking.
+[[tool.mypy.overrides]]
+module = ["aiosqlite.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-q"
+# F12 — async DB tests: asyncio_mode="auto" runs plain `async def test_` with no per-test marker.
+asyncio_mode = "auto"
+# Registered markers. `postgres` gates the real-Postgres migration round-trip test, skipped
+# unless database.test_dsn_env_var (APEX_TEST_DATABASE_URL) is set.
+markers = [
+    "postgres: integration test requiring a live PostgreSQL (skipped unless APEX_TEST_DATABASE_URL set)",
+]

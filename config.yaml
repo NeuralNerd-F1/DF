@@ -271,3 +271,23 @@ corners:
   subfingerprint_artefact_filename: corner_subfingerprints.json  # under paths.artefacts_dir
   mlflow_tracking_uri: sqlite:///artefacts/mlflow.db  # F09's OWN URI (same store, own experiment)
   mlflow_experiment: apex-ablation                    # sub-fingerprint build + ablation runs
+
+# --- F12 persistence layer (PostgreSQL schema + Alembic migrations, §8.3/§8.4/§9) -----------------
+# The 10 master-§8.4 tables (app/db/models.py) + the Alembic migration that materialises them + the
+# async engine/session + DB circuit breaker + health probe. The DSN is a SECRET sourced from the
+# environment variable named below (dsn_env_var) — never committed here (§9 RLS / secret hygiene);
+# see .env.example. The breaker mirrors the master §8.3 Supabase-PostgreSQL policy VERBATIM and is a
+# BreakerConfig driven by F12's async sibling of F01's call_with_breaker -> DB_UNAVAILABLE. schema_name
+# is null for the default schema (SQLite unit suite + single-instance deploy); §12.2 shared-instance
+# deploys set apex_schema. The offline unit suite runs on aiosqlite and never reads these DSNs.
+database:
+  dsn_env_var: APEX_DATABASE_URL           # env var holding the async DSN (e.g. postgresql+psycopg://…)
+  test_dsn_env_var: APEX_TEST_DATABASE_URL # env var whose presence enables the marked migration test
+  schema_name: null                        # null = default schema; §12.2 sets apex_schema
+  migrations_path: migrations              # Alembic script_location
+  pool_size: 5                             # async engine pool size (design decision)
+  max_overflow: 10                         # overflow connections beyond pool_size (design decision)
+  pool_timeout_s: 30                       # wait for a pooled connection before erroring (design decision)
+  statement_timeout_s: 5                   # §8.3 — server-side per-statement cap (Supabase timeout)
+  echo: false                              # SQL echo (debug only)
+  breaker: { timeout_s: 5, retries: 3, backoff_s: [1, 2, 4], open_after: 3, window_s: 30 }  # §8.3 verbatim

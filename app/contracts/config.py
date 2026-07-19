@@ -828,6 +828,71 @@ class CornersConfig(BaseModel):
         return self
 
 
+class DatabaseConfig(BaseModel):
+    """Typed view over the ``database:`` block (F12 persistence layer, §8.3/§8.4/§9).
+
+    Lives here, not in ``app/db/`` (standing rule, F01): the DB layer reads its knobs through a
+    strictly-validated model. Holds only F12 constants; ``DB_UNAVAILABLE`` / ``HEALTH_FAIL`` /
+    ``DATA_QUALITY_LOG_UNWRITABLE`` are pre-seeded in ``errors.py``; ``DB_INTEGRITY`` is F12's.
+    The **DSN is a secret** from the env var named by ``dsn_env_var`` — never stored here
+    (§9 RLS / secret hygiene); this block carries only the env-var *name* plus non-secret knobs.
+    ``breaker`` reuses the shared ``BreakerConfig`` and mirrors the §8.3 Supabase policy verbatim.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dsn_env_var: str  # env var holding the async DSN (postgresql+psycopg://); secret, never in YAML
+    test_dsn_env_var: str  # env var whose presence enables the marked Postgres migration test
+    schema_name: str | None = None  # None = default schema; §12.2 sets apex_schema (shared inst.)
+    migrations_path: str  # Alembic script_location
+    pool_size: int  # async engine connection-pool size
+    max_overflow: int  # overflow connections beyond pool_size
+    pool_timeout_s: float  # wait for a pooled connection before erroring
+    statement_timeout_s: float  # §8.3 — server-side per-statement cap (Supabase 5s)
+    echo: bool  # SQLAlchemy SQL echo (debug only)
+    breaker: BreakerConfig  # §8.3 Supabase-PostgreSQL retry/circuit policy (verbatim)
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> DatabaseConfig:
+        """Fail fast on out-of-range constants so a mis-edit is a load-time ``CONFIG_001`` rather
+        than a surprise at first DB use (#1). The breaker knobs the async driver relies on (a
+        positive ``timeout_s`` for ``asyncio.wait_for``, a ``>= 1`` open threshold, a positive
+        cooldown window, a non-empty backoff list) are guarded here since ``BreakerConfig`` is
+        deliberately unvalidated (shared with F01, whose breaker clamps a short backoff list)."""
+        for name, val in (
+            ("dsn_env_var", self.dsn_env_var),
+            ("test_dsn_env_var", self.test_dsn_env_var),
+            ("migrations_path", self.migrations_path),
+        ):
+            if not val:
+                raise ValueError(f"database.{name} must be non-empty")
+        if self.schema_name is not None and not self.schema_name:
+            raise ValueError("database.schema_name must be non-empty when set (null = default)")
+        if self.pool_size < 1:
+            raise ValueError(f"database.pool_size must be >= 1, got {self.pool_size}")
+        if self.max_overflow < 0:
+            raise ValueError(f"database.max_overflow must be >= 0, got {self.max_overflow}")
+        if self.pool_timeout_s <= 0:
+            raise ValueError(f"database.pool_timeout_s must be > 0, got {self.pool_timeout_s}")
+        if self.statement_timeout_s <= 0:
+            raise ValueError(
+                f"database.statement_timeout_s must be > 0, got {self.statement_timeout_s}"
+            )
+        if self.breaker.timeout_s <= 0:
+            raise ValueError(
+                f"database.breaker.timeout_s must be > 0, got {self.breaker.timeout_s}"
+            )
+        if self.breaker.open_after < 1:
+            raise ValueError(
+                f"database.breaker.open_after must be >= 1, got {self.breaker.open_after}"
+            )
+        if self.breaker.window_s <= 0:
+            raise ValueError(f"database.breaker.window_s must be > 0, got {self.breaker.window_s}")
+        if not self.breaker.backoff_s:
+            raise ValueError("database.breaker.backoff_s must be non-empty")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -859,6 +924,7 @@ class AppConfig(BaseModel):
     monitoring: MonitoringConfig | None = None  # F10; None until the monitoring: block is present
     personalisation: PersonalisationConfig | None = None  # F11; None until the block is present
     corners: CornersConfig | None = None  # F09; None until the corners: block is present
+    database: DatabaseConfig | None = None  # F12; None until the database: block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:

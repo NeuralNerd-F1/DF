@@ -167,7 +167,15 @@ class StyleSpaceResponse(ApiModel):
     unknown_drivers: list[StyleSpaceDriver] = Field(default_factory=list)
 
 
-# --- Deferred to F14 (Celery/replay) / F05 (upload) — schemas ship here, routes 503 -------------
+# --- F14 (Celery/replay) request + response schemas ---------------------------------------------
+class IngestSessionRequest(ApiModel):
+    """POST /ingest/session body — the FastF1 session coordinates to ingest async (§8.5)."""
+
+    year: int = Field(ge=1950, le=2100)
+    event: str = Field(min_length=1, max_length=128)
+    session: str = Field(default="R", min_length=1, max_length=8)
+
+
 class IngestSessionResponse(ApiModel):
     session_id: str
     laps_accepted: int
@@ -180,6 +188,9 @@ class IngestStatusResponse(ApiModel):
     status: Literal["PENDING", "PROCESSING", "COMPLETE", "FAILED"]
     progress: float
     error_detail: str | None = None
+    # The terminal report — the §8.5 IngestSessionResponse fields (laps_accepted, rejection_summary,
+    # quality_report, …). Populated once the job is COMPLETE; None while it is still running (F14).
+    result: dict[str, Any] | None = None
 
 
 class UploadResponse(ApiModel):

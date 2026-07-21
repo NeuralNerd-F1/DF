@@ -940,6 +940,136 @@ class ApiConfig(BaseModel):
         return self
 
 
+class CacheConfig(BaseModel):
+    """Typed view over the ``cache:`` block (F14 Redis cache, §8.2/§8.3/§9).
+
+    Lives here, not in ``app/cache/`` (standing rule, F01): the cache reads its knobs through a
+    strictly-validated model. Holds only F14 cache constants; the three cache codes
+    (``CACHE_MISS`` / ``CACHE_UNAVAILABLE`` / ``CACHE_DEGRADED``) are pre-seeded in ``errors.py``.
+    The **Redis DSN is a secret** from the env var named by ``url_env_var`` — never stored here
+    (§9). The cache is an optimisation, never a hard dependency: a down Redis / open breaker
+    degrades to a graceful miss. ``breaker`` reuses the shared ``BreakerConfig`` and mirrors the
+    §8.3 Redis policy verbatim (timeout 2s / 1 retry / 1s backoff / open after 2 in 30s).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool  # false -> RedisCache is a no-op (always CACHE_MISS); system unaffected
+    url_env_var: str  # env var holding the Redis DSN (rediss://…@upstash); secret, never in YAML
+    key_prefix: str  # §4.0-h namespace root; full key = {prefix}:v{api.version}:{ns}:{id}
+    driver_profile_ttl_s: int  # §9 — 1-hour driver-profile TTL (the one master-named TTL)
+    model_output_ttl_s: int  # /predict model-output cache TTL (master-silent, div #34)
+    normalisation_ttl_s: int  # normalisation-param cache TTL (master-silent, div #34)
+    stylespace_ttl_s: int  # style-space read TTL (master-silent, div #34)
+    breaker: BreakerConfig  # §8.3 Redis retry/circuit policy (verbatim)
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> CacheConfig:
+        """Fail fast on bad constants so a mis-edit is a load-time ``CONFIG_001`` rather than a
+        surprise at first cache use (#1). The breaker knobs the async client relies on are guarded
+        here since ``BreakerConfig`` is deliberately unvalidated (shared with F01)."""
+        if not self.url_env_var:
+            raise ValueError("cache.url_env_var must be non-empty")
+        if not self.key_prefix:
+            raise ValueError("cache.key_prefix must be non-empty")
+        for name, val in (
+            ("driver_profile_ttl_s", self.driver_profile_ttl_s),
+            ("model_output_ttl_s", self.model_output_ttl_s),
+            ("normalisation_ttl_s", self.normalisation_ttl_s),
+            ("stylespace_ttl_s", self.stylespace_ttl_s),
+        ):
+            if val <= 0:
+                raise ValueError(f"cache.{name} must be > 0, got {val}")
+        if self.breaker.timeout_s <= 0:
+            raise ValueError(f"cache.breaker.timeout_s must be > 0, got {self.breaker.timeout_s}")
+        if self.breaker.open_after < 1:
+            raise ValueError(
+                f"cache.breaker.open_after must be >= 1, got {self.breaker.open_after}"
+            )
+        if self.breaker.window_s <= 0:
+            raise ValueError(f"cache.breaker.window_s must be > 0, got {self.breaker.window_s}")
+        if not self.breaker.backoff_s:
+            raise ValueError("cache.breaker.backoff_s must be non-empty")
+        return self
+
+
+class CeleryConfig(BaseModel):
+    """Typed view over the ``celery:`` block (F14 Celery task queue, §8.2/§9).
+
+    Lives here, not in ``app/tasks/`` (standing rule, F01): the queue reads its knobs through a
+    strictly-validated model. Redis is broker AND result backend (§9); both DSNs are **secrets**
+    from the env vars named here — never stored in YAML. Celery retry/timeout constants are
+    master-SILENT (§8.3's numbers are for external HTTP deps) → chosen here (divergence #35). The
+    offline test suite sets ``always_eager`` so the task body runs in-process with no broker/worker.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    broker_url_env_var: str  # Redis broker DSN env var (secret, never in YAML)
+    result_backend_env_var: str  # Redis result backend DSN env var (secret, never in YAML)
+    task_default_queue: str  # named queue the ingestion task routes to
+    worker_concurrency: int  # worker pool size (design decision)
+    task_soft_time_limit_s: int  # soft per-task cap → graceful stop (design decision)
+    task_time_limit_s: int  # hard per-task cap → kill (design decision)
+    task_max_retries: int  # ingest-task retries on a transient fault (div #35)
+    task_retry_backoff_s: list[float]  # backoff between task retries (div #35)
+    result_ttl_s: int  # result-backend retention for the terminal IngestSessionResponse
+    always_eager: bool = False  # tests set true (synchronous, in-process, no broker)
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> CeleryConfig:
+        """Fail fast on bad constants so a mis-edit is a load-time ``CONFIG_001`` (#1)."""
+        for name, val in (
+            ("broker_url_env_var", self.broker_url_env_var),
+            ("result_backend_env_var", self.result_backend_env_var),
+            ("task_default_queue", self.task_default_queue),
+        ):
+            if not val:
+                raise ValueError(f"celery.{name} must be non-empty")
+        if self.worker_concurrency < 1:
+            raise ValueError(
+                f"celery.worker_concurrency must be >= 1, got {self.worker_concurrency}"
+            )
+        if self.task_soft_time_limit_s < 1:
+            raise ValueError("celery.task_soft_time_limit_s must be >= 1")
+        if self.task_time_limit_s <= self.task_soft_time_limit_s:
+            raise ValueError(
+                f"celery.task_time_limit_s ({self.task_time_limit_s}) must be > "
+                f"task_soft_time_limit_s ({self.task_soft_time_limit_s})"
+            )
+        if self.task_max_retries < 0:
+            raise ValueError(f"celery.task_max_retries must be >= 0, got {self.task_max_retries}")
+        if not self.task_retry_backoff_s:
+            raise ValueError("celery.task_retry_backoff_s must be non-empty")
+        for b in self.task_retry_backoff_s:
+            if b < 0:
+                raise ValueError(f"celery.task_retry_backoff_s entries must be >= 0, got {b}")
+        if self.result_ttl_s < 1:
+            raise ValueError(f"celery.result_ttl_s must be >= 1, got {self.result_ttl_s}")
+        return self
+
+
+class ReplayConfig(BaseModel):
+    """Typed view over the ``replay:`` block (F14 replay engine, §5.3/§10.7/§12.1).
+
+    Lives here, not in ``app/replay/`` (standing rule, F01). Read-only: the engine reads persisted
+    (session, driver) laps and streams a growing prefix through F10 ``monitor_stint``. ALL Model-3
+    constants (``baseline_laps`` … ``alert_confirm_laps``) live under ``monitoring:`` and are
+    referenced, never re-declared; playback speed is client-side (Zustand), not server config. Only
+    a DoS cap on the returned laps array is unique to F14.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_replay_laps: int  # DoS guard on the returned laps array (mirrors api.max_request_laps)
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> ReplayConfig:
+        if self.max_replay_laps < 1:
+            raise ValueError(f"replay.max_replay_laps must be >= 1, got {self.max_replay_laps}")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -973,6 +1103,9 @@ class AppConfig(BaseModel):
     corners: CornersConfig | None = None  # F09; None until the corners: block is present
     database: DatabaseConfig | None = None  # F12; None until the database: block is present
     api: ApiConfig | None = None  # F13; None until the api: block is present
+    cache: CacheConfig | None = None  # F14; None until the cache: block is present
+    celery: CeleryConfig | None = None  # F14; None until the celery: block is present
+    replay: ReplayConfig | None = None  # F14; None until the replay: block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:
@@ -1055,6 +1188,17 @@ class AppConfig(BaseModel):
         decomposition at first use instead of at config load. Cross-block, so it lives here."""
         if self.corners is not None and self.features is None:
             raise ValueError("corners: requires the features: block — F09 reads its keys (§5)")
+        return self
+
+    @model_validator(mode="after")
+    def _replay_requires_monitoring_block(self) -> AppConfig:
+        """F14's replay engine drives F10 ``monitor_stint``, which reads the whole ``monitoring:``
+        block (and, transitively, ``features``/``validate``/``normalise`` — already guarded by
+        ``_monitoring_requires_sibling_blocks``). A ``replay:`` block without ``monitoring:`` would
+        crash the engine at first call instead of at config load, so make it a build-breaking
+        ``CONFIG_001`` here (cross-block, spec §5 placement)."""
+        if self.replay is not None and self.monitoring is None:
+            raise ValueError("replay: requires monitoring: — F14 drives F10 monitor_stint")
         return self
 
 

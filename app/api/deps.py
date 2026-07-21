@@ -37,14 +37,17 @@ RecommendFn = Callable[..., Any]
 
 if TYPE_CHECKING:
     import pandas as pd
+    from celery import Celery
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+    from app.cache.redis import RedisCache
     from app.db.breaker import DbCircuitBreaker
     from app.ml.explain import ExplanationResult, ShapExplainer
     from app.ml.inference import ModelHandle, PredictionResult
     from app.ml.stylespace import ProjectionResult, StyleSpaceHandle, StyleSpaceResult
     from app.monitoring.detector import MonitorHandle
     from app.personalisation.engine import PersonalisationHandle, SetupRecommendation
+    from app.tasks.ingest import JobStore
 
 
 @dataclass
@@ -60,6 +63,11 @@ class AppState:
     engine: AsyncEngine | None = None
     session_factory: async_sessionmaker[AsyncSession] | None = None
     db_breaker: DbCircuitBreaker | None = None
+    # F14 platform layer. ``cache`` is non-critical (None/disabled → cache-less). ``celery_app`` +
+    # ``job_store`` back the async ingestion queue (None when the ``celery:`` block is absent).
+    cache: RedisCache | None = None
+    celery_app: Celery | None = None
+    job_store: JobStore | None = None
 
 
 def get_apex_state(request: Request) -> AppState:
@@ -199,6 +207,60 @@ def get_recommender(state: AppState = Depends(get_apex_state)) -> RecommendFn:
     return _run
 
 
+# --- F14 cache / queue / replay providers ------------------------------------------------------
+def get_cache(state: AppState = Depends(get_apex_state)) -> RedisCache | None:
+    """The cache, or ``None`` when unconfigured. NEVER raises — the cache is an optimisation, so a
+    ``None``/disabled/down cache just means the caller computes from source (§4.0-a)."""
+    return state.cache
+
+
+def get_job_store(state: AppState = Depends(get_apex_state)) -> JobStore:
+    """The ingest job store. A ``None`` (no ``celery:`` block) → 503 like any not-configured
+    component."""
+    if state.job_store is None:
+        raise service_unavailable("ingestion queue is not configured")
+    return state.job_store
+
+
+def get_celery(state: AppState = Depends(get_apex_state)) -> Celery:
+    """The Celery app for enqueuing ingestion. A ``None`` → 503 (not configured)."""
+    if state.celery_app is None:
+        raise service_unavailable("ingestion queue is not configured")
+    return state.celery_app
+
+
+def get_monitor_handle(state: AppState = Depends(get_apex_state)) -> MonitorHandle:
+    """The F10 degradation handle the replay engine drives. A ``None`` (not loaded) → 503."""
+    if state.monitor_handle is None:
+        raise service_unavailable("degradation monitor is not loaded")
+    return state.monitor_handle
+
+
+def _build_job_store(config: AppConfig, cache: RedisCache | None) -> JobStore:  # noqa: ARG001
+    """The job store shared by the API + worker. Eager / no-backend-DSN → in-process (single
+    process); a real Redis result-backend DSN → a Redis-backed store visible across processes."""
+    import os
+
+    from app.tasks.ingest import InProcessJobStore, RedisJobStore
+
+    cc = config.celery
+    assert cc is not None  # caller guards
+    dsn = os.environ.get(cc.result_backend_env_var, "").strip()
+    if cc.always_eager or not dsn or dsn.startswith(("memory", "cache+memory")):
+        return InProcessJobStore()
+    import redis.asyncio as aioredis
+
+    # Bound the client's socket ops so a hung Redis backend can never hang enqueue/status; the store
+    # additionally caps each call with asyncio.wait_for and logs faults (never silently swallows).
+    timeout = config.cache.breaker.timeout_s if config.cache is not None else 2.0
+    client = aioredis.Redis.from_url(dsn, socket_timeout=timeout, socket_connect_timeout=timeout)
+    prefix = config.cache.key_prefix if config.cache is not None else "apex"
+    return RedisJobStore(
+        client, key_prefix=prefix, ttl_s=cc.result_ttl_s, timeout_s=timeout,
+        log_path=config.paths.data_quality_log,
+    )
+
+
 def load_state(config: AppConfig) -> AppState:
     """Best-effort startup load of every handle + the DB engine. A failure → ``None`` (logged via
     ``_try_load``; the app boots and ``/health`` reports the outage as 503). Heavy imports are local
@@ -238,5 +300,19 @@ def load_state(config: AppConfig) -> AppState:
     db = _try_load("database", _build_db, log_path=lp)
     if db is not None:
         state.engine, state.session_factory, state.db_breaker = db
+
+    # F14 cache (best-effort; a down/absent Redis degrades — cache is NEVER critical).
+    from app.cache.redis import build_cache
+
+    state.cache = _try_load("cache", lambda: build_cache(config, log_path=lp), log_path=lp)
+
+    # F14 Celery queue + job store (best-effort). Absent celery: block → queue endpoints 503.
+    if config.celery is not None:
+        from app.tasks.celery import make_celery_app
+
+        state.celery_app = _try_load("celery", lambda: make_celery_app(config), log_path=lp)
+        state.job_store = _try_load(
+            "job_store", lambda: _build_job_store(config, state.cache), log_path=lp
+        )
 
     return state

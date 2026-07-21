@@ -14,6 +14,7 @@ from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
     Counter,
+    Gauge,
     Histogram,
     generate_latest,
 )
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from starlette.requests import Request
     from starlette.responses import Response
 
+    from app.cache.redis import CacheResult, RedisCache
     from app.contracts.config import AppConfig
 
 CONTENT_TYPE = CONTENT_TYPE_LATEST
@@ -37,6 +39,17 @@ REQUEST_LATENCY = Histogram(
 )
 PREDICTION_CONFIDENCE = Histogram(
     "apex_prediction_confidence", "Classifier confidence distribution", registry=REGISTRY
+)
+# F14 — cache hit rate (§8.5/§9) + breaker liveness + async queue depth.
+CACHE_HITS = Counter("apex_cache_hits_total", "Redis cache hits", registry=REGISTRY)
+CACHE_MISSES = Counter(
+    "apex_cache_misses_total", "Redis cache misses/degradations", registry=REGISTRY
+)
+CACHE_BREAKER_OPEN = Gauge(
+    "apex_cache_breaker_open", "1 if the Redis cache circuit breaker is open", registry=REGISTRY
+)
+INGEST_JOBS = Counter(
+    "apex_ingest_jobs_total", "Async ingestion jobs by outcome", ["status"], registry=REGISTRY
 )
 
 _LOOPBACK = {"127.0.0.1", "::1", "localhost", "testclient"}
@@ -63,6 +76,25 @@ def instrument(app: FastAPI) -> None:
 def observe_confidence(value: float) -> None:
     """Record one prediction's confidence (called from the /predict route)."""
     PREDICTION_CONFIDENCE.observe(value)
+
+
+def record_cache(result: CacheResult) -> None:
+    """Record one cache interaction (called from the cache-aside path). A hit bumps hits; any miss /
+    degradation bumps misses — together they give the §8.5/§9 cache hit rate."""
+    if result.hit:
+        CACHE_HITS.inc()
+    else:
+        CACHE_MISSES.inc()
+
+
+def record_ingest_job(status: str) -> None:
+    """Record an async ingestion job outcome (enqueued / completed / failed) for queue-depth."""
+    INGEST_JOBS.labels(status=status).inc()
+
+
+def update_cache_breaker_gauge(cache: RedisCache | None) -> None:
+    """Set the cache-breaker gauge at scrape time from the live cache (§8.5)."""
+    CACHE_BREAKER_OPEN.set(1.0 if (cache is not None and cache.breaker_open()) else 0.0)
 
 
 def render() -> bytes:

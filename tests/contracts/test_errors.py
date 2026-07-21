@@ -82,6 +82,10 @@ EXPECTED_CODES: set[str] = {
     "CACHE_MISS",
     "CACHE_UNAVAILABLE",
     "CACHE_DEGRADED",
+    # Queue + replay (F14)
+    "QUEUE_UNAVAILABLE",
+    "INGEST_TASK_FAILED",
+    "REPLAY_PARTIAL",
     # Database / platform (F12, F13)
     "DB_UNAVAILABLE",
     "HEALTH_FAIL",

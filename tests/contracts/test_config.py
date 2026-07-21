@@ -431,3 +431,84 @@ def test_database_block_absent_is_none(valid_config_file: Path) -> None:
     """The minimal foundation config has no database: block -> AppConfig.database is None."""
     cfg = load_config(valid_config_file)
     assert cfg.database is None
+
+
+# --- F13 api: block (ApiConfig) --------------------------------------------------------------
+
+
+def test_repo_config_parses_api_block(repo_config_path: Path) -> None:
+    """F13's api: block validates into the typed ApiConfig sub-model (§8.5)."""
+    cfg = load_config(repo_config_path)
+    assert cfg.api is not None
+    assert cfg.api.version == "0.1.0"
+    assert cfg.api.cors_origins == ["http://localhost:3000"]
+    assert cfg.api.docs_enabled is True
+    assert cfg.api.metrics_internal_only is True
+    assert cfg.api.latency_slo_ms == 500
+    assert cfg.api.request_timeout_s == 10
+    assert cfg.api.min_projection_laps == 5
+    assert cfg.api.max_request_laps == 5000
+    assert cfg.api.max_feature_keys == 128
+    assert cfg.api.allow_credentials is False  # default — F13 has no auth/cookies
+
+
+def test_api_non_positive_min_projection_laps_rejected(
+    repo_config_path: Path, tmp_path: Path
+) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "min_projection_laps: 5", "min_projection_laps: 0"
+    )
+    p = tmp_path / "bad_api_min_laps.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_api_max_request_laps_below_min_rejected(
+    repo_config_path: Path, tmp_path: Path
+) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "max_request_laps: 5000", "max_request_laps: 1"
+    )
+    p = tmp_path / "bad_api_max_laps.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_api_wildcard_origin_with_credentials_rejected(
+    repo_config_path: Path, tmp_path: Path
+) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        'cors_origins: ["http://localhost:3000"]',
+        'cors_origins: ["*"]\n  allow_credentials: true',
+    )
+    p = tmp_path / "bad_cors.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_api_empty_version_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        'version: "0.1.0"', 'version: ""'
+    )
+    p = tmp_path / "bad_api_version.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_api_non_positive_latency_slo_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "latency_slo_ms: 500", "latency_slo_ms: 0"
+    )
+    p = tmp_path / "bad_api_latency.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_api_block_absent_is_none(valid_config_file: Path) -> None:
+    cfg = load_config(valid_config_file)
+    assert cfg.api is None

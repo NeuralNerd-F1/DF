@@ -36,7 +36,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
 | F12 | PostgreSQL schema + Alembic migrations | F00 | 15 | DONE (2026-07-19) |
-| F13 | FastAPI endpoints + Pydantic contracts + health check | F06–F11, F12 | 15–16 | TODO |
+| F13 | FastAPI endpoints + Pydantic contracts + health check | F06–F11, F12 | 15–16 | DONE |
 | F14 | Redis cache + Celery queue + replay engine | F13 | 16 | TODO |
 | F15 | Failsafe evaluation harness (RQ5 — 7 tests) | F13, F14 | 14 | TODO |
 
@@ -65,6 +65,51 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F13 BUILT — 2026-07-21 (master): DONE.** `app/api/` (`main` · `deps` · `errors` · `schemas` ·
+  `metrics` + `routes/{health,predict,drivers,style,metrics,deferred}`) — the FastAPI serving layer
+  (`create_app()` factory + best-effort lifespan + typed exception handlers + CORS + Prometheus)
+  wiring the DONE never-raising handles (F06b/F07/F08/F10/F11) and the F12 persistence seam into the
+  master-§8.5 REST surface, with Pydantic v2 request/response schemas and a **real `/health`** (503
+  iff DB down or any handle not ready; cache non-critical). **10 synchronous endpoints fully
+  implemented; 4 async/upload/replay routes are honest 503 `HEALTH_FAIL` schema-stubs** (F14/F05).
+  **3 new codes `NOT_FOUND`/`FORBIDDEN`/`API_ERROR` (div #29).** New `api:` block + typed `ApiConfig`
+  (adds `min_projection_laps`, config-driving the `<5`-laps floor — no magic numbers). Pins
+  **FastAPI 0.138.1 / starlette 1.3.1 / uvicorn 0.49.0** (venv→pyproject) + **httpx** (dev).
+  **Divergence #30 — `/predict` is stateless** (the spec's optional `predictions`-row write is
+  dropped: a live `{feature_vector, circuit}` POST has no persisted `lap_id`/`predicted_driver_id`
+  for the F12 `predictions` FKs, and fabricating them would violate §1; the table is populated by the
+  F14 batch/replay path). **`failsafe-auditor` run on `app/api/`** (RQ5 evidence): confirmed
+  `/predict` never 5xx on model output, no `.fit()`, no bare excepts, stateless routes provably
+  DB-independent, rollback-before-raise (no partial write), no stack-trace leak, startup degrade
+  always logged. **Findings fixed with regression tests:** DB_UNAVAILABLE + DB_INTEGRITY now log to
+  `data_quality_log`; the `<min_projection_laps` gate logs; `INFERENCE_ERROR` surfaces its distinct
+  code (not collapsed to `HEALTH_FAIL`); `/metrics` rejects a spoofed `X-Forwarded-For` from a direct
+  external peer. **~50 `tests/api` tests** (fake handles via `dependency_overrides` + aiosqlite);
+  full suite green, `ruff` + `mypy app` clean. Consumed by F14/F05 (fill deferred routes), F16–F19
+  (frontend), F15/F20 (RQ5 harness). **Next: F14 (Redis + Celery + replay).**
+- **F13 spec — 2026-07-19 (master):** `specs/F13-api-endpoints.md` written (SPEC WRITTEN). The
+  **HTTP serving layer** — a FastAPI app (`create_app()` factory + lifespan + exception handlers +
+  CORS) wiring the DONE never-raising handles (F06b `predict` · F07 `explain_prediction`/
+  `season_stability` · F08 `project_unknown`/`get_style_space` · F10/F11 health + F11
+  `recommend_setup`/`onboard_unknown`) and the F12 persistence seam (`session_scope`/`check_database`/
+  repository) into the master-§8.5 REST surface, with Pydantic v2 request/response schemas and a
+  **real `/health`** (503 iff DB down or any model handle not ready; **cache is non-critical**).
+  **Primary divergence #28 (endpoint split):** F13 fully implements the 10 synchronous endpoints
+  (`/health`, `/predict`, `/fingerprint/unknown`, the driver reads, `/stylespace`, `/metrics`); the 4
+  async/upload/replay endpoints (`/ingest/session`, `/ingest/status`, `/ingest/upload`, `/replay`) get
+  their Pydantic schemas here but return **503 `HEALTH_FAIL`** until F14 (Redis+Celery+replay) / F05
+  (upload) wire their engines — honest, never faked. **Three new codes (div #29): `NOT_FOUND` (404),
+  `FORBIDDEN` (403 external `/metrics`), `API_ERROR` (500 no-unhandled-exception backstop);** reuses
+  `INVALID_INPUT`/`DB_UNAVAILABLE`/`DB_INTEGRITY`/`HEALTH_FAIL`/`MODEL_NOT_FOUND` + every model's
+  uncertainty state (→ 200 body, `/predict` **never 5xx**). Key design calls: handles are
+  **dependency-injected, loaded best-effort in the lifespan** (no artefacts are committed → a fresh
+  checkout 503s at `/health`; **endpoint tests inject fake handles via `dependency_overrides`**);
+  DB-criticality is per-endpoint (stateless compute stays 200 when DB down; DB-backed reads → 503);
+  DB-backed reads serve the `fingerprints` table (empty→404/[] until an F14/F20 batch populates it).
+  New typed `ApiConfig` block; pins FastAPI 0.138.1 / starlette / uvicorn (venv-only → pyproject) +
+  httpx (dev). Depends on F06–F11 + F12 (all DONE); consumed by F14/F05 (fill deferred routes),
+  F16–F19 (frontend), F15/F20 (RQ5 concurrency + DB-outage). See `specs/F13-api-endpoints.md`
+  §4.0/§6/§10. **Next: build.**
 - **F12 BUILT — 2026-07-19 (master): DONE.** `app/db/` (`base` · `models` · `results` · `breaker` ·
   `session` · `repository` · `health`) + `alembic.ini` + `migrations/` (async `env.py` +
   `0001_initial_schema.py`) + `.env.example`. The 10 §8.4 tables as SQLAlchemy-2.0 async ORM models

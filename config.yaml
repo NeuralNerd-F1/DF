@@ -291,3 +291,19 @@ database:
   statement_timeout_s: 5                   # §8.3 — server-side per-statement cap (Supabase timeout)
   echo: false                              # SQL echo (debug only)
   breaker: { timeout_s: 5, retries: 3, backoff_s: [1, 2, 4], open_after: 3, window_s: 30 }  # §8.3 verbatim
+
+# --- F13 API serving layer (FastAPI + Pydantic + health, §8.5/§8.3/§9) ----------------------------
+# Wires the DONE model handles (F06b/F07/F08/F10/F11) + the F12 DB into the master-§8.5 REST surface.
+# Model artefact paths come from the per-model blocks (classifier/stylespace/monitoring/personalisation)
+# — not re-declared. The DSN stays env-only (F12). Redis cache is F14: cache_connected is reported at
+# /health but is never a critical component (constitution: cache is an optimisation, never a hard dep).
+api:
+  version: "0.1.0"                 # /health version string (single source for the API version)
+  cors_origins: ["http://localhost:3000"]  # §8.5 frontend origins (F16 Next.js dev server)
+  docs_enabled: true               # serve OpenAPI /docs + /redoc
+  metrics_internal_only: true      # §8.5 — /metrics returns 403 to external callers
+  latency_slo_ms: 500              # §11 p95 target (surfaced as a metric; formally timed in F20)
+  request_timeout_s: 10            # per-request wall-clock ceiling (declared; enforced in F14/F20)
+  min_projection_laps: 5           # §8.5 — /fingerprint/unknown: fewer laps cannot be projected (400)
+  max_request_laps: 5000           # §11 DoS guard — reject oversized /fingerprint/unknown payloads (400)
+  max_feature_keys: 128            # §11 DoS guard — reject oversized /predict feature vectors (400)

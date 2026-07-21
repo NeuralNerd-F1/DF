@@ -59,6 +59,15 @@ scipy = "1.18.0"
 sqlalchemy = "2.0.51"
 alembic = "1.18.5"
 psycopg = { version = "3.3.4", extras = ["binary"] }
+# F13 API serving layer (§8.5/§9). FastAPI + Pydantic v2 REST surface + Prometheus /metrics. Present
+# in the venv ahead of pyproject; pinned EXACTLY here for reproducibility (#3) — the master pins
+# "FastAPI 0.111+"; 0.138.1 is the installed cp314-compatible release. uvicorn is the ASGI server
+# (run only; the test suite drives the app in-process via httpx, no live server). Same "the feature
+# adds the dep it first imports" pattern as F01/F06a/F07/F12.
+fastapi = "0.138.1"
+starlette = "1.3.1"
+uvicorn = "0.49.0"
+prometheus-client = "0.25.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -70,6 +79,9 @@ pandas-stubs = "3.0.3.260530"
 # pytest-asyncio (asyncio_mode="auto"). Pinned EXACTLY (#3).
 aiosqlite = "0.22.1"
 pytest-asyncio = "1.4.0"
+# F13 — httpx drives the FastAPI app in-process (TestClient + ASGITransport AsyncClient); no live
+# uvicorn server in tests. Pinned EXACTLY (#3).
+httpx = "0.28.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -85,6 +97,18 @@ src = ["app", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "W"]
+
+# F13 — FastAPI's dependency-injection idiom is `param: T = Depends(...)`, which B008 ("no function
+# call in an argument default") flags. These calls are immutable markers, not mutable defaults — the
+# whitelist is FastAPI's own recommended ruff config.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+]
 
 [tool.mypy]
 python_version = "3.12"

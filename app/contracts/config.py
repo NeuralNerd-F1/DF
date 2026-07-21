@@ -893,6 +893,53 @@ class DatabaseConfig(BaseModel):
         return self
 
 
+class ApiConfig(BaseModel):
+    """Typed view over the ``api:`` block (F13 FastAPI serving layer, §8.5/§8.3/§9).
+
+    Lives here, not in ``app/api/`` (standing rule, F01): the API layer reads its knobs through a
+    strictly-validated model. Holds only F13 constants; the three F13 codes (``NOT_FOUND`` /
+    ``FORBIDDEN`` / ``API_ERROR``) are in ``errors.py``, the model artefact paths come from the
+    per-model blocks, and the DSN stays env-only (F12). Redis is F14 — ``cache_connected`` is
+    reported at ``/health`` but is never a critical component.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: str  # /health version string (single source for the API version)
+    cors_origins: list[str]  # §8.5 frontend origins (F16 Next.js dev server)
+    docs_enabled: bool  # serve OpenAPI /docs + /redoc
+    metrics_internal_only: bool  # §8.5 — /metrics returns 403 to external callers
+    latency_slo_ms: float  # §11 p95 target (surfaced as a PERF_WARN metric; formally timed in F20)
+    request_timeout_s: float  # per-request wall-clock ceiling (declared; enforced in F14/F20)
+    min_projection_laps: int  # §8.5 — /fingerprint/unknown floor: fewer laps -> 400 (no magic num)
+    max_request_laps: int  # §11 DoS guard — /fingerprint/unknown laps above this -> 400
+    max_feature_keys: int  # §11 DoS guard — /predict feature_vector keys above this -> 400
+    allow_credentials: bool = False  # §8.5 CORS — F13 has no auth; credentials off by default
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> ApiConfig:
+        """Fail fast on bad constants so a mis-edit is a load-time ``CONFIG_001`` rather than
+        a surprise at first request (non-negotiable #1)."""
+        if not self.version:
+            raise ValueError("api.version must be non-empty")
+        if self.latency_slo_ms <= 0:
+            raise ValueError(f"api.latency_slo_ms must be > 0, got {self.latency_slo_ms}")
+        if self.request_timeout_s <= 0:
+            raise ValueError(f"api.request_timeout_s must be > 0, got {self.request_timeout_s}")
+        if self.min_projection_laps < 1:
+            raise ValueError(
+                f"api.min_projection_laps must be >= 1, got {self.min_projection_laps}"
+            )
+        if self.max_request_laps < self.min_projection_laps:
+            raise ValueError("api.max_request_laps must be >= min_projection_laps")
+        if self.max_feature_keys < 1:
+            raise ValueError(f"api.max_feature_keys must be >= 1, got {self.max_feature_keys}")
+        # A wildcard origin with credentials is the classic any-origin-with-credentials hole (§8.5).
+        if self.allow_credentials and "*" in self.cors_origins:
+            raise ValueError("api.cors_origins must not contain '*' when allow_credentials is true")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -925,6 +972,7 @@ class AppConfig(BaseModel):
     personalisation: PersonalisationConfig | None = None  # F11; None until the block is present
     corners: CornersConfig | None = None  # F09; None until the corners: block is present
     database: DatabaseConfig | None = None  # F12; None until the database: block is present
+    api: ApiConfig | None = None  # F13; None until the api: block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:

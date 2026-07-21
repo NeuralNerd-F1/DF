@@ -86,6 +86,9 @@ EXPECTED_CODES: set[str] = {
     "DB_UNAVAILABLE",
     "HEALTH_FAIL",
     "DB_INTEGRITY",
+    "NOT_FOUND",
+    "FORBIDDEN",
+    "API_ERROR",
 }
 
 

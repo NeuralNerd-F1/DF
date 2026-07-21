@@ -113,3 +113,6 @@ class ErrorCode(StrEnum):
     DB_UNAVAILABLE = "DB_UNAVAILABLE"  # Postgres breaker open -> API 503
     HEALTH_FAIL = "HEALTH_FAIL"  # critical component down at startup -> 503
     DB_INTEGRITY = "DB_INTEGRITY"  # F12 — constraint / app-invariant violation on write (div #24)
+    NOT_FOUND = "NOT_FOUND"  # F13 — resource (driver/combination) not found -> HTTP 404 (div #29)
+    FORBIDDEN = "FORBIDDEN"  # F13 — /metrics called externally -> HTTP 403 (div #29)
+    API_ERROR = "API_ERROR"  # F13 — unhandled fault -> typed HTTP 500, no raw stack (div #29)

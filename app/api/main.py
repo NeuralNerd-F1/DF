@@ -16,7 +16,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import metrics as metrics_mod
 from app.api.deps import load_state
 from app.api.errors import register_exception_handlers
-from app.api.routes import deferred, drivers, health, metrics, predict, style
+from app.api.routes import (
+    deferred,
+    drivers,
+    health,
+    ingest,
+    metrics,
+    predict,
+    replay,
+    style,
+)
 from app.contracts.config import AppConfig, ConfigError, load_config
 
 
@@ -31,6 +40,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         state = app.state.apex
         if state.engine is not None:
             await state.engine.dispose()
+        if state.cache is not None:  # F14 — release the Redis connection pool (never raises)
+            await state.cache.close()
 
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
@@ -68,5 +79,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(drivers.router)
     app.include_router(style.router)
     app.include_router(metrics.router)
-    app.include_router(deferred.router)
+    app.include_router(ingest.router)  # F14 — POST /ingest/session (202) + GET /ingest/status
+    app.include_router(replay.router)  # F14 — GET /replay/{session_id}/{driver_id}
+    app.include_router(deferred.router)  # only POST /ingest/upload remains (F05)
     return app

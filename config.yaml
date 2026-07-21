@@ -307,3 +307,44 @@ api:
   min_projection_laps: 5           # §8.5 — /fingerprint/unknown: fewer laps cannot be projected (400)
   max_request_laps: 5000           # §11 DoS guard — reject oversized /fingerprint/unknown payloads (400)
   max_feature_keys: 128            # §11 DoS guard — reject oversized /predict feature vectors (400)
+
+# --- F14 Redis cache (an optimisation, never a hard dependency; §8.2/§8.3/§9) ---------------------
+# Accelerates the read endpoints + the model-output path. Redis is NEVER critical: a miss, timeout, or
+# open breaker degrades to a graceful CACHE_MISS and the request serves from source (200). The DSN is a
+# SECRET sourced from url_env_var — never committed here (§9). The breaker mirrors the master §8.3 Redis
+# policy VERBATIM. The offline suite uses a FakeCache and never reads this DSN. The three cache codes
+# (CACHE_MISS/CACHE_UNAVAILABLE/CACHE_DEGRADED) are pre-seeded in errors.py; no new cache code.
+cache:
+  enabled: true                     # false → RedisCache is a no-op (always CACHE_MISS); system unaffected
+  url_env_var: APEX_REDIS_URL       # env var holding the Redis DSN (e.g. rediss://…@upstash)
+  key_prefix: apex                  # namespace root; full key = {prefix}:v{api.version}:{ns}:{id}
+  driver_profile_ttl_s: 3600        # §9 — 1-hour driver-profile TTL (the one master-named TTL)
+  model_output_ttl_s: 3600          # /predict model-output cache TTL (master-silent → mirror 1h, div #34)
+  normalisation_ttl_s: 3600         # normalisation-param cache TTL (master-silent → mirror 1h, div #34)
+  stylespace_ttl_s: 3600            # style-space read TTL (master-silent → mirror 1h, div #34)
+  breaker: { timeout_s: 2, retries: 1, backoff_s: [1], open_after: 2, window_s: 30 }  # §8.3 verbatim
+
+# --- F14 Celery task queue (async ML batch jobs; §8.2/§9) -----------------------------------------
+# Redis is broker AND result backend (§9). The heavy async job is session ingestion; batch SHAP (§6.1)
+# is the other task. Broker/backend DSNs are env-only. Tests set always_eager (no broker/worker). Celery
+# retry/timeout constants are master-SILENT (§8.3 numbers are external-HTTP-dep policy) → chosen here
+# (divergence #35). Two new codes QUEUE_UNAVAILABLE / INGEST_TASK_FAILED (errors.py, div #32).
+celery:
+  broker_url_env_var: APEX_CELERY_BROKER_URL          # Redis broker DSN (env-only)
+  result_backend_env_var: APEX_CELERY_RESULT_BACKEND  # Redis result backend DSN (env-only)
+  task_default_queue: apex
+  worker_concurrency: 4             # worker pool size (design decision)
+  task_soft_time_limit_s: 600       # soft per-task cap → graceful stop (design decision)
+  task_time_limit_s: 900            # hard per-task cap → kill (design decision)
+  task_max_retries: 3               # div #35 — DECLARED; Celery autoretry not wired (fail-fast-loud; F20/ops)
+  task_retry_backoff_s: [5, 15, 30] # div #35 — declared alongside task_max_retries (enforcement deferred)
+  result_ttl_s: 86400               # result-backend retention for the terminal IngestSessionResponse
+  always_eager: false               # tests set true (synchronous, in-process, no broker)
+
+# --- F14 replay engine (Screen 6 Historical Race Replay Monitor; §5.3/§10.7/§12.1) ----------------
+# Read-only: reads persisted (session, driver) laps and streams a growing prefix through F10
+# monitor_stint. All Model-3 constants (baseline_laps, rolling_window, alert_threshold_sd,
+# min_stint_laps [features:], alert_confirm_laps, …) live under monitoring: and are referenced, never
+# re-declared. Playback speed is client-side (Zustand) — not server config. One new code REPLAY_PARTIAL.
+replay:
+  max_replay_laps: 200              # DoS guard on the returned laps array (mirrors api.max_request_laps)

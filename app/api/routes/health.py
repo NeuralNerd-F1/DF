@@ -36,12 +36,18 @@ async def get_health(
         )
         db_connected = db_health.ok
 
+    # Cache (F14 Redis) is reported but NEVER critical (constitution: an optimisation, not a
+    # dependency). None when unconfigured; else a real PING through the breaker.
+    cache_connected: bool | None = None
+    if state.cache is not None:
+        cache_connected = await state.cache.ping()
+
     healthy = db_connected and all(models_loaded.values())
     response.status_code = 200 if healthy else 503
     return HealthResponse(
         status="healthy" if healthy else "unhealthy",
         models_loaded=models_loaded,
         db_connected=db_connected,
-        cache_connected=None,  # Redis is F14 — reported, never critical
+        cache_connected=cache_connected,
         version=state.config.api.version if state.config.api is not None else "unknown",
     )

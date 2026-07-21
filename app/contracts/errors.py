@@ -109,6 +109,11 @@ class ErrorCode(StrEnum):
     CACHE_UNAVAILABLE = "CACHE_UNAVAILABLE"  # Redis unavailable (logged)
     CACHE_DEGRADED = "CACHE_DEGRADED"  # breaker open; writes silently dropped
 
+    # --- Queue + replay (F14) — §8.2, §8.5, §10.7 ---------------------------
+    QUEUE_UNAVAILABLE = "QUEUE_UNAVAILABLE"  # broker/worker down -> enqueue 503 (div #32)
+    INGEST_TASK_FAILED = "INGEST_TASK_FAILED"  # ingestion task faulted -> FAILED (div #32)
+    REPLAY_PARTIAL = "REPLAY_PARTIAL"  # /replay partial lap data -> 206 flag (div #32)
+
     # --- Database / platform (F12, F13) — §8.3, §8.5 ------------------------
     DB_UNAVAILABLE = "DB_UNAVAILABLE"  # Postgres breaker open -> API 503
     HEALTH_FAIL = "HEALTH_FAIL"  # critical component down at startup -> 503

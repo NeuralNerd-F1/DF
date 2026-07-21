@@ -15,4 +15,5 @@ router = APIRouter(tags=["metrics"])
 async def get_metrics(request: Request, state: AppState = Depends(get_apex_state)) -> Response:
     if not metrics_mod.is_internal(request, state.config):
         raise forbidden("metrics endpoint is internal only")
+    metrics_mod.update_cache_breaker_gauge(state.cache)  # F14 — refresh the breaker gauge at scrape
     return Response(content=metrics_mod.render(), media_type=metrics_mod.CONTENT_TYPE)

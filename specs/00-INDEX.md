@@ -37,7 +37,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 |-----|---------|-----------|----|--------|
 | F12 | PostgreSQL schema + Alembic migrations | F00 | 15 | DONE (2026-07-19) |
 | F13 | FastAPI endpoints + Pydantic contracts + health check | F06–F11, F12 | 15–16 | DONE |
-| F14 | Redis cache + Celery queue + replay engine | F13 | 16 | TODO |
+| F14 | Redis cache + Celery queue + replay engine | F13 | 16 | DONE (2026-07-21) |
 | F15 | Failsafe evaluation harness (RQ5 — 7 tests) | F13, F14 | 14 | TODO |
 
 ## Layer 4 — Frontend
@@ -65,6 +65,26 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F14 BUILT — 2026-07-21 (feature/F14-cache-queue-replay): DONE.** `app/cache/redis.py` (`RedisCache`
+  + own §8.3 breaker + cache-aside, never-raising, non-critical), `app/tasks/{ingest,celery}.py`
+  (`run_ingestion` = atomic persist→predict→fingerprint batch over a `LapRecord` contract; Celery app +
+  task shell + `InProcessJobStore`/`RedisJobStore` + `enqueue_ingestion`), `app/replay/engine.py`
+  (read-only growing-prefix replay through F10 `monitor_stint`), `app/api/routes/{ingest,replay}.py` (fill
+  F13's deferred 503s; `deferred.py` shrunk to the F05 `/ingest/upload` stub), real `cache_connected` at
+  `/health` + cache/queue metrics. New `cache:`/`celery:`/`replay:` blocks + typed
+  `CacheConfig`/`CeleryConfig`/`ReplayConfig`; **3 new codes** `QUEUE_UNAVAILABLE`/`INGEST_TASK_FAILED`/
+  `REPLAY_PARTIAL` (div #32). **Divergences #31–#38** (202-async result via `/ingest/status.result`;
+  3 codes; cache-key scheme; non-driver TTLs; Celery retry constants; replay read-only writes-nothing =
+  the batch/ingestion path is the `predictions`/`fingerprints` writer, resolving F13 #30; invalidate-on-write;
+  #38 = the FastF1→F04 `feature_provider` is DI'd, live-wired in F20). Pins **redis 8.0.1 / celery 5.6.3**
+  (+ `fakeredis` dev) — billiard 4.2.4 had a cp314 wheel, F12-psycopg risk did not recur. **~57 tests**
+  (offline: fakeredis + Celery `always_eager` + aiosqlite; a `@pytest.mark.redis`/`@pytest.mark.celery`
+  gate the real infra). **`failsafe-auditor` run**; HIGH findings fixed with regression tests
+  (`RedisJobStore` bounded + logs, not hangs/silent; `predictions` deduped on re-ingest; poisoned cache
+  value logged; queue metric wired). Full suite green, `ruff` + `mypy app` clean. **Deferred (documented):**
+  Celery `autoretry` policy (fail-fast for now), worker-side completed/failed metrics, `session`-token
+  validation. Consumed by F15/F20 (RQ5 cache/concurrency + eval-DB population) + F19 (Screen 6 replay).
+  **Next: F15 (failsafe harness) or F05 (upload).**
 - **F13 BUILT — 2026-07-21 (master): DONE.** `app/api/` (`main` · `deps` · `errors` · `schemas` ·
   `metrics` + `routes/{health,predict,drivers,style,metrics,deferred}`) — the FastAPI serving layer
   (`create_app()` factory + best-effort lifespan + typed exception handlers + CORS + Prometheus)

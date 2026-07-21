@@ -105,6 +105,17 @@ def register_exception_handlers(app: FastAPI) -> None:
         _log_fault(request, ErrorCode.DB_INTEGRITY, exc)  # §6 "Logged? yes -> data_quality_log"
         return _json(409, ErrorCode.DB_INTEGRITY, "Record rejected: integrity constraint.")
 
+    from app.tasks.celery import QueueUnavailableError
+
+    @app.exception_handler(QueueUnavailableError)
+    async def _handle_queue_unavailable(
+        request: Request, exc: QueueUnavailableError
+    ) -> JSONResponse:
+        # §8.2 (F14): the Celery broker/worker is unreachable → the batch is refused loudly (never
+        # silently dropped). 503 QUEUE_UNAVAILABLE, logged.
+        _log_fault(request, ErrorCode.QUEUE_UNAVAILABLE, exc)
+        return _json(503, ErrorCode.QUEUE_UNAVAILABLE, "Ingestion queue temporarily unavailable.")
+
     @app.exception_handler(Exception)
     async def _handle_unhandled(request: Request, exc: Exception) -> JSONResponse:
         # The "no unhandled exceptions" backstop (§11): log best-effort, return a typed 500.

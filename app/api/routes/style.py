@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import uuid
 from contextlib import suppress
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import pandas as pd
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api import metrics as metrics_mod
 from app.api.deps import (
     AppState,
     ProjectFn,
     StyleSpaceFn,
     get_apex_state,
+    get_cache,
     get_db_session,
     get_projector,
     get_stylespace_fn,
@@ -30,6 +32,7 @@ from app.api.schemas import (
     UnknownFingerprintRequest,
     UnknownFingerprintResponse,
 )
+from app.cache.redis import RedisCache
 from app.contracts.errors import ErrorCode
 from app.contracts.logging import log_data_quality
 from app.db import models
@@ -151,16 +154,38 @@ async def compare(
     )
 
 
+_DEFAULT_TTL_S = 3600
+
+
 @router.get("/stylespace", response_model=StyleSpaceResponse)
-async def stylespace(style_fn: StyleSpaceFn = Depends(get_stylespace_fn)) -> StyleSpaceResponse:
-    space = style_fn()
-    drivers = [
-        StyleSpaceDriver(
-            id=name,
-            code=name,
-            coords_2d=space.coords_2d.get(name, []),
-            coords_5d=space.coords_5d.get(name, []),
+async def stylespace(
+    style_fn: StyleSpaceFn = Depends(get_stylespace_fn),
+    state: AppState = Depends(get_apex_state),
+    cache: RedisCache | None = Depends(get_cache),
+) -> StyleSpaceResponse:
+    def _compute() -> dict[str, Any]:
+        space = style_fn()
+        drivers = [
+            StyleSpaceDriver(
+                id=name,
+                code=name,
+                coords_2d=space.coords_2d.get(name, []),
+                coords_5d=space.coords_5d.get(name, []),
+            )
+            for name in space.drivers
+        ]
+        return StyleSpaceResponse(drivers=drivers, unknown_drivers=[]).model_dump(mode="json")
+
+    # Style-space read cache (§8.2 "driver profile cache"). Transparent — a miss still computes.
+    ttl = state.config.cache.stylespace_ttl_s if state.config.cache is not None else _DEFAULT_TTL_S
+    if cache is not None:
+
+        async def _acompute() -> dict[str, Any]:
+            return _compute()
+
+        payload, cres = await cache.get_or_compute(
+            namespace="stylespace", ident="all", ttl_s=ttl, compute=_acompute
         )
-        for name in space.drivers
-    ]
-    return StyleSpaceResponse(drivers=drivers, unknown_drivers=[])
+        metrics_mod.record_cache(cres)
+        return StyleSpaceResponse.model_validate(payload)
+    return StyleSpaceResponse.model_validate(_compute())

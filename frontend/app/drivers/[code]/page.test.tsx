@@ -109,4 +109,14 @@ describe('DriverProfilePage (Screen 2)', () => {
     expect(screen.getByTestId('error-card')).toBeInTheDocument();
     expect(screen.getByTestId('error-code')).toHaveTextContent('NOT_FOUND');
   });
+
+  it('shows an ErrorCard (not "no data") when setup is a real outage — HIGH-3', async () => {
+    (getFingerprint as Mock).mockResolvedValue(fingerprint);
+    (getDrivers as Mock).mockResolvedValue(drivers);
+    (getSetup as Mock).mockResolvedValue({ ok: false, code: 'DB_UNAVAILABLE', detail: 'db down', status: 503 });
+
+    render(await DriverProfilePage({ params: { code: 'VER' } }));
+    expect(screen.getByTestId('error-code')).toHaveTextContent('DB_UNAVAILABLE');
+    expect(screen.queryByText(/No setup data/)).toBeNull();
+  });
 });

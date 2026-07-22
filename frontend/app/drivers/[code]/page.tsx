@@ -13,14 +13,16 @@ import { DEFAULT_CIRCUIT } from '@/lib/design/circuits';
 
 export const dynamic = 'force-dynamic';
 
-// Field mean per domain over the 8 drivers (F16 spec div #51) — client-derived display value.
+// Field mean per domain over the 8 drivers (F16 spec div #51) — client-derived display value. A
+// domain with NO numeric data is OMITTED (not defaulted to 0) so the tooltip hides its mean line
+// rather than showing a fabricated "field mean 0.00" (failsafe MEDIUM).
 function fieldMeanOf(drivers: DriverSummary[]): Record<string, number> {
   const mean: Record<string, number> = {};
   for (const k of RADAR_DOMAINS) {
     const xs = drivers
       .map((d) => d.radar_values?.[k])
       .filter((v): v is number => typeof v === 'number');
-    mean[k] = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+    if (xs.length) mean[k] = xs.reduce((a, b) => a + b, 0) / xs.length;
   }
   return mean;
 }
@@ -46,7 +48,10 @@ export default async function DriverProfilePage({ params }: { params: { code: st
     );
   }
 
-  const fieldMean = driversRes.ok ? fieldMeanOf(driversRes.data) : undefined;
+  // Only compute a field mean when there is a real, non-empty field to average (failsafe MEDIUM):
+  // otherwise the tooltip shows no mean line rather than a fabricated one.
+  const fieldMean =
+    driversRes.ok && driversRes.data.length > 0 ? fieldMeanOf(driversRes.data) : undefined;
 
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -54,6 +59,11 @@ export default async function DriverProfilePage({ params }: { params: { code: st
         ← Command Centre
       </Link>
       <h1 className="mb-4 mt-2 font-mono text-2xl text-text-primary">{code}</h1>
+      {fp.flags.includes('STALE_DATA') ? (
+        <p data-testid="stale" className="mb-2 text-[10px] text-accent-deep">
+          Showing cached data.
+        </p>
+      ) : null}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Left — the data-backed panel */}
         <div className="space-y-4">
@@ -61,8 +71,11 @@ export default async function DriverProfilePage({ params }: { params: { code: st
           <NlDescription text={fp.data.nl_description ?? ''} />
           {setupRes.ok ? (
             <SetupPanel setup={setupRes.data} />
-          ) : (
+          ) : setupRes.code === 'NOT_FOUND' ? (
             <p className="text-xs text-text-secondary">No setup data for {DEFAULT_CIRCUIT}.</p>
+          ) : (
+            // A real outage (5xx/DB/network) is an error, NOT honest absence (failsafe HIGH-3).
+            <PageError code={setupRes.code} detail={setupRes.detail} />
           )}
         </div>
         {/* Right — multi-season + honest-unavailable per-lap / corner views */}

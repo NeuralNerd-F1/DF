@@ -43,10 +43,11 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 4 — Frontend
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F16 | Design system + Screen 1 Command Centre + Screen 2 Driver Profile | F13 | 17 | TODO |
-| F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16 | 18 | TODO |
-| F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16 | 18 | TODO |
-| F19 | Screen 6 Historical Replay Monitor | F14, F16 | 19 | TODO |
+| F16a | Design system + Screen 1 Command Centre | F13 | 17 | DONE (2026-07-22) |
+| F16b | Screen 2 Driver Profile | F13, F16a | 18 | SPEC WRITTEN |
+| F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | TODO |
+| F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | TODO |
+| F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | TODO |
 
 ## Layer 5 — Evaluation & writing
 | ID  | Feature | Depends on | Wk | Status |
@@ -65,6 +66,52 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F16 SPLIT + F16a BUILT — 2026-07-22 (worktree-F16-frontend-spec): F16a merge-ready, F16b SPEC WRITTEN.**
+  F16 proved too large for one session (the split the spec §10 documented as a contingency), so it is split
+  **F16a** (design system + Screen 1 Command Centre — BUILT) / **F16b** (Screen 2 Driver Profile — the
+  remaining §4.4 work). The combined spec `specs/F16-design-system-and-screens.md` stays the source; its
+  §12 "Split" header maps which sections are F16a (done) vs F16b (remaining) — the F06 precedent (combined
+  spec kept). **F16a delivered** on `worktree-F16-frontend-spec`: a greenfield **`frontend/`** tree
+  (Next.js 14.2.35 / TS-strict / D3 7 / Zustand 4 / Tailwind 3), the master §10.1 **design system** (tokens
+  in `tailwind.config.js`; `ds/` primitives — Skeleton=telemetry-wave-not-spinner, ErrorCard=red-border+
+  monospace-code+Retry, ConfidenceBar=colour-from-state-not-0.65/0.85, ConfidenceBadge, EmptyState, Card,
+  Button, Tabs), a **validated API client** (TS types + `ErrorCode` generated from a committed
+  `openapi.snapshot.json`; zod runtime validators; never-throwing `fetchApi`→4-state `ApiResult`; `UI_*`
+  client codes), the **`FingerprintRadar`** D3 chart, and **Screen 1 Command Centre** (SSR `/drivers`→grid;
+  per-driver stability + compatibility proxy [mean setup reliability, div #47; 404→"—"]; compat/stability
+  sort; degradation sort disabled+tooltip div #50; LOW_CONFIDENCE card treatment; hover top-3; empty/error
+  states). **Backend seam `DriverSummary.team`** (div #47) + a **pytest OpenAPI drift guard** (frontend
+  contract). **Gates:** `tsc` + ESLint clean, **31 vitest tests**, `next build` compiles, `tests/api` +
+  `tests/contracts` green. **Divergences #45–#52** + two new build-time findings: known-driver feed carries
+  **no per-driver `confidence_state`** (LOW_CONFIDENCE treatment built+tested but renders confident live —
+  honest, not faked) and **no `/circuits` endpoint** (static reference-data list, held-out circuits omitted).
+  **Also fixed + merged to master a real repo bug (`dc8ad14`):** `.gitignore` `cache/` swallowed F14's
+  `app/cache/` source so master didn't import from a clean checkout. **F16b next** = Screen 2 (ProfileRadar
+  tooltips + field-mean, season switcher+ghost, multi-season overlay+JS-divergence, SHAP beeswarm [div #48],
+  corner tabs [div #49], NL description, 10-param setup panel) + Playwright + the review gates.
+- **F16 spec — 2026-07-22 (worktree-F16-frontend-spec): SPEC WRITTEN.** `specs/F16-design-system-and-screens.md`
+  — the **first frontend feature**: the master §10.1 **design system** in Tailwind (dark-only F1-TV/MoTeC;
+  verbatim tokens `#0D0D0D`/`#E8002D`/`#C0392B`/`#F0F0F0`/`#888888`/`#1A1A1A`/`#2B2B2B`, Inter + JetBrains
+  Mono, `easeCubicInOut`, skeleton-not-spinner loading, red-left-border error) + **Screen 1 Command Centre**
+  (§10.2 — 8-driver grid of animated 6-axis fingerprint radars, 80ms/800ms bloom, circuit selector, hover
+  top-3 SHAP, LOW_CONFIDENCE dashed/badge/reduced-opacity, sort, click-through) + **Screen 2 Driver Profile**
+  (§10.3 — large radar, season switcher w/ 2s ghost, multi-season overlay + JS divergence, SHAP beeswarm,
+  corner tabs, NL description, 10-param setup panel w/ WIDE→range-bar). Greenfield **`frontend/`** tree:
+  Next.js 14 App Router / TS-strict / D3 7 / Zustand 4 / Tailwind 3 (Three.js is F17, not here); Vitest + RTL
+  + Playwright + MSW offline tests. **The frontend embodiment of the non-negotiables:** four explicit
+  data-fetch states (loading/empty/error/success) via a typed `ApiResult` union — **no silent failure**;
+  confidence colour driven by the backend-resolved `confidence_state`, **never a re-derived 0.65/0.85** gate
+  (div #46); **types + `ErrorCode` generated from `/openapi.json`** (no hardcoded strings) + a pytest drift
+  guard; deterministic (seeded) D3 layout (reproducibility). **No new backend error code, no `config.yaml`
+  block** (div #45) — the only new "codes" are frontend-local `UI_NETWORK`/`UI_TIMEOUT`/`UI_SCHEMA_MISMATCH`
+  for pre-API failures. **The honesty landmine:** four master UI elements have **no** F13 endpoint —
+  compatibility score (→ setup-reliability **proxy**, div #47), per-lap SHAP **beeswarm** (div #48), corner
+  sub-fingerprint **tabs** (F09 artefact, not served, div #49), degradation-sensitivity **sort** (disabled,
+  div #50); each is derived honestly or rendered as an **explicit unavailable state — never fabricated**
+  (constitution #1), with a named additive-seam follow-up. **Divergences #45–#52.** Depends on F13 (DONE);
+  consumed by F17–F19 (reuse design system + charts + API client) + F20/F21. **Contingency if too big for
+  one session:** split F16a (scaffold + design system + Command Centre) / F16b (Driver Profile), per the
+  F03a/b · F06a/b · F13-split precedent. **Next: build F16.**
 - **F15 BUILT — 2026-07-22 (feature/F15-failsafe-harness): DONE.** `app/eval/failsafe.py` (the 7 `rq5_*`
   §11.4 failsafe tests + `run_failsafe_suite` → content-hashed RQ5 results table + `render_table`) +
   `app/eval/harness.py` (self-contained app-assembly + fakes + fault-injection + `measure_post`/`p95`) — the

@@ -98,6 +98,9 @@ class PredictResponse(ApiModel):
 class DriverSummary(ApiModel):
     id: str
     code: str
+    # F16 seam: the Command Centre card renders a team-colour bar keyed on the driver's team
+    # (master §10.2). The team lives on the F12 ``drivers`` table; unknown drivers have none.
+    team: str | None = None
     radar_values: dict[str, float] = Field(default_factory=dict)
 
 

@@ -57,7 +57,10 @@ async def list_drivers(session: AsyncSession = Depends(get_db_session)) -> list[
     for driver, fp in rows:
         # ascending order → the last write per code wins = latest (season, circuit), deterministic
         out[driver.code] = DriverSummary(
-            id=driver.code, code=driver.code, radar_values=dict(fp.radar_values or {})
+            id=driver.code,
+            code=driver.code,
+            team=driver.team,
+            radar_values=dict(fp.radar_values or {}),
         )
     return list(out.values())
 

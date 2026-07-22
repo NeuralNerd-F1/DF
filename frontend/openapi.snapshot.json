@@ -1,0 +1,1626 @@
+{
+  "components": {
+    "schemas": {
+      "CompareResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "compatibility_delta": {
+            "title": "Compatibility Delta",
+            "type": "number"
+          },
+          "delta_shap": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Delta Shap",
+            "type": "object"
+          },
+          "driver_1_radar": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Driver 1 Radar",
+            "type": "object"
+          },
+          "driver_2_radar": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Driver 2 Radar",
+            "type": "object"
+          },
+          "most_distinctive_features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Most Distinctive Features",
+            "type": "array"
+          }
+        },
+        "required": [
+          "driver_1_radar",
+          "driver_2_radar",
+          "delta_shap",
+          "most_distinctive_features",
+          "compatibility_delta"
+        ],
+        "title": "CompareResponse",
+        "type": "object"
+      },
+      "ConfidenceState": {
+        "description": "Explicit confidence / uncertainty state for a classifier prediction.\n\nMirrors the ``predictions.confidence_state`` column (master spec \u00a78.4) and adds\n``OUT_OF_DISTRIBUTION`` \u2014 the style-space state (\u00a75.2) that the project\nconstitution lists as a mandatory uncertainty state (non-negotiable #4). The\nclassifier never returns a forced label below the confidence gate; it returns\none of these states instead.",
+        "enum": [
+          "HIGH",
+          "MEDIUM",
+          "LOW_CONFIDENCE",
+          "AMBIGUOUS",
+          "OUT_OF_DISTRIBUTION"
+        ],
+        "title": "ConfidenceState",
+        "type": "string"
+      },
+      "DataQualitySchema": {
+        "additionalProperties": false,
+        "properties": {
+          "imputed_features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Imputed Features",
+            "type": "array"
+          },
+          "n_laps_rejected": {
+            "title": "N Laps Rejected",
+            "type": "integer"
+          },
+          "n_laps_used": {
+            "title": "N Laps Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n_laps_used",
+          "n_laps_rejected"
+        ],
+        "title": "DataQualitySchema",
+        "type": "object"
+      },
+      "DriverSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "radar_values": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Radar Values",
+            "type": "object"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team"
+          }
+        },
+        "required": [
+          "id",
+          "code"
+        ],
+        "title": "DriverSummary",
+        "type": "object"
+      },
+      "ErrorCode": {
+        "description": "Every named error code, flag, fallback, and warning in the APEX spec.",
+        "enum": [
+          "OK",
+          "CONFIG_001",
+          "DATA_QUALITY_LOG_UNWRITABLE",
+          "DATA_001",
+          "STALE_DATA",
+          "DATA_SOURCE_UNAVAILABLE",
+          "COMPOUND_UNKNOWN",
+          "COMPOUND_FALLBACK",
+          "DERIVED_AGE",
+          "CACHE_CORRUPT",
+          "TRACK_STATUS_UNAVAILABLE",
+          "LAP_001",
+          "LAP_002",
+          "LAP_003",
+          "LAP_INTERP",
+          "LAP_004",
+          "LAP_005",
+          "LAP_006",
+          "LAP_PARTIAL",
+          "COMBO_001",
+          "DATA_INSUFFICIENT",
+          "ORPHAN_SAMPLES",
+          "VALIDATION_ERROR",
+          "FEATURE_001",
+          "LAP_NULL_EXCESS",
+          "IMPUTED",
+          "CORNER_001",
+          "UPLOAD_001",
+          "UPLOAD_002",
+          "UPLOAD_003",
+          "UPLOAD_004",
+          "RESAMPLED",
+          "LOW_CONFIDENCE",
+          "AMBIGUOUS",
+          "MODEL_NOT_FOUND",
+          "INVALID_INPUT",
+          "PERF_WARN",
+          "INFERENCE_ERROR",
+          "TRAIN_LEAKAGE",
+          "MODEL_TRAINING_FAILED",
+          "SPARSE_PROJECTION",
+          "OUT_OF_DISTRIBUTION",
+          "UMAP_FALLBACK",
+          "PROJECTION_FALLBACK",
+          "MONITOR_INACTIVE",
+          "BASELINE_INSUFFICIENT",
+          "FALLBACK_THRESHOLD",
+          "DEGRADED_QUALITY",
+          "DISTANCE_NAN",
+          "MONITOR_ERROR",
+          "SHAP_UNAVAILABLE",
+          "SHAP_CONSISTENCY_WARN",
+          "CONSTRAINT_CLIPPED",
+          "CONSISTENCY_WARNING",
+          "CIRCUIT_OVERRIDE_MONACO",
+          "WIDE_CONFIDENCE",
+          "NORMALISATION_FALLBACK",
+          "CACHE_MISS",
+          "CACHE_UNAVAILABLE",
+          "CACHE_DEGRADED",
+          "QUEUE_UNAVAILABLE",
+          "INGEST_TASK_FAILED",
+          "REPLAY_PARTIAL",
+          "DB_UNAVAILABLE",
+          "HEALTH_FAIL",
+          "DB_INTEGRITY",
+          "NOT_FOUND",
+          "FORBIDDEN",
+          "API_ERROR"
+        ],
+        "title": "ErrorCode",
+        "type": "string"
+      },
+      "FingerprintResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "driver_id": {
+            "title": "Driver Id",
+            "type": "string"
+          },
+          "nl_description": {
+            "default": "",
+            "title": "Nl Description",
+            "type": "string"
+          },
+          "shap_radar": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Shap Radar",
+            "type": "object"
+          },
+          "stability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StabilityResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vector_5d": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Vector 5D",
+            "type": "array"
+          }
+        },
+        "required": [
+          "driver_id",
+          "vector_5d"
+        ],
+        "title": "FingerprintResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_connected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache Connected"
+          },
+          "db_connected": {
+            "title": "Db Connected",
+            "type": "boolean"
+          },
+          "models_loaded": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Models Loaded",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "healthy",
+              "unhealthy"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "models_loaded",
+          "db_connected",
+          "version"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "IngestSessionRequest": {
+        "additionalProperties": false,
+        "description": "POST /ingest/session body \u2014 the FastF1 session coordinates to ingest async (\u00a78.5).",
+        "properties": {
+          "event": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Event",
+            "type": "string"
+          },
+          "session": {
+            "default": "R",
+            "maxLength": 8,
+            "minLength": 1,
+            "title": "Session",
+            "type": "string"
+          },
+          "year": {
+            "maximum": 2100.0,
+            "minimum": 1950.0,
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "event"
+        ],
+        "title": "IngestSessionRequest",
+        "type": "object"
+      },
+      "IngestSessionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "laps_accepted": {
+            "title": "Laps Accepted",
+            "type": "integer"
+          },
+          "laps_rejected": {
+            "title": "Laps Rejected",
+            "type": "integer"
+          },
+          "quality_report": {
+            "additionalProperties": true,
+            "title": "Quality Report",
+            "type": "object"
+          },
+          "rejection_summary": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Rejection Summary",
+            "type": "object"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "laps_accepted",
+          "laps_rejected"
+        ],
+        "title": "IngestSessionResponse",
+        "type": "object"
+      },
+      "IngestStatusResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "progress": {
+            "title": "Progress",
+            "type": "number"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "PROCESSING",
+              "COMPLETE",
+              "FAILED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "progress"
+        ],
+        "title": "IngestStatusResponse",
+        "type": "object"
+      },
+      "NeighbourSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "cosine_similarity": {
+            "title": "Cosine Similarity",
+            "type": "number"
+          },
+          "distance": {
+            "title": "Distance",
+            "type": "number"
+          },
+          "driver": {
+            "title": "Driver",
+            "type": "string"
+          }
+        },
+        "required": [
+          "driver",
+          "cosine_similarity",
+          "distance"
+        ],
+        "title": "NeighbourSchema",
+        "type": "object"
+      },
+      "PredictRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "circuit": {
+            "title": "Circuit",
+            "type": "string"
+          },
+          "feature_vector": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Feature Vector",
+            "type": "object"
+          }
+        },
+        "required": [
+          "feature_vector",
+          "circuit"
+        ],
+        "title": "PredictRequest",
+        "type": "object"
+      },
+      "PredictResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfidenceState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "predicted_driver": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicted Driver"
+          },
+          "shap_available": {
+            "default": false,
+            "title": "Shap Available",
+            "type": "boolean"
+          },
+          "shap_values": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shap Values"
+          },
+          "top_3": {
+            "items": {
+              "$ref": "#/components/schemas/TopK"
+            },
+            "title": "Top 3",
+            "type": "array"
+          }
+        },
+        "required": [
+          "predicted_driver",
+          "confidence",
+          "confidence_state",
+          "model_version"
+        ],
+        "title": "PredictResponse",
+        "type": "object"
+      },
+      "ReplayLap": {
+        "additionalProperties": false,
+        "properties": {
+          "alert_state": {
+            "title": "Alert State",
+            "type": "string"
+          },
+          "deviation_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deviation Score"
+          },
+          "feature_vector": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Feature Vector",
+            "type": "object"
+          },
+          "fingerprint_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingerprint Snapshot"
+          },
+          "lap_number": {
+            "title": "Lap Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lap_number",
+          "feature_vector",
+          "alert_state"
+        ],
+        "title": "ReplayLap",
+        "type": "object"
+      },
+      "ReplayResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "laps": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayLap"
+            },
+            "title": "Laps",
+            "type": "array"
+          }
+        },
+        "title": "ReplayResponse",
+        "type": "object"
+      },
+      "SetupParameterSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "constraint_flags": {
+            "items": {
+              "$ref": "#/components/schemas/ErrorCode"
+            },
+            "title": "Constraint Flags",
+            "type": "array"
+          },
+          "fia_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fia Max"
+          },
+          "fia_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fia Min"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rating": {
+            "title": "Rating",
+            "type": "string"
+          },
+          "shap_available": {
+            "default": false,
+            "title": "Shap Available",
+            "type": "boolean"
+          },
+          "shap_top_features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shap Top Features",
+            "type": "array"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "value_range": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Range"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "confidence",
+          "rating",
+          "unit"
+        ],
+        "title": "SetupParameterSchema",
+        "type": "object"
+      },
+      "SetupResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "approximation_disclaimer": {
+            "title": "Approximation Disclaimer",
+            "type": "string"
+          },
+          "circuit": {
+            "title": "Circuit",
+            "type": "string"
+          },
+          "consistency_warning": {
+            "default": false,
+            "title": "Consistency Warning",
+            "type": "boolean"
+          },
+          "driver": {
+            "title": "Driver",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "monaco_override": {
+            "default": false,
+            "title": "Monaco Override",
+            "type": "boolean"
+          },
+          "parameters": {
+            "items": {
+              "$ref": "#/components/schemas/SetupParameterSchema"
+            },
+            "title": "Parameters",
+            "type": "array"
+          }
+        },
+        "required": [
+          "driver",
+          "circuit",
+          "parameters",
+          "approximation_disclaimer",
+          "model_version"
+        ],
+        "title": "SetupResponse",
+        "type": "object"
+      },
+      "StabilityResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "driver_id": {
+            "title": "Driver Id",
+            "type": "string"
+          },
+          "pairwise_js": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Pairwise Js",
+            "type": "object"
+          },
+          "partial": {
+            "title": "Partial",
+            "type": "boolean"
+          },
+          "seasons_available": {
+            "title": "Seasons Available",
+            "type": "integer"
+          },
+          "stability_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stability Score"
+          }
+        },
+        "required": [
+          "driver_id",
+          "seasons_available",
+          "partial"
+        ],
+        "title": "StabilityResponse",
+        "type": "object"
+      },
+      "StyleSpaceDriver": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "coords_2d": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Coords 2D",
+            "type": "array"
+          },
+          "coords_5d": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Coords 5D",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "season": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "coords_2d",
+          "coords_5d"
+        ],
+        "title": "StyleSpaceDriver",
+        "type": "object"
+      },
+      "StyleSpaceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "drivers": {
+            "items": {
+              "$ref": "#/components/schemas/StyleSpaceDriver"
+            },
+            "title": "Drivers",
+            "type": "array"
+          },
+          "unknown_drivers": {
+            "items": {
+              "$ref": "#/components/schemas/StyleSpaceDriver"
+            },
+            "title": "Unknown Drivers",
+            "type": "array"
+          }
+        },
+        "title": "StyleSpaceResponse",
+        "type": "object"
+      },
+      "TopK": {
+        "additionalProperties": false,
+        "properties": {
+          "driver": {
+            "title": "Driver",
+            "type": "string"
+          },
+          "probability": {
+            "title": "Probability",
+            "type": "number"
+          }
+        },
+        "required": [
+          "driver",
+          "probability"
+        ],
+        "title": "TopK",
+        "type": "object"
+      },
+      "UnknownFingerprintRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "circuit": {
+            "title": "Circuit",
+            "type": "string"
+          },
+          "circuit_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Circuit Type"
+          },
+          "laps": {
+            "items": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "title": "Laps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "laps",
+          "circuit"
+        ],
+        "title": "UnknownFingerprintRequest",
+        "type": "object"
+      },
+      "UnknownFingerprintResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfidenceState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "data_quality": {
+            "$ref": "#/components/schemas/DataQualitySchema"
+          },
+          "fingerprint_id": {
+            "title": "Fingerprint Id",
+            "type": "string"
+          },
+          "fingerprint_vector": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingerprint Vector"
+          },
+          "nearest_neighbours": {
+            "items": {
+              "$ref": "#/components/schemas/NeighbourSchema"
+            },
+            "title": "Nearest Neighbours",
+            "type": "array"
+          },
+          "radar_values": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Radar Values",
+            "type": "object"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Risk Flags",
+            "type": "array"
+          },
+          "style_description": {
+            "default": "",
+            "title": "Style Description",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ErrorCode"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fingerprint_id",
+          "fingerprint_vector",
+          "data_quality"
+        ],
+        "title": "UnknownFingerprintResponse",
+        "type": "object"
+      },
+      "UploadResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "cleaning_report": {
+            "additionalProperties": true,
+            "title": "Cleaning Report",
+            "type": "object"
+          },
+          "laps_accepted": {
+            "title": "Laps Accepted",
+            "type": "integer"
+          },
+          "laps_rejected": {
+            "title": "Laps Rejected",
+            "type": "integer"
+          },
+          "upload_id": {
+            "title": "Upload Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "upload_id",
+          "laps_accepted",
+          "laps_rejected"
+        ],
+        "title": "UploadResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "APEX API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/compare/{id1}/{id2}": {
+      "get": {
+        "operationId": "compare_compare__id1___id2__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id1",
+            "required": true,
+            "schema": {
+              "title": "Id1",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id2",
+            "required": true,
+            "schema": {
+              "title": "Id2",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompareResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compare",
+        "tags": [
+          "style"
+        ]
+      }
+    },
+    "/drivers": {
+      "get": {
+        "description": "200 always \u2014 an empty array if the fingerprints table is empty (\u00a78.5). Deterministic: each\ndriver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (\u00a711).",
+        "operationId": "list_drivers_drivers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DriverSummary"
+                  },
+                  "title": "Response List Drivers Drivers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Drivers",
+        "tags": [
+          "drivers"
+        ]
+      }
+    },
+    "/drivers/{driver_id}/fingerprint": {
+      "get": {
+        "operationId": "driver_fingerprint_drivers__driver_id__fingerprint_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "driver_id",
+            "required": true,
+            "schema": {
+              "title": "Driver Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FingerprintResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Driver Fingerprint",
+        "tags": [
+          "drivers"
+        ]
+      }
+    },
+    "/drivers/{driver_id}/setup/{circuit_id}": {
+      "get": {
+        "operationId": "driver_setup_drivers__driver_id__setup__circuit_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "driver_id",
+            "required": true,
+            "schema": {
+              "title": "Driver Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "circuit_id",
+            "required": true,
+            "schema": {
+              "title": "Circuit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Driver Setup",
+        "tags": [
+          "drivers"
+        ]
+      }
+    },
+    "/drivers/{driver_id}/stability": {
+      "get": {
+        "operationId": "driver_stability_drivers__driver_id__stability_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "driver_id",
+            "required": true,
+            "schema": {
+              "title": "Driver Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Driver Stability",
+        "tags": [
+          "drivers"
+        ]
+      }
+    },
+    "/fingerprint/unknown": {
+      "post": {
+        "operationId": "fingerprint_unknown_fingerprint_unknown_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnknownFingerprintRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownFingerprintResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fingerprint Unknown",
+        "tags": [
+          "style"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Report DB + model-handle status. Critical = DB connected AND every model ready; cache\n(Redis, F14) is reported but never critical. Any critical failure \u2192 HTTP 503.",
+        "operationId": "get_health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/ingest/session": {
+      "post": {
+        "description": "Enqueue an async session ingestion \u2192 202 Accepted (\u00a78.5). Counts are *pending* placeholders;\npoll ``/ingest/status/{session_id}`` for progress and the terminal quality report.",
+        "operationId": "ingest_session_ingest_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Session",
+        "tags": [
+          "ingest"
+        ]
+      }
+    },
+    "/ingest/status/{session_id}": {
+      "get": {
+        "description": "Report a job's status (\u00a78.5). 404 if unknown. On COMPLETE, ``result`` carries the terminal\nreport (the \u00a78.5 counts + quality_report) so the async response fulfils the master contract.",
+        "operationId": "ingest_status_ingest_status__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Status",
+        "tags": [
+          "ingest"
+        ]
+      }
+    },
+    "/ingest/upload": {
+      "post": {
+        "operationId": "ingest_upload_ingest_upload_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ingest Upload",
+        "tags": [
+          "deferred"
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "get_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Metrics",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/predict": {
+      "post": {
+        "operationId": "post_predict_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Predict",
+        "tags": [
+          "predict"
+        ]
+      }
+    },
+    "/replay/{session_id}/{driver_id}": {
+      "get": {
+        "description": "Replay a persisted stint through the degradation detector (\u00a710.7). 200 full \u00b7 206 partial \u00b7\n404 unknown.",
+        "operationId": "replay_replay__session_id___driver_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "driver_id",
+            "required": true,
+            "schema": {
+              "title": "Driver Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay",
+        "tags": [
+          "replay"
+        ]
+      }
+    },
+    "/stylespace": {
+      "get": {
+        "operationId": "stylespace_stylespace_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StyleSpaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stylespace",
+        "tags": [
+          "style"
+        ]
+      }
+    }
+  }
+}

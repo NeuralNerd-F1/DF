@@ -1,0 +1,11 @@
+# dependencies / build output — never committed
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

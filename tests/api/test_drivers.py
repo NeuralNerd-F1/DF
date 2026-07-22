@@ -25,6 +25,16 @@ async def test_list_drivers_with_data(api: SimpleNamespace) -> None:
     assert body[0]["radar_values"]["throttle"] == 0.5
 
 
+async def test_list_drivers_surfaces_team(api: SimpleNamespace) -> None:
+    """F16 seam — the team-colour bar needs the driver's team on the summary; a driver with no
+    team (unknown driver) serialises ``team: null``, never a fabricated value (§4.1 / div #47)."""
+    await seed_fingerprint(api.session_factory, code="VER", team="Red Bull")
+    await seed_fingerprint(api.session_factory, code="UNK", team=None)
+    body = {d["code"]: d for d in (await api.client.get("/drivers")).json()}
+    assert body["VER"]["team"] == "Red Bull"
+    assert body["UNK"]["team"] is None
+
+
 async def test_driver_fingerprint_three_seasons_is_200(api: SimpleNamespace) -> None:
     for season in (2022, 2023, 2024):
         await seed_fingerprint(api.session_factory, code="VER", season=season)

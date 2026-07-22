@@ -45,12 +45,13 @@ async def seed_fingerprint(
     season: int = 2023,
     radar: dict[str, float] | None = None,
     shap_global: dict[str, float] | None = None,
+    team: str | None = None,
 ) -> None:
     """Insert one driver (code, season) + circuit + fingerprint row into the test DB."""
     from app.db import models
 
     async with session_factory() as s:  # type: ignore[operator]
-        driver = models.Driver(code=code, full_name=code, season=season)
+        driver = models.Driver(code=code, full_name=code, season=season, team=team)
         circuit = models.Circuit(
             name=f"Circuit-{code}-{season}", type=models.CircuitType.HIGH_SPEED
         )

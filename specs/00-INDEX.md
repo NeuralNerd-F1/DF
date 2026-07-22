@@ -44,7 +44,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
 | F16a | Design system + Screen 1 Command Centre | F13 | 17 | DONE (2026-07-22) |
-| F16b | Screen 2 Driver Profile | F13, F16a | 18 | IN PROGRESS (built + gated, merge-ready) |
+| F16b | Screen 2 Driver Profile | F13, F16a | 18 | DONE (2026-07-22) |
 | F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | TODO |
 | F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | TODO |
 | F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | TODO |

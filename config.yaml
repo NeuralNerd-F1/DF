@@ -348,3 +348,19 @@ celery:
 # re-declared. Playback speed is client-side (Zustand) — not server config. One new code REPLAY_PARTIAL.
 replay:
   max_replay_laps: 200              # DoS guard on the returned laps array (mirrors api.max_request_laps)
+
+# --- F15 RQ5 failsafe evaluation harness (§11.4 — the 7 tests; §13 Week-14 deliverable) -----------
+# The knobs the 7 §11.4 tests run with. Shared thresholds are REFERENCED, never re-declared: the
+# 6-NULL ceiling is thresholds.null_ceiling, the 0.65 gate is thresholds.confidence_gate, the p95
+# target is api.latency_slo_ms (500), the OOD DETECTION threshold is stylespace.ood_sd_threshold
+# (3.0 — the harness INJECTS at ood_injection_sd=5.0, which must exceed it). No new error code.
+failsafe:
+  n_predictions: 100          # §11.4 Test 4 — consecutive predictions with Redis disabled
+  n_concurrent: 50            # §11.4 Test 7 — concurrent /predict requests
+  null_boundary: [1, 3, 6, 7] # §11.4 Test 3 — NULL-count boundary points (must span the 6/7 ceiling)
+  n_ambiguous_samples: 50     # §11.4 Test 1 — ambiguous inputs to measure the LOW_CONFIDENCE rate
+  ambiguous_low_conf_rate: 0.90  # §11.4 Test 1 — min LOW_CONFIDENCE fraction on ambiguous input
+  cache_degradation_ms: 200   # §11.4 Test 4 — max avg response-time increase with Redis down
+  breaker_fallback_ms: 500    # §11.4 Test 2 — max time to the STALE_DATA cached fallback
+  ood_injection_sd: 5.0       # §11.4 Test 6 — SD-outside-training injection magnitude (> detection SD)
+  report_filename: failsafe_report.json  # RQ5 results-table artefact under paths.artefacts_dir

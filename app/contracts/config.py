@@ -1070,6 +1070,55 @@ class ReplayConfig(BaseModel):
         return self
 
 
+class FailsafeConfig(BaseModel):
+    """Typed view over the ``failsafe:`` block (F15 RQ5 evaluation harness, §11.4).
+
+    Lives here (standing rule): the harness reads its knobs through a validated model. Holds only
+    the F15 constants; the shared thresholds it also needs — the 6-NULL ceiling
+    (``thresholds.null_ceiling``), the 0.65 gate (``thresholds.confidence_gate``), the p95 target
+    (``api.latency_slo_ms``), and the OOD *detection* SD (``stylespace.ood_sd_threshold``) — are
+    referenced, never re-declared. F15 adds **no** error code (it asserts the pre-seeded ones). The
+    two cross-checks (null-boundary spans ceiling; ood-injection > detection) live on ``AppConfig``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    n_predictions: int  # §11.4 Test 4 — consecutive predictions with Redis disabled
+    n_concurrent: int  # §11.4 Test 7 — concurrent /predict requests
+    null_boundary: list[int]  # §11.4 Test 3 — NULL-count boundary points (span the 6/7 ceiling)
+    n_ambiguous_samples: int  # §11.4 Test 1 — ambiguous inputs to measure the LOW_CONFIDENCE rate
+    ambiguous_low_conf_rate: float  # §11.4 Test 1 — min LOW_CONFIDENCE fraction on ambiguous input
+    cache_degradation_ms: float  # §11.4 Test 4 — max avg response-time increase with Redis down
+    breaker_fallback_ms: float  # §11.4 Test 2 — max time to the STALE_DATA cached fallback
+    ood_injection_sd: float  # §11.4 Test 6 — injection SD outside training (> detection SD)
+    report_filename: str  # RQ5 results-table artefact under paths.artefacts_dir
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> FailsafeConfig:
+        """Fail fast on out-of-range constants so a mis-edit is a load-time ``CONFIG_001`` (#1)."""
+        for name, val in (
+            ("n_predictions", self.n_predictions),
+            ("n_concurrent", self.n_concurrent),
+            ("n_ambiguous_samples", self.n_ambiguous_samples),
+        ):
+            if val < 1:
+                raise ValueError(f"failsafe.{name} must be >= 1, got {val}")
+        if not self.null_boundary:
+            raise ValueError("failsafe.null_boundary must be non-empty")
+        if not 0.0 < self.ambiguous_low_conf_rate <= 1.0:
+            raise ValueError(
+                "failsafe.ambiguous_low_conf_rate must be in (0, 1], got "
+                f"{self.ambiguous_low_conf_rate}"
+            )
+        if self.cache_degradation_ms <= 0 or self.breaker_fallback_ms <= 0:
+            raise ValueError("failsafe.cache_degradation_ms / breaker_fallback_ms must be > 0")
+        if self.ood_injection_sd <= 0:
+            raise ValueError(f"failsafe.ood_injection_sd must be > 0, got {self.ood_injection_sd}")
+        if not self.report_filename:
+            raise ValueError("failsafe.report_filename must be non-empty")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -1106,6 +1155,7 @@ class AppConfig(BaseModel):
     cache: CacheConfig | None = None  # F14; None until the cache: block is present
     celery: CeleryConfig | None = None  # F14; None until the celery: block is present
     replay: ReplayConfig | None = None  # F14; None until the replay: block is present
+    failsafe: FailsafeConfig | None = None  # F15; None until the failsafe: block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:
@@ -1199,6 +1249,28 @@ class AppConfig(BaseModel):
         ``CONFIG_001`` here (cross-block, spec §5 placement)."""
         if self.replay is not None and self.monitoring is None:
             raise ValueError("replay: requires monitoring: — F14 drives F10 monitor_stint")
+        return self
+
+    @model_validator(mode="after")
+    def _failsafe_boundaries(self) -> AppConfig:
+        """F15's §11.4 Test 3 boundary must straddle the NULL ceiling, and Test 6 must INJECT beyond
+        the OOD *detection* threshold (else the test is vacuous). Cross-block, so it lives here."""
+        if self.failsafe is not None:
+            nb = set(self.failsafe.null_boundary)
+            ceil = self.thresholds.null_ceiling
+            if ceil not in nb or (ceil + 1) not in nb:
+                raise ValueError(
+                    f"failsafe.null_boundary must span null_ceiling ({ceil}) and {ceil + 1} "
+                    f"(the accept/reject boundary), got {sorted(nb)}"
+                )
+            if (
+                self.stylespace is not None
+                and self.failsafe.ood_injection_sd <= self.stylespace.ood_sd_threshold
+            ):
+                raise ValueError(
+                    f"failsafe.ood_injection_sd ({self.failsafe.ood_injection_sd}) must exceed "
+                    f"stylespace.ood_sd_threshold ({self.stylespace.ood_sd_threshold})"
+                )
         return self
 
 

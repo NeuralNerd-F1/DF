@@ -38,7 +38,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F12 | PostgreSQL schema + Alembic migrations | F00 | 15 | DONE (2026-07-19) |
 | F13 | FastAPI endpoints + Pydantic contracts + health check | F06–F11, F12 | 15–16 | DONE |
 | F14 | Redis cache + Celery queue + replay engine | F13 | 16 | DONE (2026-07-21) |
-| F15 | Failsafe evaluation harness (RQ5 — 7 tests) | F13, F14 | 14 | TODO |
+| F15 | Failsafe evaluation harness (RQ5 — 7 tests) | F13, F14 | 14 | DONE (2026-07-22) |
 
 ## Layer 4 — Frontend
 | ID  | Feature | Depends on | Wk | Status |
@@ -65,6 +65,22 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F15 BUILT — 2026-07-22 (feature/F15-failsafe-harness): DONE.** `app/eval/failsafe.py` (the 7 `rq5_*`
+  §11.4 failsafe tests + `run_failsafe_suite` → content-hashed RQ5 results table + `render_table`) +
+  `app/eval/harness.py` (self-contained app-assembly + fakes + fault-injection + `measure_post`/`p95`) — the
+  **executable RQ5 harness** (the *dynamic* complement to the static `failsafe-auditor`): assembles the real
+  F13+F14 system and runs the master §11.4 tests with real fault injection + measurement (confidence gate,
+  FastF1-breaker→STALE_DATA, NULL 6/7 tolerance, Redis-down 100-preds, DB-down 503-no-partial-write, UMAP
+  5-SD OOD, 50-concurrent). New `failsafe:` block + typed `FailsafeConfig` (2 cross-block validators);
+  **NO new error codes** (asserts pre-seeded ones); `httpx` promoted **dev→main**. **Scope = §11.4 ONLY**
+  (div #39); **F20 consumes `run_failsafe_suite`** for that pillar + extends Tests 1/6 with real-artefact
+  rates. **Divergences #39–#44** (§11.4-only; in-process measurement validates the *mechanism* not
+  production p95 → F20; Tests 1/6 rate artefact-gated; Test 2 is pipeline-level; CACHE_UNAVAILABLE/DEGRADED
+  reconciled per F14; RQ5 table = `failsafe_report.json`). **18 tests**; full suite green, `ruff` + `mypy app`
+  clean. **`failsafe-auditor` run on `app/eval/`; HIGH findings fixed with regression tests** (harness no
+  longer pollutes the real `cache/` or `data_quality_log` — both redirected to temp; the suite survives a
+  test that raises in pre-`try` setup; `render_table` gained the Findings column). Consumed by F20 (RQ5
+  evidence). **Next: F16 (frontend) or F05 (upload).**
 - **F14 BUILT — 2026-07-21 (feature/F14-cache-queue-replay): DONE.** `app/cache/redis.py` (`RedisCache`
   + own §8.3 breaker + cache-aside, never-raising, non-critical), `app/tasks/{ingest,celery}.py`
   (`run_ingestion` = atomic persist→predict→fingerprint batch over a `LapRecord` contract; Celery app +

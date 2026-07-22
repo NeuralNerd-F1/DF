@@ -75,6 +75,11 @@ prometheus-client = "0.25.0"
 # offline suite is broker-independent (Celery always_eager) and cache-independent (fakeredis/FakeCache).
 redis = "8.0.1"
 celery = "5.6.3"
+# F15 RQ5 failsafe harness (§11.4). The harness (app/eval/failsafe.py) is shipped code that DRIVES
+# the assembled ASGI app under fault injection (incl. 50 concurrent requests via ASGITransport), so
+# httpx moves from a dev-only test client (F13) to a MAIN dependency. Pinned EXACTLY (#3). F20 imports
+# run_failsafe_suite from the same module.
+httpx = "0.28.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -86,9 +91,8 @@ pandas-stubs = "3.0.3.260530"
 # pytest-asyncio (asyncio_mode="auto"). Pinned EXACTLY (#3).
 aiosqlite = "0.22.1"
 pytest-asyncio = "1.4.0"
-# F13 — httpx drives the FastAPI app in-process (TestClient + ASGITransport AsyncClient); no live
-# uvicorn server in tests. Pinned EXACTLY (#3).
-httpx = "0.28.1"
+# F13 — httpx drives the FastAPI app in-process (TestClient + ASGITransport AsyncClient). Promoted to
+# a MAIN dependency by F15 (the failsafe harness imports it); kept out of dev to avoid a duplicate pin.
 # F14 — fakeredis backs the offline cache tests (in-process sync + async Redis, no server). Celery
 # runs always_eager in tests (no broker/worker). Pinned EXACTLY (#3).
 fakeredis = "2.36.2"
@@ -166,4 +170,5 @@ markers = [
     "postgres: integration test requiring a live PostgreSQL (skipped unless APEX_TEST_DATABASE_URL set)",
     "redis: integration test requiring a live Redis (skipped unless APEX_REDIS_URL set)",
     "celery: integration test requiring a live Celery broker/worker (skipped unless APEX_CELERY_BROKER_URL set)",
+    "artefacts: F15 test needing committed model artefacts (skipped unless classifier.pkl / umap_model.pkl present)",
 ]

@@ -403,11 +403,16 @@ Screen-1 half of 5), §8 client + ds + Screen-1 tests + the drift guard, §11 st
 `FingerprintRadar`. **Delivered green:** tsc + ESLint clean, 31 vitest tests, `next build` compiles,
 `tests/api`+`tests/contracts` green; backend seam `DriverSummary.team` (#47) + pytest drift guard.
 
-**F16b — Screen 2 Driver Profile (SPEC WRITTEN, next session):** §4.2 rows for Screen 2 (field-mean #51,
-per-lap SHAP beeswarm #48, corner tabs #49), §4.4 Screen 2, §7 criterion 6 (+ Screen-2 half of 5), §8
-Screen-2 tests, §11 step 6. Charts to build: **`ShapBeeswarm`** (deterministic jitter §4.0-f), **`GaugeNeedle`**
-(+range-bar). Plus **Playwright e2e** for both screens. Reuses everything F16a built (design system, API
-client, `FingerprintRadar`, Zustand pattern).
+**F16b — Screen 2 Driver Profile (BUILT, merge-ready on `feature/F16b-driver-profile`):** §4.2 rows for
+Screen 2 (field-mean #51, per-lap SHAP beeswarm #48, corner tabs #49), §4.4 Screen 2, §7 criterion 6, §8
+Screen-2 tests, §11 step 6. Charts built: **`ShapBeeswarm`** (deterministic seeded jitter §4.0-f),
+**`GaugeNeedle`** (+range-bar). Components: `app/drivers/[code]/page.tsx`, `ProfileRadar` (tooltip +
+field-mean), `NlDescription`, `SetupPanel`, `MultiSeasonPanel`, `ShapBeeswarmPanel`, `CornerTabs`. Reuses
+everything F16a built. **9 tests; tsc + ESLint clean; `next build` compiles.** **Additional build-time
+finding (I):** the API exposes **no per-season fingerprint endpoint**, so per-season radar switching/ghost/
+overlay of shapes can't be data-backed — F16b renders the multi-season data that IS exposed (seasons,
+stability, pairwise-JS) and surfaces the per-season shape overlay honestly as unavailable, never faked.
+**Remaining:** F16b failsafe/review gates + **Playwright e2e** (needs `npx playwright install`).
 
 **Build-time findings folded in (beyond div #45–#52):**
 - **(F)** the known-driver `/drivers` + `/fingerprint` feeds expose **no per-driver `confidence_state`** —

@@ -44,7 +44,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
 | F16a | Design system + Screen 1 Command Centre | F13 | 17 | DONE (2026-07-22) |
-| F16b | Screen 2 Driver Profile | F13, F16a | 18 | SPEC WRITTEN |
+| F16b | Screen 2 Driver Profile | F13, F16a | 18 | DONE (2026-07-22) |
 | F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | TODO |
 | F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | TODO |
 | F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | TODO |
@@ -66,6 +66,19 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F16b BUILT — 2026-07-22 (feature/F16b-driver-profile): merge-ready.** Screen 2 Driver Profile on a
+  branch off the merged master. `app/drivers/[code]/page.tsx` (SSR fingerprint + drivers-for-field-mean +
+  setup; `PageError` on 404) + `components/driver-profile/` (`ProfileRadar` = the large radar with a hover
+  tooltip [domain, score, NL meaning, field-mean vs the 8 drivers, div #51]; `NlDescription`; `SetupPanel`
+  = 10 gauges w/ WIDE→range-bar + constraint badges + disclaimer; `MultiSeasonPanel` = seasons/stability/
+  pairwise-JS; `ShapBeeswarmPanel`; `CornerTabs`) + charts `GaugeNeedle` + `ShapBeeswarm` (deterministic
+  seeded jitter, colour-by-circuit). **Honest gaps rendered as explicit unavailable states, never faked:**
+  no per-lap SHAP endpoint → beeswarm empty (div #48); no corner-sub-fingerprint endpoint → corner tabs
+  empty (F09 artefact not served, div #49); no per-season fingerprint endpoint → per-season radar switching
+  shown honestly (only the multi-season stability/JS-divergence that IS exposed is rendered). Reuses the
+  F16a design system, API client, `FingerprintRadar`, and test patterns. **9 new tests (46 total)**; tsc +
+  ESLint clean; `next build` compiles (`/drivers/[code]`). Remaining before DONE: F16b failsafe/review gates
+  (running) + Playwright e2e (needs `npx playwright install`). Consumed by F17–F19.
 - **F16 SPLIT + F16a BUILT — 2026-07-22 (worktree-F16-frontend-spec): F16a merge-ready, F16b SPEC WRITTEN.**
   F16 proved too large for one session (the split the spec §10 documented as a contingency), so it is split
   **F16a** (design system + Screen 1 Command Centre — BUILT) / **F16b** (Screen 2 Driver Profile — the

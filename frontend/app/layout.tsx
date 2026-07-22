@@ -1,0 +1,29 @@
+import type { Metadata } from 'next';
+import { Inter, JetBrains_Mono } from 'next/font/google';
+import type { ReactNode } from 'react';
+
+import './globals.css';
+
+// Master §10.1: Inter for UI text, JetBrains Mono for telemetry values / lap numbers / error codes.
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
+
+export const metadata: Metadata = {
+  title: 'APEX — Driver Profiling',
+  description: 'F1 driver behavioural profiling — Command Centre & Driver Profile.',
+};
+
+// Dark theme only (master §10.1 / §9 Styling). The `dark` class + font variables live on <html>.
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`}>
+      <body className="min-h-screen bg-background font-sans text-text-primary antialiased">
+        {children}
+      </body>
+    </html>
+  );
+}

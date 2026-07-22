@@ -31,6 +31,13 @@ export const CONFIDENCE_TEXT_CLASS: Record<ConfidenceTone, string> = {
   medium: 'text-confidence-medium',
   low: 'text-confidence-low',
 };
+// SVG fill classes — dynamic bar colour set via an SVG attribute + Tailwind class, so no forbidden
+// inline `style` is needed for a dynamic colour (F16 spec §4.0-e / §7.1 no-inline-styles).
+export const CONFIDENCE_FILL_CLASS: Record<ConfidenceTone, string> = {
+  high: 'fill-confidence-high',
+  medium: 'fill-confidence-medium',
+  low: 'fill-confidence-low',
+};
 
 export function isLowConfidence(state: ConfidenceState | null | undefined): boolean {
   return state === 'LOW_CONFIDENCE' || state === 'AMBIGUOUS' || state === 'OUT_OF_DISTRIBUTION';

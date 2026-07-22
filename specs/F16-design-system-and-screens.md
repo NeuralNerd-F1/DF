@@ -2,7 +2,8 @@
 
 > One spec, one session. Self-contained: build this from this file + CLAUDE.md only.
 
-**Status:** SPEC WRITTEN
+**Status:** SPEC WRITTEN — split into **F16a** (design system + Screen 1 Command Centre; BUILT + merge-ready)
+and **F16b** (Screen 2 Driver Profile; next session). See §12 for the F16a/F16b map.
 **Master spec sections:** §9 (Technology Stack — frontend pins, pp.24–26), §10 preamble (Animated UI
 ethos, p.26), §10.1 (Global Design System — tokens, loading/error states, p.26), §10.2 (Screen 1 Command
 Centre, pp.26–27), §10.3 (Screen 2 Driver Profile, p.27), §6 (SHAP radar / beeswarm / 6 domains / NL
@@ -388,3 +389,32 @@ numeric spacing scale are F16-defined (the master leaves both open).
    `CornerTabs`/`NlDescription`/`SetupPanel`, honest empty states for the beeswarm/corner gaps. *(→ §4.4, §7)*
 7. **Failure-mode tests** — one per §6 row via MSW; determinism + drift-guard; `/apex-review F16` +
    `failsafe-auditor`; `tsc`/ESLint clean; INDEX → DONE. *(→ §7 test criteria, §9)*
+
+## 12. Split into F16a / F16b (ratified 2026-07-22 — the §10 "too big for one session" contingency)
+F16 was split at build time. This combined spec stays the source (F06 precedent); the map below says
+which parts each sub-feature owns. **`/spec-check F16a` covers only the F16a column.**
+
+**F16a — design system + Screen 1 Command Centre (BUILT, merge-ready on `worktree-F16-frontend-spec`):**
+scaffold (§2 tooling), §4.0 design notes, §4.1 design system, §4.2 rows for Screen 1 (grid/stability/
+hover-SHAP/compatibility-proxy #47/degradation-sort #50/LOW_CONFIDENCE), §4.3 Screen 1, §4.5 API client,
+§5 config surface, §6 rows reachable from Screen 1 + the client (API_ERROR/DB_UNAVAILABLE/NOT_FOUND/206/
+empty/LOW_CONFIDENCE/compat-404/UI_NETWORK/UI_TIMEOUT/UI_SCHEMA_MISMATCH), §7 criteria 1–5 + 7–11 (the
+Screen-1 half of 5), §8 client + ds + Screen-1 tests + the drift guard, §11 steps 1–5. Charts built:
+`FingerprintRadar`. **Delivered green:** tsc + ESLint clean, 31 vitest tests, `next build` compiles,
+`tests/api`+`tests/contracts` green; backend seam `DriverSummary.team` (#47) + pytest drift guard.
+
+**F16b — Screen 2 Driver Profile (SPEC WRITTEN, next session):** §4.2 rows for Screen 2 (field-mean #51,
+per-lap SHAP beeswarm #48, corner tabs #49), §4.4 Screen 2, §7 criterion 6 (+ Screen-2 half of 5), §8
+Screen-2 tests, §11 step 6. Charts to build: **`ShapBeeswarm`** (deterministic jitter §4.0-f), **`GaugeNeedle`**
+(+range-bar). Plus **Playwright e2e** for both screens. Reuses everything F16a built (design system, API
+client, `FingerprintRadar`, Zustand pattern).
+
+**Build-time findings folded in (beyond div #45–#52):**
+- **(F)** the known-driver `/drivers` + `/fingerprint` feeds expose **no per-driver `confidence_state`** —
+  so the Screen-1 LOW_CONFIDENCE treatment is built + tested (via prop) but renders **confident** on live
+  known-driver cards (the signal exists only for projected/unknown drivers, Screen 3 / F17). Honest, never
+  faked. A future additive seam could expose it; not fabricated here.
+- **(G)** there is **no `/circuits` endpoint** — the CircuitSelector uses a **static reference-data list**
+  (`lib/design/circuits.ts`), held-out Belgium/Italy omitted (quarantine). Reference data, not inference.
+- **(H)** `DriverSummary.team` did not exist — resolved by the **additive backend seam** (#47), merged into
+  the branch and covered by the drift guard.

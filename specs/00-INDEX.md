@@ -43,7 +43,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 4 — Frontend
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F16a | Design system + Screen 1 Command Centre | F13 | 17 | IN PROGRESS (built + gated, merge-ready) |
+| F16a | Design system + Screen 1 Command Centre | F13 | 17 | DONE (2026-07-22) |
 | F16b | Screen 2 Driver Profile | F13, F16a | 18 | SPEC WRITTEN |
 | F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | TODO |
 | F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | TODO |

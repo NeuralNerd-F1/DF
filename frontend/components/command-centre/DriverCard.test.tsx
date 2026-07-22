@@ -13,7 +13,9 @@ vi.mock('next/link', () => ({
 import { DriverCard, type Metric } from './DriverCard';
 
 const OK: Metric = { value: 0.8, loading: false, error: false };
-const ERRORED: Metric = { value: null, loading: false, error: true };
+const ERRORED: Metric = { value: null, loading: false, error: true, code: 'DB_UNAVAILABLE' };
+const ABSENT: Metric = { value: null, loading: false, error: false };
+const PARTIAL: Metric = { value: 0.6, loading: false, error: false, partial: true };
 const driver = {
   id: 'VER',
   code: 'VER',
@@ -43,10 +45,25 @@ describe('DriverCard (master §10.2)', () => {
     expect(document.querySelector('.border-dashed')).not.toBeNull();
   });
 
-  it('renders "—" for an errored/null metric — never a fabricated number (div #47)', () => {
+  it('renders a distinct, code-bearing marker for a FAILED metric — not the "—" of absence (HIGH-2)', () => {
     render(<DriverCard driver={driver} compatibility={ERRORED} stability={OK} animate={false} />);
-    expect(screen.getByTestId('compat')).toHaveTextContent('—');
+    const compat = screen.getByTestId('compat');
+    expect(compat.querySelector('[data-metric-error]')).not.toBeNull();
+    expect(compat).toHaveTextContent('DB_UNAVAILABLE');
+    expect(compat).not.toHaveTextContent('—');
     expect(screen.getByTestId('stability')).toHaveTextContent('80%');
+  });
+
+  it('renders "—" for honest absence (no data) — never a fabricated number (div #47)', () => {
+    render(<DriverCard driver={driver} compatibility={ABSENT} stability={OK} animate={false} />);
+    expect(screen.getByTestId('compat')).toHaveTextContent('—');
+    expect(screen.getByTestId('compat').querySelector('[data-metric-error]')).toBeNull();
+  });
+
+  it('marks 206 partial stability data (MEDIUM-1)', () => {
+    render(<DriverCard driver={driver} compatibility={OK} stability={PARTIAL} animate={false} />);
+    expect(screen.getByTestId('stability')).toHaveTextContent('60%');
+    expect(screen.getByTestId('partial-marker')).toBeInTheDocument();
   });
 
   it('reveals the top-3 SHAP peek on hover', () => {

@@ -1,5 +1,5 @@
 import { DriverGrid } from '@/components/command-centre/DriverGrid';
-import { ErrorCard } from '@/components/ds/ErrorCard';
+import { PageError } from '@/components/ds/PageError';
 import { getDrivers } from '@/lib/api/endpoints';
 
 // SSR the initial driver grid (master §9 — SSR for initial fingerprint data, CSR for animation).
@@ -16,7 +16,7 @@ export default async function CommandCentrePage() {
       {res.ok ? (
         <DriverGrid initialDrivers={res.data} />
       ) : (
-        <ErrorCard code={res.code} detail={res.detail} />
+        <PageError code={res.code} detail={res.detail} />
       )}
     </main>
   );

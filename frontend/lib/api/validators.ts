@@ -76,7 +76,9 @@ export const zStyleDriver = z
   .passthrough();
 export const zStyleSpace = z
   .object({
-    drivers: z.array(zStyleDriver),
+    // both optional to match the generated types — a valid empty style space omits them (avoids a
+    // false UI_SCHEMA_MISMATCH; code-review #7). Consumed by F18, not F16a.
+    drivers: z.array(zStyleDriver).optional(),
     unknown_drivers: z.array(zStyleDriver).optional(),
   })
   .passthrough();

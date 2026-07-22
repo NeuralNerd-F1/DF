@@ -73,6 +73,18 @@ describe('DriverGrid (master §10.2)', () => {
     await waitFor(() => expect(screen.getByTestId('compat')).toHaveTextContent('—'));
   });
 
+  it('surfaces a per-card metric FAILURE distinctly from honest absence (HIGH-2)', async () => {
+    // stability = a real 503 (must show a code-bearing marker); compat = 404 (honest "—")
+    (getStability as Mock).mockResolvedValue({ ok: false, code: 'DB_UNAVAILABLE', detail: '', status: 503 });
+    (getSetup as Mock).mockResolvedValue({ ok: false, code: 'NOT_FOUND', detail: '', status: 404 });
+    render(<DriverGrid initialDrivers={[driver('VER')]} animate={false} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('stability').querySelector('[data-metric-error]')).not.toBeNull(),
+    );
+    expect(screen.getByTestId('stability')).toHaveTextContent('DB_UNAVAILABLE');
+    expect(screen.getByTestId('compat')).toHaveTextContent('—');
+  });
+
   it('reorders cards when sorting by stability', async () => {
     (getStability as Mock).mockImplementation((code: string) =>
       Promise.resolve(stab(code === 'HAM' ? 0.9 : 0.2)),

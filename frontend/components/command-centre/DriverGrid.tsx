@@ -47,8 +47,13 @@ export function DriverGrid({
         setStability((prev) => ({
           ...prev,
           [d.code]: r.ok
-            ? { value: r.data.stability_score ?? null, loading: false, error: false }
-            : { value: null, loading: false, error: true },
+            ? {
+                value: r.data.stability_score ?? null,
+                loading: false,
+                error: false,
+                partial: Boolean(r.data.partial) || r.partial,
+              }
+            : { value: null, loading: false, error: true, code: r.code },
         }));
       });
     }
@@ -68,11 +73,11 @@ export function DriverGrid({
         const isMissing = !r.ok && r.code === 'NOT_FOUND';
         setCompat((prev) => ({
           ...prev,
-          [d.code]: {
-            value: r.ok ? meanConfidence(r.data) : null,
-            loading: false,
-            error: !r.ok && !isMissing,
-          },
+          [d.code]: r.ok
+            ? { value: meanConfidence(r.data), loading: false, error: false }
+            : isMissing
+              ? { value: null, loading: false, error: false } // honest absence
+              : { value: null, loading: false, error: true, code: r.code },
         }));
       });
     }
@@ -82,10 +87,12 @@ export function DriverGrid({
   }, [initialDrivers, circuit]);
 
   const sorted = useMemo(() => {
-    const scoreOf = (code: string): number => {
-      const m = sortKey === 'compatibility' ? compat[code] : stability[code];
-      return m?.value ?? -1; // unknown sinks to the bottom, deterministically
-    };
+    const metricMap = sortKey === 'compatibility' ? compat : stability;
+    // Don't reorder until every card's metric for the active key has SETTLED — otherwise cards
+    // churn as responses land one-by-one (code-review #3). Until then, keep the input order.
+    const settled = initialDrivers.every((d) => metricMap[d.code] && !metricMap[d.code]?.loading);
+    if (!settled) return initialDrivers;
+    const scoreOf = (code: string): number => metricMap[code]?.value ?? -1; // absent sinks to bottom
     return [...initialDrivers].sort((a, b) => scoreOf(b.code) - scoreOf(a.code));
   }, [initialDrivers, sortKey, compat, stability]);
 

@@ -10,13 +10,41 @@ import { DURATION, STAGGER } from '@/lib/design/animation';
 import { isLowConfidence } from '@/lib/design/confidence';
 import { teamColour } from '@/lib/design/teams';
 
-// A per-driver async scalar (compatibility / stability). Never fabricated: null renders "—".
-export type Metric = { value: number | null; loading: boolean; error: boolean };
+// A per-driver async scalar (compatibility / stability). A genuine fetch failure carries `error`
+// (+ the `code`); honest absence is `value === null` with `error` false. `partial` marks 206 data.
+// Never fabricated: absence renders "—", a failure renders a distinct, code-bearing marker.
+export type Metric = {
+  value: number | null;
+  loading: boolean;
+  error: boolean;
+  code?: string;
+  partial?: boolean;
+};
 
-function metricText(m: Metric): string {
-  if (m.loading) return '…';
-  if (m.error || m.value === null) return '—';
-  return `${Math.round(Math.max(0, Math.min(1, m.value)) * 100)}%`;
+// A failed metric is rendered DISTINCTLY from honest absence (failsafe HIGH-2): "⚠" + the code
+// (in the monospace <dl>), never the same "—" a genuinely-absent metric shows. The failure is also
+// logged at the fetch boundary (fetchApi), so it is observable, not silent.
+function MetricValue({ m }: { m: Metric }) {
+  if (m.loading) return <span className="text-text-secondary">…</span>;
+  if (m.error) {
+    return (
+      <span className="text-accent" data-metric-error data-code={m.code} title={m.code ?? 'error'}>
+        ⚠ {m.code ?? 'ERR'}
+      </span>
+    );
+  }
+  if (m.value === null) return <span>—</span>;
+  const pct = Math.round(Math.max(0, Math.min(1, m.value)) * 100);
+  return (
+    <span title={m.partial ? 'Partial — fewer than 3 seasons of data' : undefined}>
+      {pct}%
+      {m.partial ? (
+        <span className="text-text-secondary" data-testid="partial-marker">
+          *
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 // Command Centre card (master §10.2): team-colour bar, animated fingerprint radar, circuit
@@ -76,13 +104,13 @@ export function DriverCard({
             <div>
               <dt className="text-text-secondary">Compat</dt>
               <dd data-testid="compat" className="text-text-primary">
-                {metricText(compatibility)}
+                <MetricValue m={compatibility} />
               </dd>
             </div>
             <div>
               <dt className="text-text-secondary">Stability</dt>
               <dd data-testid="stability" className="text-text-primary">
-                {metricText(stability)}
+                <MetricValue m={stability} />
               </dd>
             </div>
           </dl>

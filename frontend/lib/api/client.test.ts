@@ -90,4 +90,23 @@ describe('fetchApi failure-mode contract (F16 §6)', () => {
     const r = await fetchApi('/drivers', zDriverSummaryList);
     expect(!r.ok && r.code).toBe(UiErrorCode.TIMEOUT);
   });
+
+  it('logs client-side failures to the client log (§6 client-log column)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('down')));
+    await fetchApi('/drivers', zDriverSummaryList);
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('does NOT log an honest 404 (expected absence, not a failure)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(resp(404, { error_code: 'NOT_FOUND', detail: 'x' })),
+    );
+    await fetchApi('/drivers/X/fingerprint', zDriverSummaryList);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
 });

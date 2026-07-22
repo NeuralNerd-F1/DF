@@ -1,10 +1,11 @@
 'use client';
 
 import { easeCubicInOut, select } from 'd3';
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 
 import { RADAR_DOMAINS, type RadarDomain } from '@/lib/api/types';
 import { DURATION, STAGGER } from '@/lib/design/animation';
+import { useIsomorphicLayoutEffect } from '@/lib/useIsomorphicLayoutEffect';
 
 type Props = {
   values: Record<string, number>;
@@ -57,7 +58,7 @@ export function FingerprintRadar({
   const polyRef = useRef<SVGPolygonElement | null>(null);
   const dotRefs = useRef<Array<SVGCircleElement | null>>([]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!animate) return;
     const poly = polyRef.current;
     if (poly) {

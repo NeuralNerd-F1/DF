@@ -45,7 +45,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 |-----|---------|-----------|----|--------|
 | F16a | Design system + Screen 1 Command Centre | F13 | 17 | DONE (2026-07-22) |
 | F16b | Screen 2 Driver Profile | F13, F16a | 18 | DONE (2026-07-22) |
-| F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | SPEC WRITTEN |
+| F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | DONE (2026-07-23) |
 | F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | TODO |
 | F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | TODO |
 
@@ -66,6 +66,21 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F17 BUILT — 2026-07-23 (worktree-F17-frontend-spec): DONE.** Screen 3 (`app/ingest`) + Screen 4 (`app/compare`)
+  built on the F16a/b design system — **pure frontend, no backend app code / no `config.yaml` block / no new backend
+  error code** (div #53). New API-client seams (`postPredict`/`postUnknownFingerprint`/`postIngestSession`/
+  `getIngestStatus`/`postUpload` + 5 zod validators + 11 type aliases; `errors.ts` messages; `animation.ts` timings;
+  a `delta.up`/`delta.down` blue token). Two chart primitives (`ShapForcePlot` signed-bars, `DeltaRadar`). Screen 3 =
+  `PredictionPanel` (the one real `/predict` + SHAP flow) + `PipelineProgress` + `FastF1Tab` (async job via
+  `useIngestionJob` poll hook) + `ManualUploadTab`/`DropZone` (live-503 F05 shell) + `UnknownDriverTab`
+  (NN/risk/quality/live-confidence). Screen 4 = `ComparisonScreen` (two radars + delta radar + distinctive domains) +
+  `SetupDeltaTable` + `CompatibilityProjection` (#47 proxy). All ~10 honesty landmines rendered as explicit
+  unavailable/proxy states with "no-fabrication" tests. **Gates green:** `tsc` clean, ESLint (`--max-warnings 0`) clean,
+  **95 vitest tests (25 files)**, `next build` compiles `/ingest` + `/compare`, extended pytest drift guard + full
+  `tests/api` green. `/apex-review F17` clean (no silent failure; confidence colour from `confidence_state`, no re-derived
+  gate; config-driven timings; each failure mode tested). **Limitations:** Playwright e2e left green-field (no
+  `npx playwright install`, as F16b); two named backend seams not built (force `base_value` #56, unknown `radar_values`
+  #59). **Divergences #53–#62.** Consumed by F18 (embeds Screen 5), F19, F20/F21. **Next: F18 (Screen 5 Style Space).**
 - **F17 spec — 2026-07-23 (worktree-F17-frontend-spec): SPEC WRITTEN.** `specs/F17-ingestion-prediction-comparison.md`
   — the **widest frontend feature**: master **§10.4 Screen 3 (Ingestion & Prediction)** (three tabs — FastF1 Session,
   Manual Upload, Unknown Driver — plus a direct `/predict` panel + shared pipeline-progress animation) and **§10.5

@@ -4,7 +4,7 @@
 > to build this feature. It must be self-contained: a session should not need the
 > 42-page master spec open, only this file plus CLAUDE.md.
 
-**Status:** SPEC WRITTEN
+**Status:** DONE (2026-07-23)
 **Master spec sections:** §10.1 (design system, reused), §10.4 (Screen 3 — Ingestion & Prediction), §10.5 (Screen 4 — Comparison View), Week-18 milestone row (§ risk table p.35)
 **Layer / Week:** Frontend / Wk 18
 

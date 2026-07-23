@@ -9,6 +9,12 @@ export const DURATION = {
   circuitChange: 600, // Screen 1: circuit-selector radar transition
   seasonGhost: 2000, // Screen 2: previous-season ghost hold before it fades
   nlFade: 300, // Screen 2: NL description fade-out/in on season/corner change
+  // --- F17 (Screen 3/4). Div #53: timings live here, never in config.yaml. ---
+  ingestPoll: 1500, // Screen 3: /ingest/status poll interval (ms)
+  pipelineStage: 400, // Screen 3: pipeline-stage light-up transition
+  forceBar: 600, // Screen 3: SHAP force bar grow-from-zero
+  deltaRadar: 600, // Screen 4: delta-radar transition
+  compatGauge: 800, // Screen 4: compatibility-projection gauge settle
 } as const;
 
 export const STAGGER = {

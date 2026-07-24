@@ -36,6 +36,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <Link href="/style-space" className="transition-colors hover:text-accent">
             Style Space
           </Link>
+          <Link href="/replay" className="transition-colors hover:text-accent">
+            Replay Monitor
+          </Link>
         </nav>
         {children}
       </body>

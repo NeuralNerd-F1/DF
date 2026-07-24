@@ -12,6 +12,7 @@ import type {
   IngestStatusResponse,
   PredictRequest,
   PredictResponse,
+  ReplayResponse,
   SetupResponse,
   StabilityResponse,
   StyleSpaceResponse,
@@ -86,4 +87,12 @@ export function postUpload(file: File): Promise<ApiResult<UploadResponse>> {
   const form = new FormData();
   form.append('file', file);
   return fetchApi<UploadResponse>('/ingest/upload', v.zUpload, { method: 'POST', body: form });
+}
+
+// --- F19 Screen 6: historical race replay (F14 → F10) ---------------------------------------------
+// Whole-payload pull: the entire replay (all laps) at once; playback is client-side (div #71). The
+// session/driver are DB UUIDs — no session catalog endpoint exists (div #77). A fresh checkout 503s
+// (no data) until F20 populates the DB; the screen renders that honestly.
+export function getReplay(sessionId: string, driverId: string): Promise<ApiResult<ReplayResponse>> {
+  return fetchApi<ReplayResponse>(`/replay/${enc(sessionId)}/${enc(driverId)}`, v.zReplay);
 }

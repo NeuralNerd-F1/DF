@@ -180,3 +180,22 @@ export const zUpload = z
     warnings: z.array(z.string()).optional(),
   })
   .passthrough();
+
+// --- F19 Screen 6 (Historical Race Replay Monitor) ------------------------------------------------
+// GET /replay/{session}/{driver} (F14 → F10). The route forwards only 5 fields per lap; τ and the
+// whole DegradationAlert are dropped (div #72–#75). Guard the load-bearing fields, passthrough rest.
+// `laps` is optional so a valid empty replay ({laps: []}) never trips a false UI_SCHEMA_MISMATCH.
+export const zReplayLap = z
+  .object({
+    lap_number: z.number(),
+    feature_vector: z.record(z.union([z.number(), z.null()])).optional(),
+    deviation_score: z.number().nullish(),
+    alert_state: z.string(),
+    fingerprint_snapshot: z.record(z.unknown()).nullish(),
+  })
+  .passthrough();
+export const zReplay = z
+  .object({
+    laps: z.array(zReplayLap).optional(),
+  })
+  .passthrough();

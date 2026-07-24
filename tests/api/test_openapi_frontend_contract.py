@@ -128,3 +128,19 @@ def test_style_space_response_fields() -> None:
     props = _schemas()["StyleSpaceResponse"]["properties"]
     for field in ("drivers", "unknown_drivers"):
         assert field in props, f"StyleSpaceResponse lost {field!r} — breaks Screen 5"
+
+
+# --- F19 (Screen 6 Historical Race Replay Monitor) ------------------------------------------------
+# Screen 6 reads ReplayLap/ReplayResponse (aliased in lib/api/types.ts, guarded by zReplay). The
+# route drops τ + the DegradationAlert (div #72–#75); these assert the 5 fields that DO ship still do.
+
+
+def test_replay_lap_fields() -> None:
+    props = _schemas()["ReplayLap"]["properties"]
+    for field in ("lap_number", "feature_vector", "deviation_score", "alert_state", "fingerprint_snapshot"):
+        assert field in props, f"ReplayLap lost {field!r} — breaks the Replay Monitor"
+
+
+def test_replay_response_fields() -> None:
+    props = _schemas()["ReplayResponse"]["properties"]
+    assert "laps" in props, "ReplayResponse lost 'laps' — breaks Screen 6"

@@ -47,7 +47,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F16b | Screen 2 Driver Profile | F13, F16a | 18 | DONE (2026-07-22) |
 | F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | DONE (2026-07-23) |
 | F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | DONE (2026-07-24) |
-| F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | SPEC WRITTEN |
+| F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | DONE (2026-07-24) |
 
 ## Layer 5 — Evaluation & writing
 | ID  | Feature | Depends on | Wk | Status |
@@ -66,6 +66,29 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F19 BUILT — 2026-07-24 (worktree-F19-replay-monitor): DONE.** Screen 6 Historical Race Replay Monitor
+  (`frontend/app/replay` + `components/replay/*`) on the F16a design system. **Frontend-only** (div #70 — no
+  `config.yaml`, no backend code, no new backend error code); adds `getReplay`/`zReplay`/`ReplayResponse`+`ReplayLap`
+  aliases only (the generated `schema.d.ts`/`openapi.snapshot.json` already carry the schema → **no regen**); one new
+  timing `DURATION.replayTick` in `lib/design/animation.ts` + a `slide-down` tailwind token for the banner. Pure logic
+  `lib/replay/replay.ts` (`alertTone`, `lapsInAlert`, `firstAlertLap`, `deviationMax`, `narrowSnapshot`) + Zustand
+  `lib/state/replay.ts` + `lib/replay/usePlayback.ts` (leak-safe interval); components `DeviationGauge` (arc coloured by
+  `alert_state` #72), `DeviationTimeline` (SVG line + ALERT highlight + null gaps, τ line deferred #73), `AlertBanner`
+  (fires on ALERT, client-derived laps-in-alert, alert-payload deferred #74), `PerLapRadarPanel` (deferred; real
+  per-lap `confidence_state` shown, no radar fabricated from 5D #75), `PlaybackControls` (Play/Pause/Speed/Scrub #71),
+  `ReplayMonitorScreen` (UUID session input #77 + driver-from-`/drivers` + four-state fetch). `/replay` forwards only
+  5 fields per lap and drops τ + the whole `DegradationAlert` — every missing master element rendered as an **explicit
+  deferred state with a named `ReplayLap` seam, never fabricated** (constitution #1). A fresh checkout **503s** (no
+  DB/artefacts) — rendered honestly via a retryable ErrorCard (client-triggered fetch → `onRetry=load`, the F17
+  precedent for PageError); animations/playback exercised against `ReplayResponse` fixtures in vitest. **Gates green:**
+  `tsc` clean, ESLint (`--max-warnings 0`) clean, **188 vitest tests (43 files; +62 F19)** incl. every §6 failure mode,
+  `next build` compiles `/replay` (5.52 kB → 111 kB first load), OpenAPI drift guard extended
+  (`ReplayLap`/`ReplayResponse`) + `tests/api` green, `/apex-review F19` clean. **Limitations (dissertation):** (1)
+  `/replay` drops τ + `DegradationAlert` + per-lap 6-domain radar → deferred behind named seams (div #72–#75); (2) no
+  session catalog → UUID input (div #77); (3) fresh checkout 503s until F20 populates the DB; (4) **8-driver grid is the
+  F19b contingency** (div #76 — N-parallel fan-out, not built); (5) Playwright e2e green-field (as F16b–F18).
+  **Divergences #70–#77.** Consumed by F20 (RQ4/RQ5 replay evidence + DB population) + F21/F22. Branch stacks on F18
+  (PR #2 chain). **Next: F19b (8-driver grid) or F20 (evaluation).**
 - **F19 spec — 2026-07-24 (worktree-F19-replay-monitor): SPEC WRITTEN.** `specs/F19-replay-monitor.md` — **Screen 6, the
   Historical Race Replay Monitor** (master §10.7): pick a session + driver, replay the race lap-by-lap (client-side
   Play/Pause/Speed/Scrub) animating a deviation-score gauge, a tyre-deg timeline, and a degradation alert banner. Driven

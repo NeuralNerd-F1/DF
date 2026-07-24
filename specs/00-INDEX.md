@@ -47,7 +47,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F16b | Screen 2 Driver Profile | F13, F16a | 18 | DONE (2026-07-22) |
 | F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | DONE (2026-07-23) |
 | F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | DONE (2026-07-24) |
-| F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | TODO |
+| F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | SPEC WRITTEN |
 
 ## Layer 5 — Evaluation & writing
 | ID  | Feature | Depends on | Wk | Status |
@@ -66,6 +66,23 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F19 spec — 2026-07-24 (worktree-F19-replay-monitor): SPEC WRITTEN.** `specs/F19-replay-monitor.md` — **Screen 6, the
+  Historical Race Replay Monitor** (master §10.7): pick a session + driver, replay the race lap-by-lap (client-side
+  Play/Pause/Speed/Scrub) animating a deviation-score gauge, a tyre-deg timeline, and a degradation alert banner. Driven
+  by the F14 `GET /replay/{session_id}/{driver_id}` engine over the F10 detector. **Frontend-only** (div #70 — no
+  `config.yaml`, no backend code, no new backend error code); adds `getReplay`/`zReplay`/`ReplayResponse` alias only (the
+  generated `schema.d.ts`/`openapi.snapshot.json` already carry `ReplayResponse`/`ReplayLap` — no regen). **The most
+  endpoint-gutted screen yet:** `/replay` forwards only `{lap_number, feature_vector, deviation_score, alert_state, 5D
+  fingerprint_snapshot}` per lap and **drops the entire F10 alert payload + τ + per-lap radar** the detector computes —
+  so F19 builds the real parts (playback #71; gauge coloured by `alert_state` NOMINAL/WATCH/ALERT #72; timeline of
+  `deviation_score` with ALERT highlighting #73; banner firing on ALERT with client-derived laps-in-alert #74) and
+  renders the deferred elements honestly with named `ReplayLap` seams: **alert confidence/feature-drivers/pit-window**
+  (#74), **τ threshold line** (#73/#72), **per-lap 6-domain radar** (#75, `fingerprint_snapshot` is 5D coords not
+  radar), plus **no session catalog** → UUID input (#77, cf. F17 #57) and **8-driver mode = N-parallel fan-out** (#76,
+  the F19b contingency). A fresh checkout **503s** (no DB/artefacts) until F20 populates data — rendered honestly;
+  animations exercised against fixtures in tests. **Divergences #70–#77.** Depends on **F14 + F16a (both DONE)** + F10;
+  branch stacks on F18 (PR #2 chain). **Contingency:** split F19a (single-driver monitor = shippable core) / F19b
+  (8-driver grid). **Next: `/plan-feature F19` then build.**
 - **F18 BUILT — 2026-07-24 (worktree-F18-style-space): DONE.** Screen 5 Style Space Map (`app/style-space`) — a
   Three.js 3D scatter of the F08 UMAP style space with a **silent D3 2D fallback**. **Frontend-only** (div #69 — no
   `config.yaml`, no backend code, no new backend error code); adds **`three` 0.169.0 + `@types/three`** (`d3` already

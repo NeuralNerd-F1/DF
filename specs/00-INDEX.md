@@ -46,7 +46,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F16a | Design system + Screen 1 Command Centre | F13 | 17 | DONE (2026-07-22) |
 | F16b | Screen 2 Driver Profile | F13, F16a | 18 | DONE (2026-07-22) |
 | F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | DONE (2026-07-23) |
-| F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | TODO |
+| F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | SPEC WRITTEN |
 | F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | TODO |
 
 ## Layer 5 — Evaluation & writing
@@ -66,6 +66,25 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F18 spec — 2026-07-24 (worktree-F18-style-space): SPEC WRITTEN.** `specs/F18-style-space-map.md` — **Screen 5, the
+  Style Space Map** (master §10.6): a Three.js 3D scatter of the F08 UMAP style space (3 of 5 dims), glowing
+  team-coloured spheres, auto-rotating orbit camera, hover tooltip (code/team/season/NN/mini-radar), click sidebar,
+  teammate-proximity lines, unknown-driver white sphere, and a **silent D3.js 2D fallback** when WebGL is unavailable.
+  Master-flagged **HIGH risk** ("Three.js most complex UI"). **Frontend-only** (div #69 — no `config.yaml`, no backend
+  code, no new backend error code); the one dep addition is **`three` + `@types/three`** (not currently installed;
+  `d3 7.9.0` already present). Consumes the **already-built-but-unused** F16a seam (`getStyleSpace`/`zStyleSpace`,
+  shipped "for F18") + `/drivers` (team colour via the #47 seam + mini-radar) + F17's `postUnknownFingerprint` (the
+  white sphere's 5D vector). **Key recon findings driving the divergences:** `/stylespace` returns **one row per driver**
+  (coords_2d + coords_5d; `season` always null — the route drops the backend-computed `season_coords_*`), so the
+  **season filter is a deferred/disabled state** (#64, named additive seam); **no `team`/neighbours** on the payload →
+  team via `/drivers` join (#65), known-driver NN computed client-side from `coords_5d` (#66); the unknown white sphere
+  has only a 5D `fingerprint_vector` and degrades to NN-only on `PROJECTION_FALLBACK` (#67, continues #59); the **D3 2D
+  fallback is the silent WebGL-unavailable path** and the naturally jsdom-testable surface, with `hasWebGL()` as the
+  injectable boundary — Three.js mocked for a smoke test, WebGL render left to Playwright e2e (green-field, as F16b/F17)
+  (#68); master's r128 pin reconciled to the current installable `three` ~0.16x (#63). **Divergences #63–#69.** Depends
+  on **F16a + F13 + F08 (all DONE)** + reuses F17; branch stacks on the F17 tip (reuses the design system + nav +
+  client, conflict-free). **Contingency:** split F18a (data + join + **D3 2D scatter** + interactions + tests = the
+  shippable core) / F18b (Three.js 3D + camera + WebGL) if one session runs long. **Next: `/plan-feature F18` then build.**
 - **F17 BUILT — 2026-07-23 (worktree-F17-frontend-spec): DONE.** Screen 3 (`app/ingest`) + Screen 4 (`app/compare`)
   built on the F16a/b design system — **pure frontend, no backend app code / no `config.yaml` block / no new backend
   error code** (div #53). New API-client seams (`postPredict`/`postUnknownFingerprint`/`postIngestSession`/

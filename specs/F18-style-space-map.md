@@ -4,7 +4,7 @@
 > to build this feature. It must be self-contained: a session should not need the
 > 42-page master spec open, only this file plus CLAUDE.md.
 
-**Status:** SPEC WRITTEN
+**Status:** DONE (2026-07-24)
 **Master spec sections:** §10.1 (design system, reused), §10.6 (Screen 5 — Style Space Map), §9 (Three.js r128 + D3 2D fallback), Week-18 milestone row (§ risk table p.35 — **High risk: "Three.js most complex UI component"**)
 **Layer / Week:** Frontend / Wk 18
 

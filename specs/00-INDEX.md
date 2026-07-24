@@ -46,7 +46,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F16a | Design system + Screen 1 Command Centre | F13 | 17 | DONE (2026-07-22) |
 | F16b | Screen 2 Driver Profile | F13, F16a | 18 | DONE (2026-07-22) |
 | F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | DONE (2026-07-23) |
-| F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | SPEC WRITTEN |
+| F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | DONE (2026-07-24) |
 | F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | TODO |
 
 ## Layer 5 — Evaluation & writing
@@ -66,6 +66,23 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F18 BUILT — 2026-07-24 (worktree-F18-style-space): DONE.** Screen 5 Style Space Map (`app/style-space`) — a
+  Three.js 3D scatter of the F08 UMAP style space with a **silent D3 2D fallback**. **Frontend-only** (div #69 — no
+  `config.yaml`, no backend code, no new backend error code); adds **`three` 0.169.0 + `@types/three`** (`d3` already
+  present). Pure utils `lib/style-space/{hasWebGL,styleSpace}.ts` (`joinStyleWithDrivers` #65, client-side
+  `nearestNeighbours` #66, `teammatePairs`, `hasWebGL()` boundary #68); components `components/style-space/`
+  (`StyleSpaceScreen` root = join + WebGL branch; `StyleSpace2D` = the jsdom-testable SVG scatter; `StyleSpaceScene` =
+  Three.js, **dynamically imported ssr:false** so `three` is code-split out of the SSR/2D path; `DriverTooltip`,
+  `DriverSidebar`, `TeammateLinesToggle`, `SeasonFilter` [deferred #64], `UnknownProjectionPanel` reusing F17's
+  `postUnknownFingerprint` + `NearestNeighbours`). The scene wraps all WebGL setup in `try/catch → onInitError`, so an
+  init failure degrades silently to 2D (master §10.6 "no error"). Reuses `FingerprintRadar` (mini radar) + `teamColour()`
+  (sphere/node colour via the #47 `/drivers` join). Honesty landmines rendered honestly: season filter deferred (#64),
+  unknown sphere 5D-only + NN-only-on-fallback (#67), team via join (#65), NN client-computed (#66). **Gates green:**
+  `tsc` clean, ESLint (`--max-warnings 0`) clean, **126 vitest tests (33 files)**, `next build` compiles `/style-space`
+  (three code-split → 125 kB first-load), OpenAPI drift guard **12/12** + `mypy app` clean, `/apex-review` clean.
+  **Limitations:** Three.js WebGL render is e2e-only (green-field, no `npx playwright install`) — the D3 2D fallback +
+  all interactions/joins/NN/teammate are fully unit-tested; season filter + unknown-2D-position are deferred by design.
+  **Divergences #63–#69.** Consumed by F19 + F20/F21. Branch stacks on F17 (PR #2). **Next: F19 (Screen 6 Replay).**
 - **F18 spec — 2026-07-24 (worktree-F18-style-space): SPEC WRITTEN.** `specs/F18-style-space-map.md` — **Screen 5, the
   Style Space Map** (master §10.6): a Three.js 3D scatter of the F08 UMAP style space (3 of 5 dims), glowing
   team-coloured spheres, auto-rotating orbit camera, hover tooltip (code/team/season/NN/mini-radar), click sidebar,

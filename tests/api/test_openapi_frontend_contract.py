@@ -113,3 +113,18 @@ def test_upload_response_fields() -> None:
     props = _schemas()["UploadResponse"]["properties"]
     for field in ("upload_id", "laps_accepted", "laps_rejected", "cleaning_report", "warnings"):
         assert field in props, f"UploadResponse lost {field!r} — breaks the Manual Upload swap-in"
+
+
+# --- F18 (Screen 5 Style Space Map) ---------------------------------------------------------------
+
+
+def test_style_space_driver_fields() -> None:
+    props = _schemas()["StyleSpaceDriver"]["properties"]
+    for field in ("code", "coords_2d", "coords_5d"):
+        assert field in props, f"StyleSpaceDriver lost {field!r} — breaks the Style Space scatter"
+
+
+def test_style_space_response_fields() -> None:
+    props = _schemas()["StyleSpaceResponse"]["properties"]
+    for field in ("drivers", "unknown_drivers"):
+        assert field in props, f"StyleSpaceResponse lost {field!r} — breaks Screen 5"

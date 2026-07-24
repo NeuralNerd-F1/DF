@@ -33,6 +33,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <Link href="/compare" className="transition-colors hover:text-accent">
             Comparison
           </Link>
+          <Link href="/style-space" className="transition-colors hover:text-accent">
+            Style Space
+          </Link>
         </nav>
         {children}
       </body>

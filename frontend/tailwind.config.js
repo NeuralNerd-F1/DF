@@ -30,6 +30,12 @@ module.exports = {
           medium: '#E8A33D', // amber → MEDIUM
           low: '#E8002D', // red    → LOW_CONFIDENCE / AMBIGUOUS
         },
+        // F17 (master §10.4 SHAP force / §10.5 delta radar). Master names red "toward"/positive and
+        // blue "away"/negative but gives no blue hex → F17-defined (div #53). Red reuses the accent.
+        delta: {
+          up: '#E8002D', // positive / toward prediction / driver-1 higher
+          down: '#3B82F6', // negative / away / driver-2 higher (blue)
+        },
       },
       fontFamily: {
         // Wired to next/font CSS variables in app/layout.tsx.

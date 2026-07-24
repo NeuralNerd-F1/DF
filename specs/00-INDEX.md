@@ -45,7 +45,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 |-----|---------|-----------|----|--------|
 | F16a | Design system + Screen 1 Command Centre | F13 | 17 | DONE (2026-07-22) |
 | F16b | Screen 2 Driver Profile | F13, F16a | 18 | DONE (2026-07-22) |
-| F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | TODO |
+| F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | DONE (2026-07-23) |
 | F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | TODO |
 | F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | TODO |
 
@@ -66,6 +66,45 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F17 BUILT — 2026-07-23 (worktree-F17-frontend-spec): DONE.** Screen 3 (`app/ingest`) + Screen 4 (`app/compare`)
+  built on the F16a/b design system — **pure frontend, no backend app code / no `config.yaml` block / no new backend
+  error code** (div #53). New API-client seams (`postPredict`/`postUnknownFingerprint`/`postIngestSession`/
+  `getIngestStatus`/`postUpload` + 5 zod validators + 11 type aliases; `errors.ts` messages; `animation.ts` timings;
+  a `delta.up`/`delta.down` blue token). Two chart primitives (`ShapForcePlot` signed-bars, `DeltaRadar`). Screen 3 =
+  `PredictionPanel` (the one real `/predict` + SHAP flow) + `PipelineProgress` + `FastF1Tab` (async job via
+  `useIngestionJob` poll hook) + `ManualUploadTab`/`DropZone` (live-503 F05 shell) + `UnknownDriverTab`
+  (NN/risk/quality/live-confidence). Screen 4 = `ComparisonScreen` (two radars + delta radar + distinctive domains) +
+  `SetupDeltaTable` + `CompatibilityProjection` (#47 proxy). All ~10 honesty landmines rendered as explicit
+  unavailable/proxy states with "no-fabrication" tests. **Gates green:** `tsc` clean, ESLint (`--max-warnings 0`) clean,
+  **95 vitest tests (25 files)**, `next build` compiles `/ingest` + `/compare`, extended pytest drift guard + full
+  `tests/api` green. `/apex-review F17` clean (no silent failure; confidence colour from `confidence_state`, no re-derived
+  gate; config-driven timings; each failure mode tested). **Limitations:** Playwright e2e left green-field (no
+  `npx playwright install`, as F16b); two named backend seams not built (force `base_value` #56, unknown `radar_values`
+  #59). **Divergences #53–#62.** Consumed by F18 (embeds Screen 5), F19, F20/F21. **Next: F18 (Screen 5 Style Space).**
+- **F17 spec — 2026-07-23 (worktree-F17-frontend-spec): SPEC WRITTEN.** `specs/F17-ingestion-prediction-comparison.md`
+  — the **widest frontend feature**: master **§10.4 Screen 3 (Ingestion & Prediction)** (three tabs — FastF1 Session,
+  Manual Upload, Unknown Driver — plus a direct `/predict` panel + shared pipeline-progress animation) and **§10.5
+  Screen 4 (Comparison)** (two radars + signed delta radar, most-distinctive features, compatibility projection, setup
+  delta). **Pure frontend, like F16** (divergence #53 = no `config.yaml` block, no backend code, no new backend error
+  code; reuses the F16a/F16b design system, API client, `ApiResult` four-state discipline, `FingerprintRadar`/
+  `GaugeNeedle`, and vitest patterns). First UI to exercise `POST /predict`, `POST /fingerprint/unknown`, the async
+  `/ingest/*` job (202 + poll), and `GET /compare`. **The honesty landmine is the widest yet — ~half the master's
+  Screen-3/4 elements have no/partial backing endpoint, each rendered as an explicit unavailable/proxy state, never
+  fabricated:** the master's "FastF1 session → prediction" is not end-to-end wireable — ingestion writes to DB and
+  returns no prediction — so ingestion and prediction are **honestly split** (div #54); `PipelineProgress` is driven by
+  the real coarse job lifecycle, not 5 faked per-stage timings (#55); the SHAP force plot is a partial (`/predict`
+  surfaces only signed `shap_values`; `base_value`/names/direction are dropped at the API boundary — #56); no
+  session-catalog endpoint → seasons static + drivers from `/drivers` + "laps available" unavailable (#57); **Manual
+  Upload is a live-503 shell** (`/ingest/upload` is an F05 stub; UPLOAD_001–004 defined but unwired — #58);
+  unknown-driver `radar_values` come back empty + no SSE + style-space embed = Screen 5/F18 (#59), but its
+  `confidence_state`/`warnings` make Screen 3 the **honest home of live LOW_CONFIDENCE/OOD/SPARSE_PROJECTION** (#60,
+  resolves F16 finding F for projected drivers); Screen 4 `delta_shap`/`most_distinctive_features` are per-**domain**
+  radar deltas not per-feature SHAP (#61); and the compatibility projection reuses the **#47 setup-reliability proxy**
+  because `/compare` is circuit-agnostic (#62). Adds two chart primitives (`ShapForcePlot`, `DeltaRadar`), new
+  `endpoints.ts`/`validators.ts`/`types.ts` for the POST routes, a refreshed `openapi.snapshot.json` + extended pytest
+  drift guard. **Divergences #53–#62.** Depends on **F13 + F16a (both DONE)** — every build prerequisite is green;
+  consumed by F18 (embeds Screen 5), F19 (reuses async-poll), F20/F21. **Contingency if too big for one session:**
+  split F17a (Screen 3) / F17b (Screen 4), per the F16a/b · F06a/b · F13 precedent. **Next: `/plan-feature F17` then build.**
 - **F16b BUILT — 2026-07-22 (feature/F16b-driver-profile): merge-ready.** Screen 2 Driver Profile on a
   branch off the merged master. `app/drivers/[code]/page.tsx` (SSR fingerprint + drivers-for-field-mean +
   setup; `PageError` on 404) + `components/driver-profile/` (`ProfileRadar` = the large radar with a hover

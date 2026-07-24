@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 vi.mock('@/lib/api/endpoints', () => ({ getCompare: vi.fn(), getSetup: vi.fn() }));
 
 import { getCompare, getSetup } from '@/lib/api/endpoints';
+import { CIRCUITS } from '@/lib/design/circuits';
 
 import { ComparisonScreen } from './ComparisonScreen';
 
@@ -52,6 +53,24 @@ describe('ComparisonScreen (master §10.5)', () => {
     await waitFor(() => expect(getCompare as Mock).toHaveBeenCalledWith('VER', 'HAM'));
     fireEvent.click(screen.getByTestId('swap-button'));
     await waitFor(() => expect(getCompare as Mock).toHaveBeenCalledWith('HAM', 'VER'));
+  });
+
+  it('renders a loading Skeleton before /compare resolves (four-state discipline)', () => {
+    (getCompare as Mock).mockReturnValue(new Promise(() => {})); // never resolves
+    (getSetup as Mock).mockReturnValue(new Promise(() => {}));
+    render(<ComparisonScreen initialDrivers={DRIVERS} animate={false} />);
+    expect(screen.getByTestId('skeleton')).toBeInTheDocument();
+  });
+
+  it('re-fetches setups when the circuit changes', async () => {
+    (getCompare as Mock).mockResolvedValue(CMP);
+    (getSetup as Mock).mockResolvedValue(SETUP);
+    render(<ComparisonScreen initialDrivers={DRIVERS} animate={false} />);
+    await waitFor(() => expect(screen.getByTestId('setup-delta-table')).toBeInTheDocument());
+    (getSetup as Mock).mockClear();
+    const other = CIRCUITS[1];
+    fireEvent.change(screen.getByTestId('compare-circuit'), { target: { value: other } });
+    await waitFor(() => expect(getSetup as Mock).toHaveBeenCalledWith('VER', other));
   });
 
   it('surfaces a 404 NOT_FOUND from /compare as an ErrorCard', async () => {

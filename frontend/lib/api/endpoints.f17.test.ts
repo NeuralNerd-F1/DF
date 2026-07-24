@@ -64,6 +64,12 @@ describe('F17 endpoint helpers (Screen 3)', () => {
     expect(!r.ok && r.code).toBe(UiErrorCode.NETWORK);
   });
 
+  it('postPredict returns UI_TIMEOUT when the request aborts', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError')));
+    const r = await postPredict({ feature_vector: { F01: 1 }, circuit: 'Bahrain' });
+    expect(!r.ok && r.code).toBe(UiErrorCode.TIMEOUT);
+  });
+
   it('postUpload posts FormData (no JSON Content-Type) and surfaces the F05 503 stub', async () => {
     const f = vi.fn().mockResolvedValue(resp(503, { error_code: 'HEALTH_FAIL', detail: 'upload ships in F05' }));
     vi.stubGlobal('fetch', f);

@@ -50,6 +50,14 @@ describe('PredictionPanel (master §10.4)', () => {
     expect(screen.getByTestId('predicted-driver')).toHaveTextContent('VER'); // answer still shown, never hidden
   });
 
+  it('shows the badge on an AMBIGUOUS prediction too (answer never forced)', async () => {
+    (postPredict as Mock).mockResolvedValue(ok({ ...HIGH, confidence_state: 'AMBIGUOUS', confidence: 0.5 }));
+    render(<PredictionPanel />);
+    await predict();
+    await waitFor(() => expect(screen.getByTestId('confidence-badge')).toHaveTextContent('AMBIGUOUS'));
+    expect(screen.getByTestId('confidence-bar')).toHaveAttribute('data-tone', 'low');
+  });
+
   it('shows an EmptyState (not a blank plot) when SHAP is unavailable, prediction preserved', async () => {
     (postPredict as Mock).mockResolvedValue(ok({ ...HIGH, shap_available: false, shap_values: null }));
     render(<PredictionPanel />);

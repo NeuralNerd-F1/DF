@@ -50,6 +50,17 @@ describe('UnknownDriverTab (master §10.4, div #59/#60)', () => {
     expect(screen.queryByTestId('fingerprint-radar')).toBeNull();
   });
 
+  it('renders the OUT_OF_DISTRIBUTION warning + risk cards against live signal', async () => {
+    (postUnknownFingerprint as Mock).mockResolvedValue(
+      ok({ ...SPARSE, confidence_state: 'OUT_OF_DISTRIBUTION', warnings: ['OUT_OF_DISTRIBUTION'], risk_flags: ['F19', 'F20'] }),
+    );
+    render(<UnknownDriverTab />);
+    fireEvent.click(screen.getByTestId('unknown-submit'));
+    await waitFor(() => expect(screen.getByTestId('unknown-result')).toBeInTheDocument());
+    expect(screen.getByTestId('unknown-warning')).toHaveAttribute('data-code', 'OUT_OF_DISTRIBUTION');
+    expect(screen.getAllByTestId('risk-flag')).toHaveLength(2);
+  });
+
   it('surfaces a 400 INVALID_INPUT (e.g. < 5 laps) as an ErrorCard', async () => {
     (postUnknownFingerprint as Mock).mockResolvedValue(err('INVALID_INPUT', 400, 'need at least 5 laps'));
     render(<UnknownDriverTab />);

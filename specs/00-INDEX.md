@@ -85,10 +85,13 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   `next build` compiles `/replay` (5.52 kB → 111 kB first load), OpenAPI drift guard extended
   (`ReplayLap`/`ReplayResponse`) + `tests/api` green, `/apex-review F19` clean. **Limitations (dissertation):** (1)
   `/replay` drops τ + `DegradationAlert` + per-lap 6-domain radar → deferred behind named seams (div #72–#75); (2) no
-  session catalog → UUID input (div #77); (3) fresh checkout 503s until F20 populates the DB; (4) **8-driver grid is the
-  F19b contingency** (div #76 — N-parallel fan-out, not built); (5) Playwright e2e green-field (as F16b–F18).
-  **Divergences #70–#77.** Consumed by F20 (RQ4/RQ5 replay evidence + DB population) + F21/F22. Branch stacks on F18
-  (PR #2 chain). **Next: F19b (8-driver grid) or F20 (evaluation).**
+  session catalog → UUID input (div #77); (3) fresh checkout 503s until F20 populates the DB; (4) **F19b (8-driver grid)
+  now BUILT** — `components/replay/DriverReplayGrid.tsx` = N-parallel `getReplay` fan-out (div #76), each cell an
+  independent four-state panel (loading/empty/error+per-cell-Retry/success) with a mini gauge + timeline + ALERT chip,
+  all driven by ONE shared playback scrubber (max-length replay; each cell clamps); a "Single driver / All drivers" mode
+  toggle on `ReplayMonitorScreen`; grid mode with no `/drivers` → honest note + disabled Load; (5) Playwright e2e
+  green-field (as F16b–F18). **Divergences #70–#77.** Consumed by F20 (RQ4/RQ5 replay evidence + DB population) +
+  F21/F22. Branch stacks on F18 (PR #2 chain). **Next: F20 (evaluation).**
 - **F19 spec — 2026-07-24 (worktree-F19-replay-monitor): SPEC WRITTEN.** `specs/F19-replay-monitor.md` — **Screen 6, the
   Historical Race Replay Monitor** (master §10.7): pick a session + driver, replay the race lap-by-lap (client-side
   Play/Pause/Speed/Scrub) animating a deviation-score gauge, a tyre-deg timeline, and a degradation alert banner. Driven

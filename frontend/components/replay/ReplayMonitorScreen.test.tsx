@@ -145,3 +145,30 @@ describe('ReplayMonitorScreen — failure fixtures (§6)', () => {
     await waitFor(() => expect(screen.getByTestId('error-code')).toHaveTextContent('UI_SCHEMA_MISMATCH'));
   });
 });
+
+describe('ReplayMonitorScreen — 8-driver grid mode (div #76, F19b)', () => {
+  it('switching to grid mode hides the single-driver select', () => {
+    render(<ReplayMonitorScreen initialDrivers={DRIVERS} />);
+    expect(screen.getByTestId('driver-select')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('mode-grid'));
+    expect(screen.queryByTestId('driver-select')).toBeNull();
+  });
+
+  it('loads the N-parallel fan-out grid (one cell per driver)', async () => {
+    (getReplay as Mock).mockResolvedValue(ok(REPLAY));
+    render(<ReplayMonitorScreen initialDrivers={DRIVERS} />);
+    fireEvent.click(screen.getByTestId('mode-grid'));
+    fireEvent.change(screen.getByTestId('session-input'), { target: { value: 'sess-1' } });
+    fireEvent.click(screen.getByTestId('load-replay'));
+    await waitFor(() => expect(screen.getByTestId('driver-grid')).toBeInTheDocument());
+    expect(screen.getAllByTestId('grid-cell')).toHaveLength(DRIVERS.length);
+  });
+
+  it('grid mode with no /drivers → note + disabled Load (honest, never a blank grid)', () => {
+    render(<ReplayMonitorScreen initialDrivers={[]} />);
+    fireEvent.click(screen.getByTestId('mode-grid'));
+    fireEvent.change(screen.getByTestId('session-input'), { target: { value: 'sess-1' } });
+    expect(screen.getByTestId('grid-no-drivers-note')).toBeInTheDocument();
+    expect(screen.getByTestId('load-replay')).toBeDisabled();
+  });
+});

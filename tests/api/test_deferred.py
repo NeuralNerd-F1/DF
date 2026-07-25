@@ -1,21 +1,14 @@
-"""Deferred/queue endpoints. After F14 only ``/ingest/upload`` is still deferred (503 → F05); the
-async ingestion + replay routes are implemented and 503 ONLY when their backing service is
-unconfigured (this F13 fixture injects no ``celery_app``/``job_store``; the DB + monitor ARE set, so
-``/replay`` reaches the engine). Real F14 route behaviour lives in ``test_ingest_routes.py`` +
-``test_replay_route.py``."""
+"""Queue endpoints. After F05 every documented route is implemented; the async ingestion + replay
+routes 503 ONLY when their backing service is unconfigured (this F13 fixture injects no
+``celery_app``/``job_store``; the DB + monitor ARE set, so ``/replay`` reaches the engine). Real F14
+route behaviour lives in ``test_ingest_routes.py`` + ``test_replay_route.py``; the upload route
+(``/ingest/upload``, no longer deferred) is covered by ``test_upload_route.py``."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 import pytest
-
-
-async def test_upload_still_deferred_503(api: SimpleNamespace) -> None:
-    """The manual-upload route remains an honest 503 until F05."""
-    r = await api.client.post("/ingest/upload")
-    assert r.status_code == 503
-    assert r.json()["error_code"] == "HEALTH_FAIL"
 
 
 @pytest.mark.parametrize(

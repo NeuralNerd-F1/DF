@@ -266,6 +266,20 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_ingest_upload_ingest_upload_post */
+        Body_ingest_upload_ingest_upload_post: {
+            /** Circuit */
+            circuit?: string | null;
+            /** Driver Label */
+            driver_label?: string | null;
+            /** File */
+            file: string;
+            /**
+             * Unknown Driver
+             * @default false
+             */
+            unknown_driver: boolean;
+        };
         /** CompareResponse */
         CompareResponse: {
             /** Compatibility Delta */
@@ -916,7 +930,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_ingest_upload_ingest_upload_post"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -925,6 +943,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

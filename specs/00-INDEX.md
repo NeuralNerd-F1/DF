@@ -20,7 +20,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F03a | Scalar-channel features (F01–F18, F22–F24, F26) + vector assembly, `FeatureComputationError`, 6-NULL tolerance | F00, F02 | 3 | DONE (2026-06-26) |
 | F03b | X/Y cornering (F19–F21), corner-balance (F25), tyre-age slopes (F27–F28) — plug into F03a's vector | F00, F02, F03a | 3 | DONE (2026-06-26) |
 | F04 | Circuit-aware normalisation (train-only, saved artefact) | F03a, F03b | 4 | DONE (2026-06-26) |
-| F05 | Manual CSV upload pipeline + edge cases (UPLOAD_001–004) | F02, F03 | 16 | TODO |
+| F05 | Manual CSV upload pipeline + edge cases (UPLOAD_001–004) | F02, F03 | 16 | DONE (2026-07-25) |
 
 ## Layer 2 — Machine learning
 | ID  | Feature | Depends on | Wk | Status |
@@ -66,6 +66,50 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F05 BUILT — 2026-07-25 (feature/F05-manual-upload): DONE.** `app/pipeline/upload.py`
+  (`process_upload` + the eight §3.4 edge-case handlers + `_to_session_frame` + `UploadResult`/
+  `CleaningReport`/`LapRejection`) + live `app/api/routes/upload.py` (`POST /ingest/upload` multipart →
+  `UploadResponse`, retires the F13 `deferred.py` 503 stub) + `get_medians` provider on `AppState` +
+  typed `UploadConfig` + the `upload:` config block. **No new error codes** (all pre-seeded). Runs the
+  **real F02 `validate_session` + F03 feature extraction** behind CSV pre-processing; **synchronous +
+  stateless** (writes nothing to the DB, mirrors F13 `/predict` #30). The CSV→wide-frame adapter
+  synthesizes documented context defaults (green `track_status`, per-lap `lap_time` from Time, no-pit,
+  tyre-age-UNKNOWN → F27/F28 NULL); imputation is **injected train-only `FeatureMedians`** (constitution-#2
+  leakage scan + ml-auditor PASS); NULLs bounded by {X/Y cornering, F15 distance, F27/F28} so a full-
+  telemetry lap → IMPUTED, a bare 5-channel CSV → LAP_NULL_EXCESS. Adds **`python-multipart`** (first
+  multipart route) pinned. **Gates:** 51 F05 tests + full suite `PYTEST_EXIT=0`, `mypy app` + `ruff` clean,
+  `/spec-check F05` DONE, `/apex-review F05` clean, `/security-review` no findings; failsafe-auditor findings
+  folded in (dedup logs `ORPHAN_SAMPLES` not `LAP_PARTIAL`; corrupt-drop/dedup/all-rejected now warn;
+  `combination_excluded` surfaced; route caps the multipart read at `max_file_bytes+1`). Regenerated
+  `frontend/openapi.snapshot.json` + `schema.d.ts` for the new multipart body (tsc + eslint clean).
+  **Limitations (dissertation):** (1) sync + stateless; (2) documented context defaults; (3) UPLOAD_002
+  `Speed median > 350 ⇒ mph` copied verbatim though physically inverted (supervisor-flagged); (4) unknown-
+  driver projection is F08 via a follow-on `/fingerprint/unknown`; (5) **`FeatureMedians` inject-only — no
+  committed artefact/loader yet** (parallel to F13's uncommitted handles) → a live upload returns the
+  cleaning report with `clean_vectors=[]` (logged `MODEL_NOT_FOUND` + warned) until a producer lands.
+  Depends on **F02 + F03a/F03b + F04 + F13 (all DONE)**; consumed by F13/F14 (route live), F17 (Manual
+  Upload tab live), F08 (unknown-driver projection), F20 (upload ingress). Branch off master.
+- **F05 spec — 2026-07-25 (feature/F05-manual-upload): SPEC WRITTEN.** `specs/F05-manual-upload.md` — the
+  **manual CSV upload pipeline** (master §3.4 edge-case handling + §8.5 `POST /ingest/upload`). Reuses the
+  **same F02 filter chain + F03 feature extraction** behind the eight §3.4 pre-processing edge cases and
+  fills the one endpoint F13 still stubs as 503 (unblocking F17's live-503 Manual Upload shell). **Adds no
+  new error codes** — `UPLOAD_001` (missing columns→400), `UPLOAD_002` (mph-units warning→200),
+  `UPLOAD_003` (>5% corrupt→400), `UPLOAD_004` (empty→400) **and** `RESAMPLED`/`IMPUTED`/`LAP_PARTIAL`/
+  `SPARSE_PROJECTION`/`DATA_INSUFFICIENT`/`FEATURE_001`/`LAP_NULL_EXCESS`/`INVALID_INPUT` are all
+  pre-seeded in `errors.py`; the committed `UploadResponse` schema and `lap_validation.required_channels`
+  (= the §3.4 required 5) are reused unchanged. Produces `app/pipeline/upload.py` (`process_upload →
+  UploadResult`/`CleaningReport`) + live `app/api/routes/upload.py` (retires `deferred.py`) + typed
+  `UploadConfig`. **Key design calls (divergences):** upload is **synchronous + stateless** (returns the
+  cleaning report in the response, not a 202-job; writes nothing to the DB — mirrors F13 `/predict` #30;
+  `clean_vectors` handed to downstream `/predict`/`/fingerprint/unknown`); the CSV lacks session context so
+  `_to_session_frame` synthesizes **documented defaults** (green `track_status`, per-lap `lap_time`
+  from Time, no-pit, tyre-age-UNKNOWN → F27/F28 NULL); imputation uses the **injected train-only
+  `FeatureMedians`** with a no-`.fit()`/no-`.median()`-on-upload leakage scan (constitution #2); `upload_id`
+  = `sha256(bytes)[:16]` (idempotent); DoS guards (`max_file_bytes`/`max_rows` → `INVALID_INPUT`) reject
+  before parse; the §3.4 UPLOAD_002 threshold (`Speed median > 350 ⇒ mph`) is **copied verbatim** though
+  physically inverted — flagged for the supervisor. Depends on **F02 + F03a/F03b + F04 + F13 (all DONE)**;
+  consumed by F13/F14 (route live), F17 (tab live), F08 (unknown-driver projection), F20 (upload ingress).
+  Built on `feature/F05-manual-upload` off master. **Next: build (in progress via /ship).**
 - **F17 BUILT — 2026-07-23 (worktree-F17-frontend-spec): DONE.** Screen 3 (`app/ingest`) + Screen 4 (`app/compare`)
   built on the F16a/b design system — **pure frontend, no backend app code / no `config.yaml` block / no new backend
   error code** (div #53). New API-client seams (`postPredict`/`postUnknownFingerprint`/`postIngestSession`/

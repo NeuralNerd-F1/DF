@@ -80,6 +80,10 @@ celery = "5.6.3"
 # httpx moves from a dev-only test client (F13) to a MAIN dependency. Pinned EXACTLY (#3). F20 imports
 # run_failsafe_suite from the same module.
 httpx = "0.28.1"
+# F05 manual CSV upload (§3.4/§8.5). POST /ingest/upload is the first multipart/form-data route, so
+# Starlette/FastAPI need python-multipart to parse UploadFile/Form. Pinned EXACTLY (#3) at the newest
+# cp314-compatible release. Same "the feature adds the dep it first imports" pattern as F01/F13/F14.
+python-multipart = "0.0.32"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -122,6 +126,8 @@ extend-immutable-calls = [
     "fastapi.Path",
     "fastapi.Body",
     "fastapi.Header",
+    "fastapi.File",
+    "fastapi.Form",
 ]
 
 [tool.mypy]

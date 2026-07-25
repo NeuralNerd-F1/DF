@@ -17,7 +17,6 @@ from app.api import metrics as metrics_mod
 from app.api.deps import load_state
 from app.api.errors import register_exception_handlers
 from app.api.routes import (
-    deferred,
     drivers,
     health,
     ingest,
@@ -25,6 +24,7 @@ from app.api.routes import (
     predict,
     replay,
     style,
+    upload,
 )
 from app.contracts.config import AppConfig, ConfigError, load_config
 
@@ -81,5 +81,5 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(metrics.router)
     app.include_router(ingest.router)  # F14 — POST /ingest/session (202) + GET /ingest/status
     app.include_router(replay.router)  # F14 — GET /replay/{session_id}/{driver_id}
-    app.include_router(deferred.router)  # only POST /ingest/upload remains (F05)
+    app.include_router(upload.router)  # F05 — POST /ingest/upload (manual CSV upload)
     return app

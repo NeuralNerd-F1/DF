@@ -52,7 +52,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 5 — Evaluation & writing
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F20 | Evaluation framework (classifier, stability, degradation, failsafe) | F06–F15 | 20 | TODO |
+| F20 | Evaluation framework (classifier, stability, degradation, failsafe) | F06–F15 | 20 | SPEC WRITTEN |
 | F21 | Dissertation: Intro, Related Work, Design, Implementation | all | 21 | TODO |
 | F22 | Dissertation: Evaluation, Discussion, Conclusion + submit | F20 | 22 | TODO |
 

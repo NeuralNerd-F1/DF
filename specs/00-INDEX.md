@@ -52,7 +52,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 5 — Evaluation & writing
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F20 | Evaluation framework (classifier, stability, degradation, failsafe) | F06–F15 | 20 | TODO |
+| F20 | Evaluation framework (classifier, stability, degradation, failsafe) | F06–F15 | 20 | SPEC WRITTEN |
 | F21 | Dissertation: Intro, Related Work, Design, Implementation | all | 21 | TODO |
 | F22 | Dissertation: Evaluation, Discussion, Conclusion + submit | F20 | 22 | TODO |
 
@@ -66,6 +66,39 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F20 spec — 2026-07-25 (feature/F20-evaluation-framework off master): SPEC WRITTEN.**
+  `specs/F20-evaluation-framework.md` — the **full §11 evaluation run** (all four pillars + the five RQ
+  verdicts; the §13 Week-20 deliverable "all results tables completed, every RQ answered with data").
+  **F20 is an orchestrator/reporter, not a re-computer (div #53):** it *calls* the read-only evaluation
+  surfaces the earlier features already ship — `run_failsafe_suite` (§11.4, F15), `lead_time_report` (§11.3,
+  F10), `stability_report`/`teammate_proximity`/`project_unknown` (§11.2, F08), `season_stability` (§11.2
+  year-on-year JS, F07), `run_ablation` (F09) — and *harvests* the classifier's §11.1 held-out numbers from
+  the champion `ClassifierTrainingResult` (there is **no** standalone re-scorable classifier evaluator;
+  harvesting avoids a second held-out scoring site, div #55). Produces `app/eval/evaluate.py`
+  (`run_full_evaluation → EvaluationReport` async + the pillar runners + the `evaluate_classifier` harvest
+  seam + `MetricResult`/`PillarResult`/`RQVerdict`/`EvaluationReport` with `render_report()`), the
+  content-hashed `artefacts/evaluation_report.json`, and a typed `EvalConfig` + `eval:` block. **Adds no new
+  error code** (asserts/harvests pre-seeded ones; a can't-evaluate condition is a typed `skipped` state,
+  mirroring `FailsafeTestResult.skipped`). **Key honesty call (div #54):** APEX commits no model artefacts
+  (only `mlflow.db`) and no feature matrix, so F20 ships the **framework + mechanism** — the §11.4 pillar runs
+  offline via the F15 harness; the three data/artefact-dependent pillars return `skipped` + reason (never a
+  fabricated number) and their RQs are `INSUFFICIENT_DATA` — and the **real dissertation numbers are an
+  `@pytest.mark.artefacts`(+matrix)-gated run** (F13-no-artefact-503 / F15-rate-test pattern). Other
+  divergences: **#56** style-space circuit-generalisation reuses the §11.1 held-out F1 (no dedicated function
+  exists); **#57** RQ2 (compatibility↔consistency correlation) has **no §11 metric table** → answered
+  `PARTIAL` from F11 reliability + teammate-proximity proxy, flagged as an honest limitation; **#58**
+  `content_hash` certifies the reproducible OUTCOME (targets + pass/fail + RQ verdicts), not stochastic UMAP
+  coords / failsafe timing; **#59** `run_full_evaluation` never raises — a pillar fault → `skipped` + finding,
+  one pillar never aborts the run (lifts F15 §4.0-h to the pillar level); **#60** results table =
+  `evaluation_report.json` + rendered markdown (master names the deliverable, not a format); **#61** the
+  train/held-out `split` column is consumed (produced upstream in F00–F03), Belgium/Italy the only sanctioned
+  touch-point. References `classifier.target_macro_f1`/`per_driver_floor`, `stylespace.stability_variance_threshold`/
+  `stability_n_runs`/`nearest_neighbours_k`, `monitoring.sensitivity_grid_sd`, the whole `failsafe:` block,
+  `held_out_circuits`, `seeds` — never re-declared; the `eval:` block adds only the §11.2/§11.3 targets no
+  block owns (`stability_js_target` 0.15, `unknown_nn_correct_min` 6, `lead_time_min/max_laps` 2/5,
+  `tp_rate_target` 0.70, `fp_rate_max` 0.20). Depends on **F06–F15 (all DONE)**; consumed by **F21/F22**
+  (dissertation Evaluation/Discussion/Conclusion). Built on `feature/F20-evaluation-framework` off master.
+  **Next: build.**
 - **F16b BUILT — 2026-07-22 (feature/F16b-driver-profile): merge-ready.** Screen 2 Driver Profile on a
   branch off the merged master. `app/drivers/[code]/page.tsx` (SSR fingerprint + drivers-for-field-mean +
   setup; `PageError` on 404) + `components/driver-profile/` (`ProfileRadar` = the large radar with a hover

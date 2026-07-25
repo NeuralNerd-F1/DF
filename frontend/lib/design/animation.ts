@@ -15,7 +15,14 @@ export const DURATION = {
   forceBar: 600, // Screen 3: SHAP force bar grow-from-zero
   deltaRadar: 600, // Screen 4: delta-radar transition
   compatGauge: 800, // Screen 4: compatibility-projection gauge settle
+  // --- F18 (Screen 5). Div #69: timings live here, never in config.yaml. ---
+  unknownDrift: 1500, // Screen 5: unknown-driver sphere drift from origin to its position
+  spherePulse: 400, // Screen 5: hover sphere pulse
+  // NB: the season/camera-focus transition reuses DURATION.styleSpace (1200), already declared above.
 } as const;
+
+// Screen 5: auto-rotating camera speed (master §10.6). Degrees per second.
+export const CAMERA_ROTATE_DEG_PER_SEC = 0.2;
 
 export const STAGGER = {
   screen1Axis: 80, // Screen 1: per-axis bloom stagger (bloom effect)

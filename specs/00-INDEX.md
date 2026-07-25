@@ -20,7 +20,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F03a | Scalar-channel features (F01–F18, F22–F24, F26) + vector assembly, `FeatureComputationError`, 6-NULL tolerance | F00, F02 | 3 | DONE (2026-06-26) |
 | F03b | X/Y cornering (F19–F21), corner-balance (F25), tyre-age slopes (F27–F28) — plug into F03a's vector | F00, F02, F03a | 3 | DONE (2026-06-26) |
 | F04 | Circuit-aware normalisation (train-only, saved artefact) | F03a, F03b | 4 | DONE (2026-06-26) |
-| F05 | Manual CSV upload pipeline + edge cases (UPLOAD_001–004) | F02, F03 | 16 | TODO |
+| F05 | Manual CSV upload pipeline + edge cases (UPLOAD_001–004) | F02, F03 | 16 | SPEC WRITTEN |
 
 ## Layer 2 — Machine learning
 | ID  | Feature | Depends on | Wk | Status |
@@ -66,6 +66,27 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F05 spec — 2026-07-25 (feature/F05-manual-upload): SPEC WRITTEN.** `specs/F05-manual-upload.md` — the
+  **manual CSV upload pipeline** (master §3.4 edge-case handling + §8.5 `POST /ingest/upload`). Reuses the
+  **same F02 filter chain + F03 feature extraction** behind the eight §3.4 pre-processing edge cases and
+  fills the one endpoint F13 still stubs as 503 (unblocking F17's live-503 Manual Upload shell). **Adds no
+  new error codes** — `UPLOAD_001` (missing columns→400), `UPLOAD_002` (mph-units warning→200),
+  `UPLOAD_003` (>5% corrupt→400), `UPLOAD_004` (empty→400) **and** `RESAMPLED`/`IMPUTED`/`LAP_PARTIAL`/
+  `SPARSE_PROJECTION`/`DATA_INSUFFICIENT`/`FEATURE_001`/`LAP_NULL_EXCESS`/`INVALID_INPUT` are all
+  pre-seeded in `errors.py`; the committed `UploadResponse` schema and `lap_validation.required_channels`
+  (= the §3.4 required 5) are reused unchanged. Produces `app/pipeline/upload.py` (`process_upload →
+  UploadResult`/`CleaningReport`) + live `app/api/routes/upload.py` (retires `deferred.py`) + typed
+  `UploadConfig`. **Key design calls (divergences):** upload is **synchronous + stateless** (returns the
+  cleaning report in the response, not a 202-job; writes nothing to the DB — mirrors F13 `/predict` #30;
+  `clean_vectors` handed to downstream `/predict`/`/fingerprint/unknown`); the CSV lacks session context so
+  `_to_session_frame` synthesizes **documented defaults** (green `track_status`, per-lap `lap_time`
+  from Time, no-pit, tyre-age-UNKNOWN → F27/F28 NULL); imputation uses the **injected train-only
+  `FeatureMedians`** with a no-`.fit()`/no-`.median()`-on-upload leakage scan (constitution #2); `upload_id`
+  = `sha256(bytes)[:16]` (idempotent); DoS guards (`max_file_bytes`/`max_rows` → `INVALID_INPUT`) reject
+  before parse; the §3.4 UPLOAD_002 threshold (`Speed median > 350 ⇒ mph`) is **copied verbatim** though
+  physically inverted — flagged for the supervisor. Depends on **F02 + F03a/F03b + F04 + F13 (all DONE)**;
+  consumed by F13/F14 (route live), F17 (tab live), F08 (unknown-driver projection), F20 (upload ingress).
+  Built on `feature/F05-manual-upload` off master. **Next: build (in progress via /ship).**
 - **F16b BUILT — 2026-07-22 (feature/F16b-driver-profile): merge-ready.** Screen 2 Driver Profile on a
   branch off the merged master. `app/drivers/[code]/page.tsx` (SSR fingerprint + drivers-for-field-mean +
   setup; `PageError` on 404) + `components/driver-profile/` (`ProfileRadar` = the large radar with a hover

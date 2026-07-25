@@ -7,13 +7,28 @@ import type {
   DriverSummary,
   FingerprintResponse,
   HealthResponse,
+  IngestSessionRequest,
+  IngestSessionResponse,
+  IngestStatusResponse,
+  PredictRequest,
+  PredictResponse,
   SetupResponse,
   StabilityResponse,
   StyleSpaceResponse,
+  UnknownFingerprintRequest,
+  UnknownFingerprintResponse,
+  UploadResponse,
 } from './types';
 import * as v from './validators';
 
 const enc = encodeURIComponent;
+
+// POST helpers add Content-Type (client.ts only defaults Accept); body is JSON-serialised.
+const jsonPost = (body: unknown): RequestInit => ({
+  method: 'POST',
+  body: JSON.stringify(body),
+  headers: { 'Content-Type': 'application/json' },
+});
 
 export function getHealth(): Promise<ApiResult<HealthResponse>> {
   return fetchApi<HealthResponse>('/health', v.zHealth);
@@ -41,4 +56,34 @@ export function getStyleSpace(): Promise<ApiResult<StyleSpaceResponse>> {
 
 export function getCompare(a: string, b: string): Promise<ApiResult<CompareResponse>> {
   return fetchApi<CompareResponse>(`/compare/${enc(a)}/${enc(b)}`, v.zCompare);
+}
+
+// --- F17 Screen 3: prediction + ingestion (all POST except getIngestStatus) -----------------------
+
+export function postPredict(body: PredictRequest): Promise<ApiResult<PredictResponse>> {
+  return fetchApi<PredictResponse>('/predict', v.zPredict, jsonPost(body));
+}
+
+export function postUnknownFingerprint(
+  body: UnknownFingerprintRequest,
+): Promise<ApiResult<UnknownFingerprintResponse>> {
+  return fetchApi<UnknownFingerprintResponse>('/fingerprint/unknown', v.zUnknownFingerprint, jsonPost(body));
+}
+
+export function postIngestSession(
+  body: IngestSessionRequest,
+): Promise<ApiResult<IngestSessionResponse>> {
+  return fetchApi<IngestSessionResponse>('/ingest/session', v.zIngestSession, jsonPost(body));
+}
+
+export function getIngestStatus(sessionId: string): Promise<ApiResult<IngestStatusResponse>> {
+  return fetchApi<IngestStatusResponse>(`/ingest/status/${enc(sessionId)}`, v.zIngestStatus);
+}
+
+// Manual upload: multipart file POST. Currently a 503 stub (F05, div #58) — the client surfaces the
+// honest error; NO Content-Type header (the browser sets the multipart boundary for FormData).
+export function postUpload(file: File): Promise<ApiResult<UploadResponse>> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetchApi<UploadResponse>('/ingest/upload', v.zUpload, { method: 'POST', body: form });
 }

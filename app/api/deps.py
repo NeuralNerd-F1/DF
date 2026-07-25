@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from app.ml.stylespace import ProjectionResult, StyleSpaceHandle, StyleSpaceResult
     from app.monitoring.detector import MonitorHandle
     from app.personalisation.engine import PersonalisationHandle, SetupRecommendation
+    from app.pipeline.features import FeatureMedians
     from app.tasks.ingest import JobStore
 
 
@@ -68,6 +69,10 @@ class AppState:
     cache: RedisCache | None = None
     celery_app: Celery | None = None
     job_store: JobStore | None = None
+    # F05 manual upload — the train-only imputation medians, injected (there is NO production
+    # loader; ``None`` in a fresh checkout → the upload returns the cleaning report with feature
+    # vectors unavailable, never fabricated). Tests inject a synthetic table.
+    medians: FeatureMedians | None = None
 
 
 def get_apex_state(request: Request) -> AppState:
@@ -234,6 +239,13 @@ def get_monitor_handle(state: AppState = Depends(get_apex_state)) -> MonitorHand
     if state.monitor_handle is None:
         raise service_unavailable("degradation monitor is not loaded")
     return state.monitor_handle
+
+
+def get_medians(state: AppState = Depends(get_apex_state)) -> FeatureMedians | None:
+    """The F05 train-only imputation medians, or ``None`` when unavailable. NEVER raises — the
+    upload's cleaning report (accepted/rejected counts) is medians-independent, so a ``None`` table
+    just means feature vectors are skipped (honestly), not that the endpoint fails (§4.0-d)."""
+    return state.medians
 
 
 def _build_job_store(config: AppConfig, cache: RedisCache | None) -> JobStore:  # noqa: ARG001

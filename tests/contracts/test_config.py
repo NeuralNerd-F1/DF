@@ -512,3 +512,80 @@ def test_api_non_positive_latency_slo_rejected(repo_config_path: Path, tmp_path:
 def test_api_block_absent_is_none(valid_config_file: Path) -> None:
     cfg = load_config(valid_config_file)
     assert cfg.api is None
+
+
+# --- F05 upload block ---------------------------------------------------------------
+
+
+def test_repo_config_parses_upload_block(repo_config_path: Path) -> None:
+    """The shipped config.yaml carries the F05 upload knobs with the master's §3.4 values."""
+    cfg = load_config(repo_config_path)
+    assert cfg.upload is not None
+    assert cfg.upload.mph_speed_median_kmh == 350
+    assert cfg.upload.max_corrupt_row_fraction == 0.05
+    assert cfg.upload.resample_target_hz == 50
+    assert cfg.upload.lap_number_column == "LapNumber"
+    assert cfg.upload.time_column == "Time"
+
+
+def test_upload_block_absent_is_none(valid_config_file: Path) -> None:
+    cfg = load_config(valid_config_file)
+    assert cfg.upload is None
+
+
+def test_upload_corrupt_fraction_out_of_range_rejected(
+    repo_config_path: Path, tmp_path: Path
+) -> None:
+    """max_corrupt_row_fraction must be in (0, 1) — 1.5 is a load-time CONFIG_001."""
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "max_corrupt_row_fraction: 0.05", "max_corrupt_row_fraction: 1.5"
+    )
+    p = tmp_path / "bad_corrupt.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_upload_non_positive_max_file_bytes_rejected(
+    repo_config_path: Path, tmp_path: Path
+) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "max_file_bytes: 10485760", "max_file_bytes: 0"
+    )
+    p = tmp_path / "bad_bytes.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_upload_resample_below_floor_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    """Cross-block: resample_target_hz below thresholds.sample_rate_floor_hz (20) is incoherent."""
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "resample_target_hz: 50", "resample_target_hz: 10"
+    )
+    p = tmp_path / "bad_resample.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_upload_resample_equal_to_floor_ok(repo_config_path: Path, tmp_path: Path) -> None:
+    """Boundary: resample_target_hz == sample_rate_floor_hz (20) is valid (>=)."""
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "resample_target_hz: 50", "resample_target_hz: 20"
+    )
+    p = tmp_path / "ok_resample.yaml"
+    p.write_text(text, encoding="utf-8")
+    cfg = load_config(p)
+    assert cfg.upload is not None
+    assert cfg.upload.resample_target_hz == 20
+
+
+def test_upload_empty_column_name_rejected(repo_config_path: Path, tmp_path: Path) -> None:
+    text = repo_config_path.read_text(encoding="utf-8").replace(
+        "lap_number_column: LapNumber", 'lap_number_column: ""'
+    )
+    p = tmp_path / "bad_col.yaml"
+    p.write_text(text, encoding="utf-8")
+    with pytest.raises(ConfigError):
+        load_config(p)

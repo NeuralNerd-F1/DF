@@ -13,6 +13,20 @@ export type CompareResponse = components['schemas']['CompareResponse'];
 export type StyleSpaceResponse = components['schemas']['StyleSpaceResponse'];
 export type HealthResponse = components['schemas']['HealthResponse'];
 
+// F17 — Screen 3 (Ingestion & Prediction) + Screen 4 reuse. Aliased from the SAME generated
+// components; no backend change (div #53). The snapshot already carries these (F13/F14 defined them).
+export type PredictRequest = components['schemas']['PredictRequest'];
+export type PredictResponse = components['schemas']['PredictResponse'];
+export type TopK = components['schemas']['TopK'];
+export type UnknownFingerprintRequest = components['schemas']['UnknownFingerprintRequest'];
+export type UnknownFingerprintResponse = components['schemas']['UnknownFingerprintResponse'];
+export type NeighbourSchema = components['schemas']['NeighbourSchema'];
+export type DataQualitySchema = components['schemas']['DataQualitySchema'];
+export type IngestSessionRequest = components['schemas']['IngestSessionRequest'];
+export type IngestSessionResponse = components['schemas']['IngestSessionResponse'];
+export type IngestStatusResponse = components['schemas']['IngestStatusResponse'];
+export type UploadResponse = components['schemas']['UploadResponse'];
+
 // The uniform error envelope (app/api/schemas.py ErrorResponse). Defined explicitly because the
 // FastAPI exception handlers don't declare it as a response_model, so it isn't in the OpenAPI
 // components — the pytest drift guard asserts the real shape still matches this.

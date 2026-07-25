@@ -20,7 +20,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 | F03a | Scalar-channel features (F01–F18, F22–F24, F26) + vector assembly, `FeatureComputationError`, 6-NULL tolerance | F00, F02 | 3 | DONE (2026-06-26) |
 | F03b | X/Y cornering (F19–F21), corner-balance (F25), tyre-age slopes (F27–F28) — plug into F03a's vector | F00, F02, F03a | 3 | DONE (2026-06-26) |
 | F04 | Circuit-aware normalisation (train-only, saved artefact) | F03a, F03b | 4 | DONE (2026-06-26) |
-| F05 | Manual CSV upload pipeline + edge cases (UPLOAD_001–004) | F02, F03 | 16 | TODO |
+| F05 | Manual CSV upload pipeline + edge cases (UPLOAD_001–004) | F02, F03 | 16 | DONE (2026-07-25) |
 
 ## Layer 2 — Machine learning
 | ID  | Feature | Depends on | Wk | Status |
@@ -45,7 +45,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 |-----|---------|-----------|----|--------|
 | F16a | Design system + Screen 1 Command Centre | F13 | 17 | DONE (2026-07-22) |
 | F16b | Screen 2 Driver Profile | F13, F16a | 18 | DONE (2026-07-22) |
-| F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | TODO |
+| F17 | Screen 3 Ingestion/Prediction + Screen 4 Comparison | F13, F16a | 18 | DONE (2026-07-23) |
 | F18 | Screen 5 Style Space (Three.js + D3 2D fallback) | F16a | 18 | TODO |
 | F19 | Screen 6 Historical Replay Monitor | F14, F16a | 19 | TODO |
 
@@ -66,39 +66,89 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
-- **F20 spec — 2026-07-25 (feature/F20-evaluation-framework off master): SPEC WRITTEN.**
-  `specs/F20-evaluation-framework.md` — the **full §11 evaluation run** (all four pillars + the five RQ
-  verdicts; the §13 Week-20 deliverable "all results tables completed, every RQ answered with data").
-  **F20 is an orchestrator/reporter, not a re-computer (div #53):** it *calls* the read-only evaluation
-  surfaces the earlier features already ship — `run_failsafe_suite` (§11.4, F15), `lead_time_report` (§11.3,
-  F10), `stability_report`/`teammate_proximity`/`project_unknown` (§11.2, F08), `season_stability` (§11.2
-  year-on-year JS, F07), `run_ablation` (F09) — and *harvests* the classifier's §11.1 held-out numbers from
-  the champion `ClassifierTrainingResult` (there is **no** standalone re-scorable classifier evaluator;
-  harvesting avoids a second held-out scoring site, div #55). Produces `app/eval/evaluate.py`
-  (`run_full_evaluation → EvaluationReport` async + the pillar runners + the `evaluate_classifier` harvest
-  seam + `MetricResult`/`PillarResult`/`RQVerdict`/`EvaluationReport` with `render_report()`), the
-  content-hashed `artefacts/evaluation_report.json`, and a typed `EvalConfig` + `eval:` block. **Adds no new
-  error code** (asserts/harvests pre-seeded ones; a can't-evaluate condition is a typed `skipped` state,
-  mirroring `FailsafeTestResult.skipped`). **Key honesty call (div #54):** APEX commits no model artefacts
-  (only `mlflow.db`) and no feature matrix, so F20 ships the **framework + mechanism** — the §11.4 pillar runs
-  offline via the F15 harness; the three data/artefact-dependent pillars return `skipped` + reason (never a
-  fabricated number) and their RQs are `INSUFFICIENT_DATA` — and the **real dissertation numbers are an
-  `@pytest.mark.artefacts`(+matrix)-gated run** (F13-no-artefact-503 / F15-rate-test pattern). Other
-  divergences: **#56** style-space circuit-generalisation reuses the §11.1 held-out F1 (no dedicated function
-  exists); **#57** RQ2 (compatibility↔consistency correlation) has **no §11 metric table** → answered
-  `PARTIAL` from F11 reliability + teammate-proximity proxy, flagged as an honest limitation; **#58**
-  `content_hash` certifies the reproducible OUTCOME (targets + pass/fail + RQ verdicts), not stochastic UMAP
-  coords / failsafe timing; **#59** `run_full_evaluation` never raises — a pillar fault → `skipped` + finding,
-  one pillar never aborts the run (lifts F15 §4.0-h to the pillar level); **#60** results table =
-  `evaluation_report.json` + rendered markdown (master names the deliverable, not a format); **#61** the
-  train/held-out `split` column is consumed (produced upstream in F00–F03), Belgium/Italy the only sanctioned
-  touch-point. References `classifier.target_macro_f1`/`per_driver_floor`, `stylespace.stability_variance_threshold`/
-  `stability_n_runs`/`nearest_neighbours_k`, `monitoring.sensitivity_grid_sd`, the whole `failsafe:` block,
-  `held_out_circuits`, `seeds` — never re-declared; the `eval:` block adds only the §11.2/§11.3 targets no
-  block owns (`stability_js_target` 0.15, `unknown_nn_correct_min` 6, `lead_time_min/max_laps` 2/5,
-  `tp_rate_target` 0.70, `fp_rate_max` 0.20). Depends on **F06–F15 (all DONE)**; consumed by **F21/F22**
-  (dissertation Evaluation/Discussion/Conclusion). Built on `feature/F20-evaluation-framework` off master.
-  **Next: build.**
+- **F05 BUILT — 2026-07-25 (feature/F05-manual-upload): DONE.** `app/pipeline/upload.py`
+  (`process_upload` + the eight §3.4 edge-case handlers + `_to_session_frame` + `UploadResult`/
+  `CleaningReport`/`LapRejection`) + live `app/api/routes/upload.py` (`POST /ingest/upload` multipart →
+  `UploadResponse`, retires the F13 `deferred.py` 503 stub) + `get_medians` provider on `AppState` +
+  typed `UploadConfig` + the `upload:` config block. **No new error codes** (all pre-seeded). Runs the
+  **real F02 `validate_session` + F03 feature extraction** behind CSV pre-processing; **synchronous +
+  stateless** (writes nothing to the DB, mirrors F13 `/predict` #30). The CSV→wide-frame adapter
+  synthesizes documented context defaults (green `track_status`, per-lap `lap_time` from Time, no-pit,
+  tyre-age-UNKNOWN → F27/F28 NULL); imputation is **injected train-only `FeatureMedians`** (constitution-#2
+  leakage scan + ml-auditor PASS); NULLs bounded by {X/Y cornering, F15 distance, F27/F28} so a full-
+  telemetry lap → IMPUTED, a bare 5-channel CSV → LAP_NULL_EXCESS. Adds **`python-multipart`** (first
+  multipart route) pinned. **Gates:** 51 F05 tests + full suite `PYTEST_EXIT=0`, `mypy app` + `ruff` clean,
+  `/spec-check F05` DONE, `/apex-review F05` clean, `/security-review` no findings; failsafe-auditor findings
+  folded in (dedup logs `ORPHAN_SAMPLES` not `LAP_PARTIAL`; corrupt-drop/dedup/all-rejected now warn;
+  `combination_excluded` surfaced; route caps the multipart read at `max_file_bytes+1`). Regenerated
+  `frontend/openapi.snapshot.json` + `schema.d.ts` for the new multipart body (tsc + eslint clean).
+  **Limitations (dissertation):** (1) sync + stateless; (2) documented context defaults; (3) UPLOAD_002
+  `Speed median > 350 ⇒ mph` copied verbatim though physically inverted (supervisor-flagged); (4) unknown-
+  driver projection is F08 via a follow-on `/fingerprint/unknown`; (5) **`FeatureMedians` inject-only — no
+  committed artefact/loader yet** (parallel to F13's uncommitted handles) → a live upload returns the
+  cleaning report with `clean_vectors=[]` (logged `MODEL_NOT_FOUND` + warned) until a producer lands.
+  Depends on **F02 + F03a/F03b + F04 + F13 (all DONE)**; consumed by F13/F14 (route live), F17 (Manual
+  Upload tab live), F08 (unknown-driver projection), F20 (upload ingress). Branch off master.
+- **F05 spec — 2026-07-25 (feature/F05-manual-upload): SPEC WRITTEN.** `specs/F05-manual-upload.md` — the
+  **manual CSV upload pipeline** (master §3.4 edge-case handling + §8.5 `POST /ingest/upload`). Reuses the
+  **same F02 filter chain + F03 feature extraction** behind the eight §3.4 pre-processing edge cases and
+  fills the one endpoint F13 still stubs as 503 (unblocking F17's live-503 Manual Upload shell). **Adds no
+  new error codes** — `UPLOAD_001` (missing columns→400), `UPLOAD_002` (mph-units warning→200),
+  `UPLOAD_003` (>5% corrupt→400), `UPLOAD_004` (empty→400) **and** `RESAMPLED`/`IMPUTED`/`LAP_PARTIAL`/
+  `SPARSE_PROJECTION`/`DATA_INSUFFICIENT`/`FEATURE_001`/`LAP_NULL_EXCESS`/`INVALID_INPUT` are all
+  pre-seeded in `errors.py`; the committed `UploadResponse` schema and `lap_validation.required_channels`
+  (= the §3.4 required 5) are reused unchanged. Produces `app/pipeline/upload.py` (`process_upload →
+  UploadResult`/`CleaningReport`) + live `app/api/routes/upload.py` (retires `deferred.py`) + typed
+  `UploadConfig`. **Key design calls (divergences):** upload is **synchronous + stateless** (returns the
+  cleaning report in the response, not a 202-job; writes nothing to the DB — mirrors F13 `/predict` #30;
+  `clean_vectors` handed to downstream `/predict`/`/fingerprint/unknown`); the CSV lacks session context so
+  `_to_session_frame` synthesizes **documented defaults** (green `track_status`, per-lap `lap_time`
+  from Time, no-pit, tyre-age-UNKNOWN → F27/F28 NULL); imputation uses the **injected train-only
+  `FeatureMedians`** with a no-`.fit()`/no-`.median()`-on-upload leakage scan (constitution #2); `upload_id`
+  = `sha256(bytes)[:16]` (idempotent); DoS guards (`max_file_bytes`/`max_rows` → `INVALID_INPUT`) reject
+  before parse; the §3.4 UPLOAD_002 threshold (`Speed median > 350 ⇒ mph`) is **copied verbatim** though
+  physically inverted — flagged for the supervisor. Depends on **F02 + F03a/F03b + F04 + F13 (all DONE)**;
+  consumed by F13/F14 (route live), F17 (tab live), F08 (unknown-driver projection), F20 (upload ingress).
+  Built on `feature/F05-manual-upload` off master. **Next: build (in progress via /ship).**
+- **F17 BUILT — 2026-07-23 (worktree-F17-frontend-spec): DONE.** Screen 3 (`app/ingest`) + Screen 4 (`app/compare`)
+  built on the F16a/b design system — **pure frontend, no backend app code / no `config.yaml` block / no new backend
+  error code** (div #53). New API-client seams (`postPredict`/`postUnknownFingerprint`/`postIngestSession`/
+  `getIngestStatus`/`postUpload` + 5 zod validators + 11 type aliases; `errors.ts` messages; `animation.ts` timings;
+  a `delta.up`/`delta.down` blue token). Two chart primitives (`ShapForcePlot` signed-bars, `DeltaRadar`). Screen 3 =
+  `PredictionPanel` (the one real `/predict` + SHAP flow) + `PipelineProgress` + `FastF1Tab` (async job via
+  `useIngestionJob` poll hook) + `ManualUploadTab`/`DropZone` (live-503 F05 shell) + `UnknownDriverTab`
+  (NN/risk/quality/live-confidence). Screen 4 = `ComparisonScreen` (two radars + delta radar + distinctive domains) +
+  `SetupDeltaTable` + `CompatibilityProjection` (#47 proxy). All ~10 honesty landmines rendered as explicit
+  unavailable/proxy states with "no-fabrication" tests. **Gates green:** `tsc` clean, ESLint (`--max-warnings 0`) clean,
+  **95 vitest tests (25 files)**, `next build` compiles `/ingest` + `/compare`, extended pytest drift guard + full
+  `tests/api` green. `/apex-review F17` clean (no silent failure; confidence colour from `confidence_state`, no re-derived
+  gate; config-driven timings; each failure mode tested). **Limitations:** Playwright e2e left green-field (no
+  `npx playwright install`, as F16b); two named backend seams not built (force `base_value` #56, unknown `radar_values`
+  #59). **Divergences #53–#62.** Consumed by F18 (embeds Screen 5), F19, F20/F21. **Next: F18 (Screen 5 Style Space).**
+- **F17 spec — 2026-07-23 (worktree-F17-frontend-spec): SPEC WRITTEN.** `specs/F17-ingestion-prediction-comparison.md`
+  — the **widest frontend feature**: master **§10.4 Screen 3 (Ingestion & Prediction)** (three tabs — FastF1 Session,
+  Manual Upload, Unknown Driver — plus a direct `/predict` panel + shared pipeline-progress animation) and **§10.5
+  Screen 4 (Comparison)** (two radars + signed delta radar, most-distinctive features, compatibility projection, setup
+  delta). **Pure frontend, like F16** (divergence #53 = no `config.yaml` block, no backend code, no new backend error
+  code; reuses the F16a/F16b design system, API client, `ApiResult` four-state discipline, `FingerprintRadar`/
+  `GaugeNeedle`, and vitest patterns). First UI to exercise `POST /predict`, `POST /fingerprint/unknown`, the async
+  `/ingest/*` job (202 + poll), and `GET /compare`. **The honesty landmine is the widest yet — ~half the master's
+  Screen-3/4 elements have no/partial backing endpoint, each rendered as an explicit unavailable/proxy state, never
+  fabricated:** the master's "FastF1 session → prediction" is not end-to-end wireable — ingestion writes to DB and
+  returns no prediction — so ingestion and prediction are **honestly split** (div #54); `PipelineProgress` is driven by
+  the real coarse job lifecycle, not 5 faked per-stage timings (#55); the SHAP force plot is a partial (`/predict`
+  surfaces only signed `shap_values`; `base_value`/names/direction are dropped at the API boundary — #56); no
+  session-catalog endpoint → seasons static + drivers from `/drivers` + "laps available" unavailable (#57); **Manual
+  Upload is a live-503 shell** (`/ingest/upload` is an F05 stub; UPLOAD_001–004 defined but unwired — #58);
+  unknown-driver `radar_values` come back empty + no SSE + style-space embed = Screen 5/F18 (#59), but its
+  `confidence_state`/`warnings` make Screen 3 the **honest home of live LOW_CONFIDENCE/OOD/SPARSE_PROJECTION** (#60,
+  resolves F16 finding F for projected drivers); Screen 4 `delta_shap`/`most_distinctive_features` are per-**domain**
+  radar deltas not per-feature SHAP (#61); and the compatibility projection reuses the **#47 setup-reliability proxy**
+  because `/compare` is circuit-agnostic (#62). Adds two chart primitives (`ShapForcePlot`, `DeltaRadar`), new
+  `endpoints.ts`/`validators.ts`/`types.ts` for the POST routes, a refreshed `openapi.snapshot.json` + extended pytest
+  drift guard. **Divergences #53–#62.** Depends on **F13 + F16a (both DONE)** — every build prerequisite is green;
+  consumed by F18 (embeds Screen 5), F19 (reuses async-poll), F20/F21. **Contingency if too big for one session:**
+  split F17a (Screen 3) / F17b (Screen 4), per the F16a/b · F06a/b · F13 precedent. **Next: `/plan-feature F17` then build.**
 - **F16b BUILT — 2026-07-22 (feature/F16b-driver-profile): merge-ready.** Screen 2 Driver Profile on a
   branch off the merged master. `app/drivers/[code]/page.tsx` (SSR fingerprint + drivers-for-field-mean +
   setup; `PageError` on 404) + `components/driver-profile/` (`ProfileRadar` = the large radar with a hover

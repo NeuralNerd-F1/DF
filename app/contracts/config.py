@@ -1119,6 +1119,53 @@ class FailsafeConfig(BaseModel):
         return self
 
 
+class UploadConfig(BaseModel):
+    """Typed view over the ``upload:`` block (F05 manual CSV upload pipeline, §3.4).
+
+    Lives here (standing rule): ``app/pipeline/upload.py`` reads its knobs through a validated
+    model. Holds only the F05 pre-processing constants; the shared bounds it also needs are
+    referenced, never re-declared — the UPLOAD_001 required-column set is
+    ``validate.required_channels`` (§3.3/§3.4 name the same five), and the 20 Hz post-interpolation
+    FLOOR is ``thresholds.sample_rate_floor_hz``. The 50 Hz below is the RESAMPLE *target* for
+    inconsistent uploads (§3.4) — a different quantity from the floor; the cross-check
+    (``resample_target_hz >= sample_rate_floor_hz``) lives on ``AppConfig``. F05 adds no error code.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mph_speed_median_kmh: float  # §3.4 UPLOAD_002 — Speed median > this (km/h) -> mph warning
+    max_corrupt_row_fraction: float  # §3.4 UPLOAD_003 — > this fraction corrupt -> error; else drop
+    resample_target_hz: int  # §3.4 RESAMPLED — linear-interp resample target (inconsistent Δt)
+    sampling_delta_std_fraction: float  # §3.4 — inter-sample Δt std > this × mean -> resample
+    max_file_bytes: int  # DoS guard — reject before parse (INVALID_INPUT), no silent truncation
+    max_rows: int  # DoS guard — reject before parse (INVALID_INPUT)
+    lap_number_column: str  # §3.4 duplicate-lap dedup + per-lap grouping key
+    time_column: str  # inter-sample Δt source for the sampling-consistency check + per-lap lap_time
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> UploadConfig:
+        """Fail fast on out-of-range constants so a mis-edit is a load-time ``CONFIG_001`` (#1)."""
+        for name, val in (
+            ("mph_speed_median_kmh", self.mph_speed_median_kmh),
+            ("resample_target_hz", self.resample_target_hz),
+            ("max_file_bytes", self.max_file_bytes),
+            ("max_rows", self.max_rows),
+            ("sampling_delta_std_fraction", self.sampling_delta_std_fraction),
+        ):
+            if val <= 0:
+                raise ValueError(f"upload.{name} must be > 0, got {val}")
+        if not 0.0 < self.max_corrupt_row_fraction < 1.0:
+            raise ValueError(
+                "upload.max_corrupt_row_fraction must be in (0, 1), got "
+                f"{self.max_corrupt_row_fraction}"
+            )
+        if not self.lap_number_column:
+            raise ValueError("upload.lap_number_column must be non-empty")
+        if not self.time_column:
+            raise ValueError("upload.time_column must be non-empty")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -1156,6 +1203,7 @@ class AppConfig(BaseModel):
     celery: CeleryConfig | None = None  # F14; None until the celery: block is present
     replay: ReplayConfig | None = None  # F14; None until the replay: block is present
     failsafe: FailsafeConfig | None = None  # F15; None until the failsafe: block is present
+    upload: UploadConfig | None = None  # F05; None until the upload: block is present
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:
@@ -1271,6 +1319,21 @@ class AppConfig(BaseModel):
                     f"failsafe.ood_injection_sd ({self.failsafe.ood_injection_sd}) must exceed "
                     f"stylespace.ood_sd_threshold ({self.stylespace.ood_sd_threshold})"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _upload_resample_at_or_above_floor(self) -> AppConfig:
+        """F05's §3.4 resample TARGET must sit at or above the §3.3 sampling-rate FLOOR — resampling
+        an inconsistent upload *below* the floor F02 then rejects (LAP_004) would be self-defeating.
+        Cross-block (``upload`` cannot see its sibling ``thresholds``), so it lives here on
+        ``AppConfig`` (spec §5 placement)."""
+        if self.upload is not None and (
+            self.upload.resample_target_hz < self.thresholds.sample_rate_floor_hz
+        ):
+            raise ValueError(
+                f"upload.resample_target_hz ({self.upload.resample_target_hz}) must be >= "
+                f"thresholds.sample_rate_floor_hz ({self.thresholds.sample_rate_floor_hz})"
+            )
         return self
 
 

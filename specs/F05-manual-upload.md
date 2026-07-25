@@ -37,8 +37,12 @@ orchestration* feature — it reuses F02/F03 wholesale and adds **no new error c
     vector + §4.5 6-NULL gate: `IMPUTED` at ≤6, `LAP_NULL_EXCESS` reject at >6, `FEATURE_001` for a NULL
     with no train median), `FEATURE_IDS`, `CORNER_001` (X/Y-absent skip → F19–F21/F25 NULL).
   - **`FeatureMedians`** (`app/pipeline/features.py`) — the **train-only** driver×circuit-type imputation
-    table (`global_medians` + `driver_circuit_medians`), **injected** (constitution #2): F05 loads it
-    read-only from the committed artefact seam and **never derives a median from the uploaded file**.
+    table (`global_medians` + `driver_circuit_medians`), **injected** (constitution #2) via the
+    `get_medians` provider and **never derived from the uploaded file**. There is **no committed
+    medians artefact / production loader yet** (none exists in APEX — the same posture as F13's
+    uncommitted `classifier.pkl`), so in a fresh checkout the provider yields `None` and the upload
+    returns the cleaning report with `clean_vectors=[]` (honest degrade, logged `MODEL_NOT_FOUND` +
+    warned) rather than fabricating vectors. Tests inject a synthetic table. See §9 limitation (4).
   - **F04** — `artefacts/normalisation.json` is **not** applied inside F05 (upload returns *raw* assembled
     vectors; per-circuit normalisation happens downstream at `/predict` / `/fingerprint/unknown`). Only
     the train-only median table is consumed here.
@@ -274,7 +278,20 @@ TrackStatus/pit/tyre-age use **documented defaults** (all-green, no-pit, tyre-ag
 §4.0-c); (3) the §3.4 UPLOAD_002 detection (`Speed median > 350 km/h ⇒ mph`) is **copied verbatim** as a
 contract though it reads physically inverted (mph values are *smaller* than km/h) — flagged for supervisor
 review; (4) the unknown-driver projection + nearest-neighbour matches happen in **F08** via a follow-on
-`/fingerprint/unknown` call, not inside F05.
+`/fingerprint/unknown` call, not inside F05; (5) **`FeatureMedians` is inject-only — no committed medians
+artefact / production loader exists yet** (parallel to F13's uncommitted handles), so a live
+`POST /ingest/upload` returns the cleaning report with `clean_vectors=[]` (logged `MODEL_NOT_FOUND` +
+warned) until a medians producer + `get_medians` loader lands; `medians` is **non-critical** (the cleaning
+report — the master's documented `/ingest/upload` payload — is fully produced without it), so it is not a
+`/health` component (like the cache).
+
+**Build refinements (failsafe-auditor findings folded in):** the dedup DQ row is logged under
+`ORPHAN_SAMPLES` (rows dropped pre-validation), **not** `LAP_PARTIAL` (which F02 emits per upload lap →
+no log conflation); the ≤5 %-corrupt-drop and dedup paths now append a `warnings` entry (not only a
+report count); an **all-laps-rejected** upload (`laps_total>0`, `laps_accepted==0`) appends a warning so
+an empty result is never a silent `OK`; F02's `combination_excluded` (COMBO_001/DATA_INSUFFICIENT) is
+surfaced on `CleaningReport.combination_excluded`; and the route **caps the multipart read at
+`max_file_bytes + 1`** so an oversize upload is rejected without buffering the whole body.
 
 ## 10. Risks & mitigations (from master risk register where relevant)
 - **Imputation leakage from the uploaded file** (the top risk) → §4.0-d: medians are **injected**

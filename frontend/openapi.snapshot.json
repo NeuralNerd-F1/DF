@@ -1,6 +1,47 @@
 {
   "components": {
     "schemas": {
+      "Body_ingest_upload_ingest_upload_post": {
+        "properties": {
+          "circuit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Circuit"
+          },
+          "driver_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Driver Label"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "unknown_driver": {
+            "default": false,
+            "title": "Unknown Driver",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_ingest_upload_ingest_upload_post",
+        "type": "object"
+      },
       "CompareResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1471,6 +1512,16 @@
     "/ingest/upload": {
       "post": {
         "operationId": "ingest_upload_ingest_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_ingest_upload_ingest_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -1481,11 +1532,21 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Ingest Upload",
         "tags": [
-          "deferred"
+          "upload"
         ]
       }
     },

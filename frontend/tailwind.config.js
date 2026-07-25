@@ -42,6 +42,17 @@ module.exports = {
         sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['var(--font-jetbrains-mono)', 'ui-monospace', 'monospace'],
       },
+      // F19 (Screen 6 §10.7): the degradation alert banner "animates down" on fire. A design token,
+      // not a component literal — matches how all motion constants live outside components (div #70).
+      keyframes: {
+        slideDown: {
+          '0%': { transform: 'translateY(-8px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+      },
+      animation: {
+        'slide-down': 'slideDown 300ms ease-in-out',
+      },
     },
   },
   plugins: [],

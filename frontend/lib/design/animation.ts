@@ -19,6 +19,8 @@ export const DURATION = {
   unknownDrift: 1500, // Screen 5: unknown-driver sphere drift from origin to its position
   spherePulse: 400, // Screen 5: hover sphere pulse
   // NB: the season/camera-focus transition reuses DURATION.styleSpace (1200), already declared above.
+  // --- F19 (Screen 6). Div #70: timings live here, never in config.yaml. ---
+  replayTick: 900, // Screen 6: base ms per replayed lap at 1× playback (÷ speed for 5× / 10×)
 } as const;
 
 // Screen 5: auto-rotating camera speed (master §10.6). Degrees per second.

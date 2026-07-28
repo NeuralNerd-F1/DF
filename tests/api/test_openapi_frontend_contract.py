@@ -58,7 +58,7 @@ def test_confidence_state_values_match_the_frontend_union() -> None:
 
 
 # --- F17 (Screen 3 Ingestion/Prediction + Screen 4 Comparison) ------------------------------------
-# The new screens read these schemas (aliased in lib/api/types.ts, guarded in lib/api/validators.ts).
+# New screens read these schemas (aliased in lib/api/types.ts, guarded in lib/api/validators.ts).
 # A backend rename must fail HERE, not in the browser.
 
 
@@ -87,7 +87,7 @@ def test_unknown_fingerprint_response_fields() -> None:
         "confidence_state",
         "warnings",
     ):
-        assert field in props, f"UnknownFingerprintResponse lost {field!r} — breaks the Unknown Driver tab"
+        assert field in props, f"UnknownFingerprintResponse lost {field!r} — Unknown Driver tab"
 
 
 def test_compare_response_fields() -> None:
@@ -105,7 +105,7 @@ def test_compare_response_fields() -> None:
 def test_ingest_status_response_fields() -> None:
     props = _schemas()["IngestStatusResponse"]["properties"]
     for field in ("status", "progress", "error_detail", "result"):
-        assert field in props, f"IngestStatusResponse lost {field!r} — breaks the FastF1 pipeline poll"
+        assert field in props, f"IngestStatusResponse lost {field!r} — FastF1 pipeline poll"
 
 
 def test_upload_response_fields() -> None:
@@ -132,12 +132,15 @@ def test_style_space_response_fields() -> None:
 
 # --- F19 (Screen 6 Historical Race Replay Monitor) ------------------------------------------------
 # Screen 6 reads ReplayLap/ReplayResponse (aliased in lib/api/types.ts, guarded by zReplay). The
-# route drops τ + the DegradationAlert (div #72–#75); these assert the 5 fields that DO ship still do.
+# route drops τ + the DegradationAlert (div #72–#75); these assert the 5 fields that ship.
 
 
 def test_replay_lap_fields() -> None:
     props = _schemas()["ReplayLap"]["properties"]
-    for field in ("lap_number", "feature_vector", "deviation_score", "alert_state", "fingerprint_snapshot"):
+    for field in (
+        "lap_number", "feature_vector", "deviation_score", "alert_state",
+        "fingerprint_snapshot",
+    ):
         assert field in props, f"ReplayLap lost {field!r} — breaks the Replay Monitor"
 
 

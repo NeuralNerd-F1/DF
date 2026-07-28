@@ -137,7 +137,7 @@ async def test_breaker_opens_after_two_failures(cfg: AppConfig) -> None:
     )
     r1 = await cache.get("predict", "a")  # failure 1
     assert r1.state is ErrorCode.CACHE_UNAVAILABLE
-    r2 = await cache.get("predict", "b")  # failure 2 → opens
+    await cache.get("predict", "b")  # failure 2 → opens
     assert cache.breaker_open() is True
     r3 = await cache.get("predict", "c")  # short-circuits → graceful miss (no call)
     assert r3.state is ErrorCode.CACHE_MISS

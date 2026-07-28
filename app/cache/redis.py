@@ -8,7 +8,7 @@ handler** — every fault is caught, recorded on its own circuit breaker (§8.3:
 ``data_quality_log`` at outage onset. This is the RQ5 "cache unavailability resilience" guarantee
 (§11.4) made structural.
 
-The client is injected as a minimal :class:`RedisClientProtocol`, so the real ``redis.asyncio.Redis``
+The client is injected as a minimal :class:`RedisClientProtocol`, so ``redis.asyncio.Redis``
 and the offline ``fakeredis.aioredis.FakeRedis`` (and a ``None`` for the disabled case) are all
 first-class — the whole cache suite runs with no Redis server.
 """
@@ -69,7 +69,7 @@ class CacheResult:
 class _CacheBreaker:
     """The §8.3 circuit-breaker state machine, non-raising (mirrors ``DbCircuitBreaker`` but the
     cache turns an open breaker into a graceful miss instead of an error). Clock injected so tests
-    never touch wall time. Reimplemented locally to keep ``app/cache`` free of the DB/pandas stack."""
+    never touch wall time. Reimplemented to keep ``app/cache`` free of the DB/pandas stack."""
 
     config: BreakerConfig
     clock: Callable[[], float] = time.monotonic
@@ -107,7 +107,7 @@ class _CacheBreaker:
 
 
 class RedisCache:
-    """A cache-aside wrapper that never fails a request. ``enabled=False`` (or ``client=None``) makes
+    """A cache-aside wrapper that never fails a request. ``enabled=False``/``client=None`` makes
     every read a graceful ``CACHE_MISS`` — the system runs identically cache-less."""
 
     def __init__(
@@ -126,7 +126,7 @@ class RedisCache:
         self._breaker = _CacheBreaker(config.breaker, clock=clock)
         self._log_path = log_path
         self.enabled = bool(config.enabled and client is not None)
-        # Cheap in-process counters the /metrics endpoint reads at scrape (no coupling to prometheus).
+        # Cheap in-process counters the /metrics endpoint reads at scrape (no prometheus coupling).
         self.hits = 0
         self.misses = 0
 
@@ -179,7 +179,7 @@ class RedisCache:
             return CacheResult(hit=False, state=ErrorCode.CACHE_MISS)
         if self._breaker.is_open():
             self.misses += 1
-            return CacheResult(hit=False, state=ErrorCode.CACHE_MISS)  # short-circuit → graceful miss
+            return CacheResult(hit=False, state=ErrorCode.CACHE_MISS)  # short-circuit → miss
         client = self._client
         raw, ok = await self._guarded(lambda: client.get(self.key(namespace, ident)))
         if not ok:
@@ -211,7 +211,7 @@ class RedisCache:
         try:
             blob = json.dumps(value, separators=(",", ":"), default=str)
         except (TypeError, ValueError):
-            return ErrorCode.CACHE_DEGRADED  # non-serialisable → skip caching, never fail the request
+            return ErrorCode.CACHE_DEGRADED  # non-serialisable → skip caching, never fail
         client = self._client
         _, ok = await self._guarded(lambda: client.set(self.key(namespace, ident), blob, ex=ttl_s))
         return None if ok else ErrorCode.CACHE_UNAVAILABLE
@@ -240,7 +240,7 @@ class RedisCache:
             return cast("_T", read.value), read
         value = await compute()
         write_state = await self.set(namespace, ident, value, ttl_s)
-        # Surface the more informative state: a read fault (CACHE_UNAVAILABLE) dominates a write drop.
+        # Surface the more informative state: a read fault (CACHE_UNAVAILABLE) beats a write drop.
         state = read.state or write_state
         return value, CacheResult(value=value, hit=False, state=state)
 

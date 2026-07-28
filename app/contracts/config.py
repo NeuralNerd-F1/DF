@@ -1166,6 +1166,59 @@ class UploadConfig(BaseModel):
         return self
 
 
+class EvalConfig(BaseModel):
+    """Typed view over the ``eval:`` block (F20 evaluation framework, §11 — all four pillars + RQ
+    verdicts; §13 Week-20 deliverable).
+
+    Lives here (standing rule): ``app/eval/evaluate.py`` reads its knobs through a validated model.
+    Holds ONLY the §11 targets that no existing block owns; every target already owned by a feature
+    block is REFERENCED, never re-declared — ``classifier.target_macro_f1`` (0.78) /
+    ``classifier.per_driver_floor`` (0.70) / ``classifier.baselines``,
+    ``stylespace.stability_variance_threshold`` (0.05) / ``stylespace.stability_n_runs`` (10) /
+    ``stylespace.nearest_neighbours_k`` (3), ``monitoring.sensitivity_grid_sd``,
+    ``shap.stability_min_seasons``, the whole ``failsafe:`` block, ``api.latency_slo_ms``,
+    ``held_out_circuits``, and ``seeds``. F20 adds **no** error code (it harvests/asserts the
+    pre-seeded ones). The cross-block check (``eval:`` requires classifier/stylespace/monitoring/
+    failsafe) lives on ``AppConfig``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stability_js_target: float  # §11.2 — year-on-year JS divergence below this = stable (F07)
+    unknown_nn_correct_min: int  # §11.2 — min drivers-as-unknown projected to the correct neighbour
+    lead_time_min_laps: int  # §11.3 — mean alert lead time lower bound (laps before pit)
+    lead_time_max_laps: int  # §11.3 — mean alert lead time upper bound
+    tp_rate_target: float  # §11.3 — min stint true-positive rate (alerted within 5 laps before pit)
+    fp_rate_max: float  # §11.3 — max stint false-positive rate (alert > 5 laps early)
+    report_filename: str  # results-table artefact under paths.artefacts_dir
+
+    @model_validator(mode="after")
+    def _scalars_sane(self) -> EvalConfig:
+        """Fail fast on out-of-range constants so a mis-edit is a load-time ``CONFIG_001`` (#1)."""
+        if self.stability_js_target <= 0.0:
+            raise ValueError(
+                f"eval.stability_js_target must be > 0, got {self.stability_js_target}"
+            )
+        if self.unknown_nn_correct_min < 1:
+            raise ValueError(
+                f"eval.unknown_nn_correct_min must be >= 1, got {self.unknown_nn_correct_min}"
+            )
+        if not 0 < self.lead_time_min_laps < self.lead_time_max_laps:
+            raise ValueError(
+                "eval.lead_time_min_laps must satisfy 0 < min < max, got "
+                f"min={self.lead_time_min_laps}, max={self.lead_time_max_laps}"
+            )
+        if not 0.0 < self.tp_rate_target <= 1.0:
+            raise ValueError(
+                f"eval.tp_rate_target must be in (0, 1], got {self.tp_rate_target}"
+            )
+        if not 0.0 <= self.fp_rate_max < 1.0:
+            raise ValueError(f"eval.fp_rate_max must be in [0, 1), got {self.fp_rate_max}")
+        if not self.report_filename:
+            raise ValueError("eval.report_filename must be non-empty")
+        return self
+
+
 class AppConfig(BaseModel):
     """Validated view over ``config.yaml``.
 
@@ -1204,6 +1257,9 @@ class AppConfig(BaseModel):
     replay: ReplayConfig | None = None  # F14; None until the replay: block is present
     failsafe: FailsafeConfig | None = None  # F15; None until the failsafe: block is present
     upload: UploadConfig | None = None  # F05; None until the upload: block is present
+    # YAML key is `eval:`; the Python attribute is `eval_` to avoid shadowing the builtin `eval`
+    # (F20; None until the eval: block is present). Same alias precedent as `lap_validation`.
+    eval_: EvalConfig | None = Field(default=None, alias="eval")
 
     @model_validator(mode="after")
     def _held_out_circuits_non_empty(self) -> AppConfig:
@@ -1334,6 +1390,31 @@ class AppConfig(BaseModel):
                 f"upload.resample_target_hz ({self.upload.resample_target_hz}) must be >= "
                 f"thresholds.sample_rate_floor_hz ({self.thresholds.sample_rate_floor_hz})"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _eval_requires_sibling_blocks(self) -> AppConfig:
+        """F20 references the ``classifier`` (target_macro_f1 / per_driver_floor / baselines),
+        ``stylespace`` (stability_variance_threshold / nearest_neighbours_k), ``monitoring``
+        (sensitivity_grid_sd, and it loads the F10 detector), and ``failsafe`` (it calls
+        ``run_failsafe_suite`` over the whole block) targets/surfaces — an ``eval:`` block without
+        those siblings would skip every pillar or crash a runner at first use instead of failing at
+        config load. Cross-block, so it lives here on ``AppConfig`` (spec §5 placement)."""
+        if self.eval_ is not None:
+            missing = [
+                name
+                for name, present in (
+                    ("classifier", self.classifier is not None),
+                    ("stylespace", self.stylespace is not None),
+                    ("monitoring", self.monitoring is not None),
+                    ("failsafe", self.failsafe is not None),
+                )
+                if not present
+            ]
+            if missing:
+                raise ValueError(
+                    f"eval: requires {missing} — F20 references their targets/surfaces (§11)"
+                )
         return self
 
 

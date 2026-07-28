@@ -82,6 +82,10 @@ async def test_rq5_7_concurrent(cfg: AppConfig) -> None:
 
 
 # --- artefact-gated real-rate companions (Tests 1 & 6) — skipped without committed artefacts ---
+# F20 now OWNS the real rate assertions: app/eval/evaluate.py::_test1_low_confidence_rate /
+# _test6_ood_5sd_detection compute them, and tests/eval/test_evaluation.py::test_real_full_run
+# drives them under the same @pytest.mark.artefacts gate. These two skip cleanly (they no longer
+# raise) and point there — so a future artefacts-present run asserts in one place, not two.
 def _artefact(cfg: AppConfig, filename: str) -> Path:
     return Path(cfg.paths.artefacts_dir) / filename
 
@@ -91,7 +95,9 @@ async def test_rq5_1_real_gate_rate(cfg: AppConfig) -> None:
     art = _artefact(cfg, cfg.classifier.model_artefact_filename) if cfg.classifier else None
     if art is None or not art.is_file():
         pytest.skip("champion artefact absent — the 90% gate rate is evaluated in F20")
-    raise AssertionError("real-artefact rate assertion runs only in F20")  # pragma: no cover
+    pytest.skip(  # pragma: no cover - real rate is asserted by F20's test_real_full_run
+        "real rate asserted by tests/eval/test_evaluation.py::test_real_full_run (F20 owns it)"
+    )
 
 
 @pytest.mark.artefacts
@@ -99,7 +105,9 @@ async def test_rq5_6_real_ood_detection(cfg: AppConfig) -> None:
     art = _artefact(cfg, cfg.stylespace.umap_model_filename) if cfg.stylespace else None
     if art is None or not art.is_file():
         pytest.skip("umap artefact absent — real 5-SD detection is evaluated in F20")
-    raise AssertionError("real-artefact detection assertion runs only in F20")  # pragma: no cover
+    pytest.skip(  # pragma: no cover - real detection is asserted by F20's test_real_full_run
+        "real 5-SD detection asserted by tests/eval/test_evaluation.py::test_real_full_run (F20)"
+    )
 
 
 # --- suite + report ----------------------------------------------------------------------------

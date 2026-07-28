@@ -380,3 +380,20 @@ upload:
   max_rows: 500000                   # DoS guard — reject before parse (INVALID_INPUT)
   lap_number_column: LapNumber       # §3.4 duplicate-lap dedup + per-lap grouping key
   time_column: Time                  # inter-sample Δt source for the sampling-consistency check
+
+# --- F20 evaluation framework (§11 — all four pillars + RQ verdicts; §13 Week-20 deliverable) ------
+# F20 ORCHESTRATES the existing pillar surfaces and GATES each harvested/returned metric against its
+# master target. Targets already owned by a feature block are REFERENCED, never re-declared here:
+#   classifier.target_macro_f1 (0.78), classifier.per_driver_floor (0.70), classifier.baselines,
+#   stylespace.stability_variance_threshold (0.05), stylespace.stability_n_runs (10),
+#   stylespace.nearest_neighbours_k (3), monitoring.sensitivity_grid_sd, shap.stability_min_seasons,
+#   the whole failsafe: block, api.latency_slo_ms, held_out_circuits, seeds.
+# This block holds ONLY the §11 targets that NO existing block owns. F20 adds no error code.
+eval:
+  stability_js_target: 0.15         # §11.2 — year-on-year JS divergence below this = stable (F07 season_stability)
+  unknown_nn_correct_min: 6         # §11.2 — min drivers-as-unknown projected to the correct nearest neighbour
+  lead_time_min_laps: 2             # §11.3 — mean alert lead time lower bound (laps before pit)
+  lead_time_max_laps: 5             # §11.3 — mean alert lead time upper bound
+  tp_rate_target: 0.70              # §11.3 — min stint true-positive rate (alerted within 5 laps before pit)
+  fp_rate_max: 0.20                 # §11.3 — max stint false-positive rate (alert > 5 laps early)
+  report_filename: evaluation_report.json  # results-table artefact under paths.artefacts_dir

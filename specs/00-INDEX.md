@@ -52,7 +52,7 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
 ## Layer 5 — Evaluation & writing
 | ID  | Feature | Depends on | Wk | Status |
 |-----|---------|-----------|----|--------|
-| F20 | Evaluation framework (classifier, stability, degradation, failsafe) | F06–F15 | 20 | SPEC WRITTEN |
+| F20 | Evaluation framework (classifier, stability, degradation, failsafe) | F06–F15 | 20 | DONE (2026-07-26) |
 | F21 | Dissertation: Intro, Related Work, Design, Implementation | all | 21 | TODO |
 | F22 | Dissertation: Evaluation, Discussion, Conclusion + submit | F20 | 22 | TODO |
 
@@ -66,6 +66,48 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F20 BUILT — 2026-07-26 (worktree-F20-evaluation-build): DONE.** `app/eval/evaluate.py` — the §11
+  evaluation framework: one **async orchestrator** `run_full_evaluation(matrix, *, config, artefact_dir,
+  teams, log_path, classifier_result) → EvaluationReport` over the four §11 pillars + the F09 ablation.
+  It **orchestrates; it recomputes nothing** (div #53): *calls* the read-only surfaces
+  (`run_failsafe_suite`, `lead_time_report`, `stability_report`/`teammate_proximity`/`project_unknown`,
+  `season_stability`, `run_ablation`) and *harvests* the champion `ClassifierTrainingResult`'s held-out
+  §11.1 numbers — **no `.fit()`, no metric arithmetic beyond value-vs-target** (a repo-scan test asserts
+  it). Typed `MetricResult`/`PillarResult`/`RQVerdict`/`EvaluationReport` (+ `render_report()` = 4 pillar
+  tables + RQ table + failures roll-up); the RQ1–RQ5 mapper (RQ2 **`PARTIAL` by construction**, div #57;
+  any skipped-evidence RQ → `INSUFFICIENT_DATA`). **No new error code, no new model artefact** — the
+  content-hashed, timestamp-free `evaluation_report.json` mirrors `failsafe_report.json` (hash covers the
+  **outcome/verdicts**, not stochastic `value`s, div #58). New typed `EvalConfig` + `eval:` block (7
+  targets no sibling owns; references `classifier`/`stylespace`/`monitoring`/`failsafe`/`api.latency_slo_ms`/
+  `held_out_circuits`; cross-block validator requires those four siblings). **Offline = the machine +
+  mechanism** (div #54): the §11.4 failsafe pillar runs via `run_failsafe_suite`; the three data/artefact
+  pillars `skipped` + reason; RQ5 answered, RQ1/RQ3/RQ4 `INSUFFICIENT_DATA`, RQ2 `PARTIAL` — the real
+  numbers are `@pytest.mark.artefacts`-gated (skipped without the committed champion/umap/detector +
+  held-out matrix). **Never raises** — a pillar fault → `skipped` + finding, never an aborted run
+  (div #59). **Build-time divergences #62–#63:** (#62) the champion result reaches §11.1 via an additive
+  keyword-only `classifier_result` inject (spec-signature-compatible); MLflow auto-recovery is a documented
+  follow-up seam → offline `None`→skip. (#63) the §11.4 real rate extensions (Test 1 ≥90% LOW_CONFIDENCE,
+  Test 6 5-SD OOD) are computed via the read-only surfaces (`predict`/`project_unknown`) threaded with the
+  matrix, artefact-gated; a fault degrades to a visible `value=None`+finding, never a false pass. Also:
+  the handle-load probes log `MODEL_NOT_FOUND` to an **eval-scoped** `eval_dq.jsonl` (not the operational
+  `data_quality_log`) so an eval run never pollutes it (§7 AC). The two F15 `@pytest.mark.artefacts`
+  placeholders (`test_rq5_1/6`) now **skip → point to F20's `test_real_full_run`** (no longer `raise`).
+  **Gates:** `tests/eval/test_evaluation.py` (32 offline + 1 `@artefacts` skip: shape/harvest above-below-
+  mixed-None/pillar-wiring/RQ-rules/hash-stability/no-pollution/never-abort/no-`.fit`/config-validators/
+  held-out-isolation/NaN-target/write-failure); `mypy app` (57 files) + `ruff` clean on all F20 files; full
+  suite green. **`failsafe-auditor` run on `app/eval/evaluate.py`; findings fixed with regression tests:**
+  (A) implemented the §4.0-h held-out (Belgium/Italy) `_held_out_matrix` gate — the generalisation
+  evaluators (degradation lead-time, unknown-driver projection, §11.4 rate extensions) now score on the
+  held-out slice ONLY and skip with a reason on a no-held-out / no-`circuit`-`split` matrix (never silently
+  score on training data); (B) `_gate` now treats a **NaN/None target** as `passes=None` (a NaN harvested
+  `held_out_macro_f1` used as the ablation-drop target no longer fabricates a FAIL); (C) the report
+  hash/write tail is wrapped so `run_full_evaluation` returns the report even if persistence fails (the
+  "never raises" contract); (D) removed the `config.eval_`/`failsafe` magic-number fallbacks (absent target
+  → honest skip); (G) fixed the artefact-gated Test-1 sampling (`iloc[i%1]`→varied rows + `total`
+  denominator). `/apex-review F20` run. Consumed by F21/F22 (embed the tables + RQ verdicts). **F20 is the
+  last executable feature — next is F21 (dissertation).**
+  _(Note: `ruff check .` still reports pre-existing E501 debt in F14/F17 files — `app/cache/redis.py`,
+  `tests/api/test_openapi_frontend_contract.py`, `tests/cache/test_redis_cache.py` — untouched by F20.)_
 - **F05 BUILT — 2026-07-25 (feature/F05-manual-upload): DONE.** `app/pipeline/upload.py`
   (`process_upload` + the eight §3.4 edge-case handlers + `_to_session_frame` + `UploadResult`/
   `CleaningReport`/`LapRejection`) + live `app/api/routes/upload.py` (`POST /ingest/upload` multipart →

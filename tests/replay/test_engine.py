@@ -128,6 +128,24 @@ async def test_unknown_session_or_driver_is_not_found(
     assert r1.found is False and r2.found is False and r3.found is False
 
 
+async def test_driver_resolved_by_code(
+    cfg: AppConfig, session_factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The serving API identifies a driver by CODE (Screen 6's picker passes the ``/drivers`` id,
+    which is the code): replay must resolve "HAM" and the raw driver UUID alike; unknown is 404."""
+    _fake_monitor(monkeypatch)
+    sid, did = await _seed(session_factory, lap_numbers=[1, 2, 3, 4, 5])
+    async with session_factory() as s:
+        by_code = await replay_stint(sid, "HAM", session=s, monitor_handle=None, config=cfg)
+        by_uuid = await replay_stint(sid, did, session=s, monitor_handle=None, config=cfg)
+        unknown = await replay_stint(sid, "ZZZ", session=s, monitor_handle=None, config=cfg)
+    assert by_code.found is True
+    assert [lp.lap_number for lp in by_code.laps] == [1, 2, 3, 4, 5]
+    # Code and raw UUID resolve to the identical trace.
+    assert [lp.lap_number for lp in by_code.laps] == [lp.lap_number for lp in by_uuid.laps]
+    assert unknown.found is False  # unknown code → 404, never a silent empty replay
+
+
 async def test_gap_in_laps_is_partial(
     cfg: AppConfig, session_factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
 ) -> None:

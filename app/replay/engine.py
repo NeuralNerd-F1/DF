@@ -84,7 +84,8 @@ async def replay_stint(
 ) -> ReplayResult:
     """Replay one persisted ``(session, driver)`` lap-by-lap through F10 ``monitor_stint``.
 
-    ``session_id`` / ``driver_id`` are the DB ``sessions.id`` / ``drivers.id`` UUIDs. Returns a
+    ``session_id`` is the DB ``sessions.id`` UUID; ``driver_id`` is the driver **code** (e.g.
+    "VER", the serving-API driver identifier) or, tolerated, a raw ``drivers.id`` UUID. Returns a
     :class:`ReplayResult`; never raises on model output (``monitor_stint`` never raises). A DB fault
     propagates (the caller's ``session_scope`` maps it to 503, no partial write)."""
     import pandas as pd
@@ -100,23 +101,49 @@ async def replay_stint(
 
     try:
         sess_uuid = uuid.UUID(str(session_id))
-        drv_uuid = uuid.UUID(str(driver_id))
     except (ValueError, AttributeError):
         return ReplayResult(found=False)
 
     race = await session.get(models.RaceSession, sess_uuid)
-    driver = await session.get(models.Driver, drv_uuid)
-    if race is None or driver is None:
+    if race is None:
         return ReplayResult(found=False)
     circuit = await session.get(models.Circuit, race.circuit_id)
     if circuit is None:  # pragma: no cover — FK guarantees this, defensive only
+        return ReplayResult(found=False)
+
+    # Driver identity across the serving API is the driver **code** (e.g. "VER") — see
+    # ``app/api/routes/drivers.py`` (``{id}`` is the code) and ``DriverSummary.id``. Screen 6's
+    # driver picker is populated from ``/drivers``, so it passes a code here. Resolve by code,
+    # tolerating a raw driver UUID too (a code is <= 3 chars, a UUID is 36 — no collision). One code
+    # can map to several per-season driver rows (``UNIQUE(code, season)``), so match laps against
+    # every driver row for that code. Unknown driver (neither a live UUID nor a known code) → 404.
+    driver_ids: list[uuid.UUID] = []
+    driver: Any | None = None
+    try:
+        drv_uuid: uuid.UUID | None = uuid.UUID(str(driver_id))
+    except (ValueError, AttributeError):
+        drv_uuid = None
+    if drv_uuid is not None:
+        driver = await session.get(models.Driver, drv_uuid)
+        if driver is not None:
+            driver_ids = [driver.id]
+    if not driver_ids:
+        matched = (
+            await session.execute(
+                select(models.Driver).where(models.Driver.code == str(driver_id))
+            )
+        ).scalars().all()
+        if matched:
+            driver = matched[0]
+            driver_ids = [d.id for d in matched]
+    if driver is None or not driver_ids:
         return ReplayResult(found=False)
 
     rows = (
         await session.execute(
             select(models.Lap, models.LapFeatures)
             .join(models.LapFeatures, models.LapFeatures.lap_id == models.Lap.id)
-            .where(models.Lap.session_id == sess_uuid, models.Lap.driver_id == drv_uuid)
+            .where(models.Lap.session_id == sess_uuid, models.Lap.driver_id.in_(driver_ids))
             .order_by(models.Lap.lap_number)
         )
     ).all()

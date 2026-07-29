@@ -70,18 +70,26 @@ export function StyleSpaceScreen({
         <SeasonFilter />
       </header>
 
-      {/* What the dots are + where they come from — the scene is otherwise unlabelled coloured dots. */}
+      {/* What the dots are + where they come from — the scene is otherwise unlabelled coloured dots.
+          Every claim here is mode-aware and engine-honest: /stylespace returns coordinates only, not
+          which engine produced them (UMAP or the PCA fallback), so the copy never names one. */}
       <p
         className="mb-4 max-w-3xl font-mono text-[11px] leading-relaxed text-text-secondary"
         data-testid="style-space-about"
       >
         Each point is one driver&apos;s <span className="text-text-primary">behavioural fingerprint</span>{' '}
-        — their per-lap 28-feature vector (throttle, braking, cornering, tyre usage…) averaged over the
-        season, then projected from 28 dimensions down to this map by UMAP. Points that sit close
-        together drive alike; <span className="text-text-primary">colour marks the constructor</span>.
-        Hover or pick a driver for its nearest neighbours, drag to orbit, scroll to zoom. A projected
-        unknown driver appears as a drifting white sphere. Showing{' '}
-        <span className="text-text-primary">{nodes.length}</span> drivers from the loaded dataset.
+        — the mean <em>and</em> spread of their 28 per-lap features (throttle, braking, cornering, tyre
+        usage…) over the season, a 56-number summary. The style-space model (UMAP, or its PCA fallback)
+        compresses that to 5 dimensions;{' '}
+        {mode === 'webgl'
+          ? 'this scene plots 3 of them. Drag to orbit, scroll to zoom'
+          : 'this is the flat 2D projection of the same model'}
+        . Points that sit close together drive alike;{' '}
+        <span className="text-text-primary">colour marks the constructor</span>. Hover or pick a driver
+        for its nearest neighbours
+        {mode === 'webgl' ? '; a projected unknown driver appears as a drifting white sphere' : ''}.
+        Showing <span className="text-text-primary">{nodes.length}</span> drivers from the loaded
+        dataset.
       </p>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">

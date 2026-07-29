@@ -67,6 +67,39 @@ describe('StyleSpaceScreen (master §10.6)', () => {
     expect(screen.getByTestId('driver-sidebar')).toBeInTheDocument();
   });
 
+  // The legend doubles as a driver picker, so it must drive the SAME selection/hover state as the
+  // scatter — a spy on the prop only proves the callback fired, not that the screen is wired to it.
+  it('a legend row selects and hovers the same driver as the scatter (shared state)', () => {
+    render(<StyleSpaceScreen initialStyle={STYLE} initialDrivers={DRIVERS} />);
+    expect(screen.queryByTestId('driver-sidebar')).toBeNull();
+
+    fireEvent.mouseEnter(screen.getByTestId('legend-row-PER'));
+    expect(screen.getByTestId('tooltip-code')).toHaveTextContent('PER');
+
+    fireEvent.click(screen.getByTestId('legend-row-PER'));
+    expect(screen.getByTestId('driver-sidebar')).toHaveTextContent('PER');
+    expect(screen.getByTestId('legend-row-PER')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('legend-row-VER')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  // The caption explains what the dots are; it must not claim capabilities the active mode lacks
+  // (2D renders no unknown sphere and has no orbit) nor name an engine /stylespace never reports.
+  it('captions the scatter honestly per mode, and never names UMAP as the confirmed engine', () => {
+    const { unmount } = render(<StyleSpaceScreen initialStyle={STYLE} initialDrivers={DRIVERS} />);
+    const flat = screen.getByTestId('style-space-about');
+    expect(flat).toHaveTextContent('56-number summary');
+    expect(flat).toHaveTextContent('UMAP, or its PCA fallback'); // hedged — engine is not exposed
+    expect(flat).toHaveTextContent('flat 2D projection');
+    expect(flat).not.toHaveTextContent('drifting white sphere'); // 2D draws no unknown marker
+    expect(flat).not.toHaveTextContent('scroll to zoom');
+    unmount();
+
+    render(<StyleSpaceScreen initialStyle={STYLE} initialDrivers={DRIVERS} forceMode="webgl" />);
+    const scene = screen.getByTestId('style-space-about');
+    expect(scene).toHaveTextContent('plots 3 of them');
+    expect(scene).toHaveTextContent('drifting white sphere');
+  });
+
   it('renders the season filter as a deferred/disabled control (div #64)', () => {
     render(<StyleSpaceScreen initialStyle={STYLE} initialDrivers={DRIVERS} />);
     const btns = screen.getAllByTestId('season-btn');

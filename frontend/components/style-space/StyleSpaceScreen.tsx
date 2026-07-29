@@ -12,6 +12,7 @@ import { DriverSidebar } from './DriverSidebar';
 import { DriverTooltip } from './DriverTooltip';
 import { SeasonFilter } from './SeasonFilter';
 import { StyleSpace2D } from './StyleSpace2D';
+import { StyleSpaceLegend } from './StyleSpaceLegend';
 import { TeammateLinesToggle } from './TeammateLinesToggle';
 import { UnknownProjectionPanel } from './UnknownProjectionPanel';
 
@@ -63,11 +64,25 @@ export function StyleSpaceScreen({
 
   return (
     <main className="mx-auto max-w-6xl p-6" data-testid="style-space-screen" data-mode={mode}>
-      <header className="mb-4 flex flex-wrap items-center gap-3">
+      <header className="mb-2 flex flex-wrap items-center gap-3">
         <h1 className="font-mono text-lg uppercase tracking-wide text-accent">Style Space</h1>
         <TeammateLinesToggle value={showTeammates} onChange={setShowTeammates} />
         <SeasonFilter />
       </header>
+
+      {/* What the dots are + where they come from — the scene is otherwise unlabelled coloured dots. */}
+      <p
+        className="mb-4 max-w-3xl font-mono text-[11px] leading-relaxed text-text-secondary"
+        data-testid="style-space-about"
+      >
+        Each point is one driver&apos;s <span className="text-text-primary">behavioural fingerprint</span>{' '}
+        — their per-lap 28-feature vector (throttle, braking, cornering, tyre usage…) averaged over the
+        season, then projected from 28 dimensions down to this map by UMAP. Points that sit close
+        together drive alike; <span className="text-text-primary">colour marks the constructor</span>.
+        Hover or pick a driver for its nearest neighbours, drag to orbit, scroll to zoom. A projected
+        unknown driver appears as a drifting white sphere. Showing{' '}
+        <span className="text-text-primary">{nodes.length}</span> drivers from the loaded dataset.
+      </p>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
         <div className="relative rounded-lg border border-border bg-card p-2">
@@ -101,6 +116,12 @@ export function StyleSpaceScreen({
 
         <div className="space-y-4">
           {selectedNode ? <DriverSidebar node={selectedNode} onClose={() => setSelected(null)} /> : null}
+          <StyleSpaceLegend
+            nodes={nodes}
+            selected={selected}
+            onHover={setHovered}
+            onSelect={setSelected}
+          />
           <UnknownProjectionPanel onProjected={onProjected} />
         </div>
       </div>

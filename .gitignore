@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 .venv/
+# FastF1 lives in its OWN venv: it needs pandas 2.x, APEX runs pandas 3.x. The two halves
+# communicate only through parquet on disk, never in-process (see scripts/fetch_fastf1.py).
+.ff1venv/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
@@ -12,6 +15,11 @@ artefacts/*
 !artefacts/.gitkeep
 /cache/
 logs/
+
+# Real-telemetry corpus: FastF1's HTTP/session cache + the parquet contract frames Stage A
+# writes. Tens of GB for a multi-season pull — never committed, always re-fetchable.
+fastf1_cache/
+fastf1_data/
 
 # MLflow / Optuna
 mlruns/

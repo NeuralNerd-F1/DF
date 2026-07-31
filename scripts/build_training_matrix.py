@@ -1,0 +1,446 @@
+"""Stage B of real-data training: the FastF1 parquet corpus -> APEX's 28-feature training matrix.
+
+Reads what ``scripts/fetch_fastf1.py`` (Stage A) wrote and drives the REAL pipeline surfaces --
+:func:`validate_session` (F02), :func:`compute_scalar_features` / :func:`compute_geometry_features`
+/ :func:`compute_degradation_slopes` (F03a/F03b) and :func:`assemble_feature_vector` -- to produce
+``driver, circuit, season, split, F01..F28``, the matrix :func:`train_classifier` and
+:func:`build_style_space` consume.
+
+This script ORCHESTRATES; it computes no feature maths of its own.
+
+Three things it must get right, all of them documented decisions rather than defaults:
+
+**1. Resampling (§3.4 RESAMPLED).** FastF1's public telemetry is ~7.5 Hz with irregular gaps,
+below ``thresholds.sample_rate_floor_hz`` (20) -- every raw lap would be rejected ``LAP_004``.
+The corpus measures inter-sample Δt std/mean ~0.61, far above ``upload.sampling_delta_std_fraction``
+(0.20), so it formally meets APEX's own "inconsistent sampling" test and §3.4 prescribes a
+linear-interpolation resample to ``upload.resample_target_hz``. That is applied here, per lap,
+before validation. NOTE FOR THE WRITE-UP: upsampling clears the floor but adds no information --
+the true information rate stays ~7.5 Hz, and any feature reading high-frequency content
+(modulation rate, jerk) is interpolation-smoothed. Recorded in the matrix metadata.
+
+**2. Train-only medians (non-negotiable #2).** ``assemble_feature_vector`` imputes NULLs from a
+:class:`FeatureMedians` table that must be computed on TRAINING laps only. So this runs TWO passes:
+pass 1 computes raw per-lap feature values and derives medians from the train split alone; pass 2
+assembles the final vectors with those medians injected. Held-out circuits never contribute.
+
+**3. Circuit type.** Nothing in the repo maps a circuit to one of ``config.circuit_types`` -- it is
+always caller-supplied. This module owns that mapping explicitly (``_CIRCUIT_TYPE``); an unmapped
+circuit is reported, not silently defaulted.
+
+Run (main venv -- NOT the FastF1 one):
+
+    .venv/Scripts/python.exe scripts/build_training_matrix.py --seasons 2022 2023 2024 2025
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections import defaultdict
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.contracts.config import AppConfig, load_config  # noqa: E402
+from app.contracts.results import Status  # noqa: E402
+from app.pipeline.features import (  # noqa: E402
+    FEATURE_IDS,
+    FeatureMedians,
+    StintLap,
+    assemble_feature_vector,
+    compute_degradation_slopes,
+    compute_geometry_features,
+    compute_scalar_features,
+)
+from app.pipeline.validate import validate_session  # noqa: E402
+
+# Circuit -> config.circuit_types member. Grouped on the dominant demand of the layout:
+#   street      — public-road circuits: low grip, walls, low average speed
+#   high_speed  — long straights / high full-throttle fraction
+#   technical   — high corner density, heavy braking, low speed
+#   mixed       — balanced layouts that sit in neither extreme
+# An unmapped circuit is REPORTED (never silently bucketed) — the type drives F04 grouping,
+# the F10 τ lookup and F11's setup mapping, so a wrong guess is worse than a loud gap.
+_CIRCUIT_TYPE: dict[str, str] = {
+    "Bahrain": "high_speed",
+    "Saudi Arabia": "street",
+    "Australia": "mixed",
+    "Azerbaijan": "street",
+    "Miami": "mixed",
+    "Emilia-Romagna": "technical",
+    "Monaco": "street",
+    "Spain": "technical",
+    "Canada": "mixed",
+    "Austria": "high_speed",
+    "Great Britain": "high_speed",
+    "Hungary": "technical",
+    "Belgium": "high_speed",      # held out
+    "Netherlands": "technical",
+    "Italy": "high_speed",        # held out
+    "Singapore": "street",
+    "Japan": "technical",
+    "Qatar": "high_speed",
+    "USA": "mixed",
+    "Mexico": "mixed",
+    "Brazil": "mixed",
+    "Las Vegas": "street",
+    "Abu Dhabi": "mixed",
+    "France": "high_speed",
+    "Portugal": "technical",
+    "China": "mixed",
+    "Turkey": "mixed",
+}
+
+# Resampling treats channels by KIND, which is load-bearing. Linearly interpolating a CATEGORICAL
+# channel invents transitions: linear-interp Gear changes value at essentially every sample, so
+# F15 (gear changes per km) explodes past its [0,15] range and NULLs out — which then fails every
+# lap, because a NULL with no train median cannot be imputed. Gear and DRS are category codes and
+# so carry the previous observed value (zero-order hold).
+#
+# Brake sits with the CONTINUOUS channels despite arriving as a bool, and this is a documented
+# limitation rather than a clean call. FastF1 publishes brake as 1-bit on/off; APEX's F06/F08
+# (brake_peak_mean, brake_release_rate in bar/50 ms) were specified against a brake-PRESSURE
+# trace, which the public feed does not carry. Held as a step, the signal is a square wave whose
+# "release" is a single -100 edge — F08 saturates past its [0,100] range and NULLs for every lap.
+# Interpolating treats the bool as a coarse quantisation of the underlying pressure, which is the
+# least-wrong available reading. FOR THE WRITE-UP: on real data F06/F08 are derived from a boolean
+# proxy and are NOT brake pressure; they should not be interpreted as such.
+_CONTINUOUS = ["Speed", "Throttle", "RPM", "X", "Y", "Brake"]
+_DISCRETE = ["Gear", "DRS"]
+
+
+def resample_lap(lap: pd.DataFrame, hz: int) -> pd.DataFrame:
+    """Linear-interpolate one lap's channels onto a uniform ``hz`` grid (§3.4 RESAMPLED).
+
+    Mirrors ``app/pipeline/upload.py::_resample_lap_to_hz`` but is applied UNCONDITIONALLY:
+    upload resamples only when Δt is inconsistent, whereas here the raw rate is uniformly below
+    the 20 Hz floor and every lap needs lifting. Per-lap scalar context (lap_time, compound,
+    stint, tyre_age, ...) is constant within a lap and is carried through unchanged.
+    """
+    t = pd.to_numeric(lap["time"], errors="coerce").to_numpy(dtype=float)
+    order = np.argsort(t, kind="stable")
+    t = t[order]
+    finite = np.isfinite(t)
+    t = t[finite]
+    if t.size < 2:
+        return lap
+    keep = np.concatenate(([True], np.diff(t) > 0))  # np.interp needs strictly increasing x
+    t = t[keep]
+    if t.size < 2:
+        return lap
+    grid = np.arange(t[0], t[-1], 1.0 / hz, dtype=float)
+    if grid.size == 0:
+        return lap
+    out: dict[str, Any] = {"time": grid}
+    for col in _CONTINUOUS:
+        if col not in lap.columns:
+            continue
+        vals = pd.to_numeric(lap[col], errors="coerce").to_numpy(dtype=float)[order][finite][keep]
+        out[col] = np.interp(grid, t, vals)
+    # Zero-order hold for discrete channels — the sample in force at each grid point.
+    step_idx = np.clip(np.searchsorted(t, grid, side="right") - 1, 0, t.size - 1)
+    for col in _DISCRETE:
+        if col not in lap.columns:
+            continue
+        vals = pd.to_numeric(lap[col], errors="coerce").to_numpy(dtype=float)[order][finite][keep]
+        out[col] = vals[step_idx]
+    frame = pd.DataFrame(out)
+    # Per-lap constants ride along unchanged (first value — constant within the lap).
+    carry = ("lap", "track_status", "compound", "pit_in", "pit_out", "lap_time", "stint",
+             "tyre_age")
+    for col in carry:
+        if col in lap.columns:
+            frame[col] = lap[col].iloc[0]
+    return frame
+
+
+def resample_session(frame: pd.DataFrame, hz: int) -> pd.DataFrame:
+    """Resample every lap of a driver-session onto the uniform grid."""
+    out = [resample_lap(g, hz) for _, g in frame.groupby("lap", sort=True)]
+    return pd.concat(out, ignore_index=True) if out else frame
+
+
+def _lap_distance_m(lap: pd.DataFrame) -> float | None:
+    """Path length of one lap from the X/Y trace, in metres (FastF1 X/Y are in 1/10 m)."""
+    if "X" not in lap.columns or "Y" not in lap.columns:
+        return None
+    x = pd.to_numeric(lap["X"], errors="coerce").to_numpy(dtype=float)
+    y = pd.to_numeric(lap["Y"], errors="coerce").to_numpy(dtype=float)
+    ok = np.isfinite(x) & np.isfinite(y)
+    if ok.sum() < 2:
+        return None
+    d = float(np.sum(np.hypot(np.diff(x[ok]), np.diff(y[ok])))) / 10.0
+    return d if np.isfinite(d) and d > 0 else None
+
+
+def _raw_values(
+    frame: pd.DataFrame, lap_no: int, config: AppConfig, session_max_rpm: float | None,
+    entity_id: str, log_path: Path,
+) -> tuple[dict[str, float | None], list[str]]:
+    """F03a scalars + F03b geometry for one lap, as a plain feature->value dict."""
+    lap = frame.loc[frame["lap"] == lap_no]
+    lt = pd.to_numeric(lap["lap_time"], errors="coerce").dropna()
+    lap_time_s = float(lt.iloc[0]) if len(lt) else None
+    scalar = compute_scalar_features(
+        lap, lap_number=lap_no, session_max_rpm=session_max_rpm,
+        lap_distance_m=_lap_distance_m(lap), config=config, lap_time_s=lap_time_s,
+        log_path=log_path, entity_id=entity_id,
+    )
+    geo = compute_geometry_features(
+        lap, lap_number=lap_no, config=config, log_path=log_path, entity_id=entity_id,
+    )
+    values: dict[str, float | None] = {}
+    values.update(scalar.features)
+    values.update(geo.features)
+    return values, []
+
+
+def build_session_rows(
+    path: Path, season: int, circuit: str, driver: str, config: AppConfig,
+    medians: FeatureMedians | None, log_path: Path, hz: int,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """One driver-circuit parquet -> per-lap feature rows (+ a small rejection tally).
+
+    With ``medians=None`` this is PASS 1: raw values only, vectors not assembled (there is no
+    train-only median table yet). With medians injected it is PASS 2 and returns final rows.
+    """
+    stats: dict[str, int] = defaultdict(int)
+    frame = pd.read_parquet(path)
+    if frame.empty:
+        stats["empty_parquet"] += 1
+        return [], stats
+    frame = resample_session(frame, hz)
+
+    vres = validate_session(
+        frame, season=season, circuit=circuit, driver=driver, config=config, log_path=log_path
+    )
+    stats["laps_seen"] += len(vres.clean_laps) + len(vres.rejected_laps)
+    stats["laps_clean"] += len(vres.clean_laps)
+    for rej in vres.rejected_laps:
+        stats[f"rej_{rej.error_code.value}"] += 1
+    if vres.combination_excluded:
+        stats["combination_excluded"] += 1
+    if not vres.clean_laps:
+        return [], stats
+
+    rpm = pd.to_numeric(frame.get("RPM"), errors="coerce")
+    session_max_rpm = float(rpm.max()) if rpm is not None and rpm.notna().any() else None
+    circuit_type = _CIRCUIT_TYPE.get(circuit)
+
+    # F03a/F03b per accepted lap.
+    per_lap: dict[int, dict[str, float | None]] = {}
+    for lv in vres.clean_laps:
+        eid = f"{season}/{circuit}/{driver}/lap{lv.lap_number}"
+        vals, _ = _raw_values(frame, lv.lap_number, config, session_max_rpm, eid, log_path)
+        per_lap[lv.lap_number] = vals
+
+    # F03b tyre-age slopes (F27/F28) per stint, broadcast back over the stint's laps.
+    lap_stint = (
+        frame.drop_duplicates("lap").set_index("lap")[["stint", "tyre_age"]].to_dict("index")
+    )
+    stints: dict[float, list[StintLap]] = defaultdict(list)
+    for lap_no, vals in per_lap.items():
+        meta = lap_stint.get(lap_no, {})
+        st = meta.get("stint")
+        age = meta.get("tyre_age")
+        stints[float(st) if pd.notna(st) else -1.0].append(
+            StintLap(
+                lap_number=lap_no,
+                tyre_age=int(age) if age is not None and pd.notna(age) else None,
+                throttle_mean=vals.get("F01"),
+                brake_peak_mean=vals.get("F06"),
+            )
+        )
+    for sid, stint_laps in stints.items():
+        dres = compute_degradation_slopes(
+            sorted(stint_laps, key=lambda s: s.lap_number), stint_id=int(sid),
+            config=config, log_path=log_path,
+        )
+        for lap_no in dres.applies_to:
+            if lap_no in per_lap:
+                per_lap[lap_no]["F27"] = dres.f27
+                per_lap[lap_no]["F28"] = dres.f28
+
+    if medians is None:  # PASS 1 — raw values for the median table, no assembly
+        return [
+            {"season": season, "circuit": circuit, "driver": driver, "lap": lap_no, **vals}
+            for lap_no, vals in per_lap.items()
+        ], stats
+
+    rows: list[dict[str, Any]] = []
+    by_lap = {lv.lap_number: lv for lv in vres.clean_laps}
+    for lap_no, vals in per_lap.items():
+        lv = by_lap[lap_no]
+        fres = assemble_feature_vector(
+            vals, lap_number=lap_no, driver=driver, circuit_type=circuit_type,
+            medians=medians, config=config, forced_null=lv.null_features or None,
+            flags=list(lv.flags) or None, log_path=log_path,
+            entity_id=f"{season}/{circuit}/{driver}/lap{lap_no}",
+        )
+        # FeatureResult has no `accepted`: a rejected vector is Status.FAILED (LAP_NULL_EXCESS
+        # over the NULL ceiling, or FEATURE_001 when a NULL had no train median to impute from).
+        if fres.status is Status.FAILED:
+            stats[f"vec_{fres.error_code.value if fres.error_code else 'FAILED'}"] += 1
+            continue
+        rows.append(
+            {
+                "season": season, "circuit": circuit, "driver": driver, "lap": lap_no,
+                "circuit_type": circuit_type,
+                **{fid: fres.feature_vector.get(fid) for fid in FEATURE_IDS},
+            }
+        )
+    stats["vectors_built"] += len(rows)
+    return rows, stats
+
+
+def discover(data_dir: Path, seasons: list[int]) -> list[tuple[int, str, str, Path]]:
+    """(season, circuit, driver, parquet_path) for the requested seasons."""
+    found = []
+    for season in seasons:
+        sdir = data_dir / str(season)
+        if not sdir.is_dir():
+            continue
+        for cdir in sorted(sdir.iterdir()):
+            if not cdir.is_dir():
+                continue
+            for pq in sorted(cdir.glob("*.parquet")):
+                found.append((season, cdir.name, pq.stem, pq))
+    return found
+
+
+def stable_core(units: list[tuple[int, str, str, Path]], seasons: list[int]) -> set[str]:
+    """Drivers present in EVERY requested season (the chosen label scope)."""
+    by_season: dict[int, set[str]] = defaultdict(set)
+    for season, _c, driver, _p in units:
+        by_season[season].add(driver)
+    present = [by_season[s] for s in seasons if by_season.get(s)]
+    return set.intersection(*present) if present else set()
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--seasons", type=int, nargs="+", default=[2022, 2023, 2024, 2025])
+    ap.add_argument("--data-dir", default="D:/COMP702/DF/fastf1_data")
+    ap.add_argument("--out", default="D:/COMP702/DF/artefacts/real/training_matrix.parquet")
+    ap.add_argument("--config", default="config.yaml")
+    ap.add_argument("--limit-units", type=int, default=None,
+                    help="cap driver-sessions (smoke test)")
+    args = ap.parse_args()
+
+    config = load_config(args.config)
+    hz = config.upload.resample_target_hz if config.upload is not None else 50
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path = out_path.parent / "build_dq.jsonl"
+
+    units = discover(Path(args.data_dir), args.seasons)
+    if not units:
+        print(f"no parquet corpus under {args.data_dir} for seasons {args.seasons}",
+              file=sys.stderr)
+        raise SystemExit(2)
+
+    core = stable_core(units, args.seasons)
+    unmapped = sorted({c for _s, c, _d, _p in units if c not in _CIRCUIT_TYPE})
+    if unmapped:
+        print(f"!! circuits with NO circuit_type mapping (rows will carry None): {unmapped}",
+              file=sys.stderr)
+
+    units = [u for u in units if u[2] in core]
+    if args.limit_units:
+        units = units[: args.limit_units]
+    print(f"corpus: {len(units)} driver-sessions | "
+          f"stable-core drivers ({len(core)}): {sorted(core)}")
+    print(f"resample: {hz} Hz (§3.4 RESAMPLED; raw corpus ~7.5 Hz < "
+          f"{config.thresholds.sample_rate_floor_hz} Hz floor)")
+
+    held_out = set(config.held_out_circuits)
+    totals: dict[str, int] = defaultdict(int)
+
+    # ---- PASS 1: raw values -> TRAIN-ONLY median table (non-negotiable #2) -------------------
+    print("\n[pass 1/2] raw features for the train-only median table")
+    raw_rows: list[dict[str, Any]] = []
+    for i, (season, circuit, driver, pq) in enumerate(units, 1):
+        if circuit in held_out:
+            continue  # held-out NEVER contributes to the median table
+        rows, stats = build_session_rows(pq, season, circuit, driver, config, None, log_path, hz)
+        raw_rows.extend(rows)
+        for k, v in stats.items():
+            totals[k] += v
+        if i % 50 == 0:
+            print(f"  {i}/{len(units)} sessions, {len(raw_rows)} train laps")
+    if not raw_rows:
+        print("no clean training laps produced — refusing to write an empty matrix",
+              file=sys.stderr)
+        raise SystemExit(3)
+
+    raw = pd.DataFrame(raw_rows)
+    raw["circuit_type"] = raw["circuit"].map(_CIRCUIT_TYPE)
+    global_medians = {
+        fid: float(raw[fid].median()) for fid in FEATURE_IDS
+        if fid in raw.columns and raw[fid].notna().any()
+    }
+    dc: dict[tuple[str, str], dict[str, float]] = {}
+    _typed = raw.dropna(subset=["circuit_type"])
+    for (drv, ctype), grp in _typed.groupby(["driver", "circuit_type"]):
+        dc[(str(drv), str(ctype))] = {
+            fid: float(grp[fid].median()) for fid in FEATURE_IDS
+            if fid in grp.columns and grp[fid].notna().any()
+        }
+    medians = FeatureMedians(global_medians=global_medians, driver_circuit_medians=dc)
+    print(f"  medians: {len(global_medians)} global, {len(dc)} driver×circuit-type cells")
+
+    # ---- PASS 2: assemble the real vectors, held-out included (as the test split) ------------
+    print("\n[pass 2/2] assembling 28-feature vectors")
+    all_rows: list[dict[str, Any]] = []
+    totals = defaultdict(int)
+    for i, (season, circuit, driver, pq) in enumerate(units, 1):
+        rows, stats = build_session_rows(pq, season, circuit, driver, config, medians, log_path, hz)
+        all_rows.extend(rows)
+        for k, v in stats.items():
+            totals[k] += v
+        if i % 50 == 0:
+            print(f"  {i}/{len(units)} sessions, {len(all_rows)} vectors")
+
+    if not all_rows:
+        print("no feature vectors produced — refusing to write an empty matrix", file=sys.stderr)
+        raise SystemExit(3)
+
+    matrix = pd.DataFrame(all_rows)
+    # split: held-out circuits are the quarantined test set; everything else is the train pool
+    # (train_classifier carves its own disjoint calibration split from it).
+    matrix["split"] = np.where(matrix["circuit"].isin(held_out), "test", "train")
+    matrix.to_parquet(out_path, index=False)
+
+    meta = {
+        "seasons": args.seasons,
+        "resample_hz": hz,
+        "raw_rate_note": "FastF1 public telemetry ~7.5 Hz; upsampled per §3.4 RESAMPLED. "
+                         "Upsampling clears the 20 Hz floor but adds no information.",
+        "stable_core_drivers": sorted(core),
+        "circuits": sorted(matrix["circuit"].unique().tolist()),
+        "held_out_circuits": sorted(held_out),
+        "unmapped_circuit_types": unmapped,
+        "n_vectors": int(len(matrix)),
+        "n_train": int((matrix["split"] == "train").sum()),
+        "n_test": int((matrix["split"] == "test").sum()),
+        "tallies": dict(sorted(totals.items())),
+    }
+    (out_path.parent / "training_matrix_meta.json").write_text(
+        json.dumps(meta, indent=2), encoding="utf-8"
+    )
+
+    print(f"\nDONE: {len(matrix)} vectors -> {out_path}")
+    print(f"  train={meta['n_train']} test(held-out)={meta['n_test']}  "
+          f"drivers={matrix['driver'].nunique()}")
+    print(f"  rejection tallies: {dict(sorted(totals.items()))}")
+    print(f"  meta: {out_path.parent / 'training_matrix_meta.json'}")
+
+
+if __name__ == "__main__":
+    main()

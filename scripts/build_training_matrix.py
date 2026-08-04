@@ -48,6 +48,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.contracts.config import AppConfig, load_config  # noqa: E402
+from app.contracts.errors import ErrorCode  # noqa: E402
 from app.contracts.results import Status  # noqa: E402
 from app.pipeline.features import (  # noqa: E402
     FEATURE_IDS,
@@ -201,14 +202,18 @@ def _raw_values(
     return values, []
 
 
-def build_session_rows(
+def extract_session(
     path: Path, season: int, circuit: str, driver: str, config: AppConfig,
-    medians: FeatureMedians | None, log_path: Path, hz: int,
+    log_path: Path, hz: int, session_kind: str = "R",
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """One driver-circuit parquet -> per-lap feature rows (+ a small rejection tally).
+    """One driver-circuit parquet -> per-lap RAW feature records (+ a rejection tally).
 
-    With ``medians=None`` this is PASS 1: raw values only, vectors not assembled (there is no
-    train-only median table yet). With medians injected it is PASS 2 and returns final rows.
+    Resample, validate, and run F03a/F03b ONCE per lap. Assembly (median imputation + the NULL
+    gate) is deferred to :func:`assemble_rows`, because the median table is derived from the
+    train subset of these very records. Computing features twice — once for the medians and
+    again for assembly — doubled a four-season build to ~7 hours for no benefit.
+
+    Each record carries the raw values plus the context assembly and F10/F11 need.
     """
     stats: dict[str, int] = defaultdict(int)
     frame = pd.read_parquet(path)
@@ -240,10 +245,12 @@ def build_session_rows(
         vals, _ = _raw_values(frame, lv.lap_number, config, session_max_rpm, eid, log_path)
         per_lap[lv.lap_number] = vals
 
-    # F03b tyre-age slopes (F27/F28) per stint, broadcast back over the stint's laps.
-    lap_stint = (
-        frame.drop_duplicates("lap").set_index("lap")[["stint", "tyre_age"]].to_dict("index")
-    )
+    # Per-lap context (constant within a lap): stint/tyre-age drive the F03b slopes below, and
+    # the rest are carried onto the output rows for F10/F11.
+    ctx_cols = [c for c in ("stint", "tyre_age", "compound", "track_status", "lap_time")
+                if c in frame.columns]
+    lap_ctx = frame.drop_duplicates("lap").set_index("lap")[ctx_cols].to_dict("index")
+    lap_stint = lap_ctx
     stints: dict[float, list[StintLap]] = defaultdict(list)
     for lap_no, vals in per_lap.items():
         meta = lap_stint.get(lap_no, {})
@@ -267,34 +274,81 @@ def build_session_rows(
                 per_lap[lap_no]["F27"] = dres.f27
                 per_lap[lap_no]["F28"] = dres.f28
 
-    if medians is None:  # PASS 1 — raw values for the median table, no assembly
-        return [
-            {"season": season, "circuit": circuit, "driver": driver, "lap": lap_no, **vals}
-            for lap_no, vals in per_lap.items()
-        ], stats
-
-    rows: list[dict[str, Any]] = []
+    # Per-lap context F10 (stint variation) and F11 (personalisation) need on top of the 28
+    # features. Names mirror their _REQUIRED_COLUMNS exactly: detector wants lap_number /
+    # session / stint / track_status / is_clean / has_interpolation / tyre_age, engine wants
+    # lap_time_s. Every lap reaching here is an F02-accepted lap, hence is_clean=True.
+    records: list[dict[str, Any]] = []
     by_lap = {lv.lap_number: lv for lv in vres.clean_laps}
     for lap_no, vals in per_lap.items():
         lv = by_lap[lap_no]
+        ctx = lap_ctx.get(lap_no, {})
+        records.append(
+            {
+                "season": season, "circuit": circuit, "driver": driver, "lap": lap_no,
+                "circuit_type": circuit_type,
+                "session": session_kind,
+                "lap_number": lap_no,
+                "stint": ctx.get("stint"),
+                "tyre_age": ctx.get("tyre_age"),
+                "compound": ctx.get("compound"),
+                "track_status": ctx.get("track_status"),
+                "lap_time_s": ctx.get("lap_time"),
+                "is_clean": True,
+                "has_interpolation": ErrorCode.LAP_INTERP in lv.flags,
+                "_raw": vals,
+                "_forced_null": lv.null_features or None,
+                "_flags": list(lv.flags) or None,
+            }
+        )
+    return records, stats
+
+
+def derive_medians(records: list[dict[str, Any]], held_out: set[str]) -> FeatureMedians:
+    """Train-only imputation medians (non-negotiable #2): held-out circuits never contribute."""
+    train = [r for r in records if r["circuit"] not in held_out]
+    raw = pd.DataFrame([r["_raw"] for r in train])
+    meta = pd.DataFrame([{"driver": r["driver"], "circuit_type": r["circuit_type"]} for r in train])
+    global_medians = {
+        fid: float(raw[fid].median())
+        for fid in FEATURE_IDS
+        if fid in raw.columns and raw[fid].notna().any()
+    }
+    dc: dict[tuple[str, str], dict[str, float]] = {}
+    joined = pd.concat([meta.reset_index(drop=True), raw.reset_index(drop=True)], axis=1)
+    for (drv, ctype), grp in joined.dropna(subset=["circuit_type"]).groupby(
+        ["driver", "circuit_type"]
+    ):
+        dc[(str(drv), str(ctype))] = {
+            fid: float(grp[fid].median())
+            for fid in FEATURE_IDS
+            if fid in grp.columns and grp[fid].notna().any()
+        }
+    return FeatureMedians(global_medians=global_medians, driver_circuit_medians=dc)
+
+
+def assemble_rows(
+    records: list[dict[str, Any]], medians: FeatureMedians, config: AppConfig, log_path: Path,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Apply the §4.5 NULL gate + train-only imputation to every extracted record."""
+    stats: dict[str, int] = defaultdict(int)
+    rows: list[dict[str, Any]] = []
+    for rec in records:
+        lap_no = rec["lap"]
         fres = assemble_feature_vector(
-            vals, lap_number=lap_no, driver=driver, circuit_type=circuit_type,
-            medians=medians, config=config, forced_null=lv.null_features or None,
-            flags=list(lv.flags) or None, log_path=log_path,
-            entity_id=f"{season}/{circuit}/{driver}/lap{lap_no}",
+            rec["_raw"], lap_number=lap_no, driver=rec["driver"],
+            circuit_type=rec["circuit_type"], medians=medians, config=config,
+            forced_null=rec["_forced_null"], flags=rec["_flags"], log_path=log_path,
+            entity_id=f"{rec['season']}/{rec['circuit']}/{rec['driver']}/lap{lap_no}",
         )
         # FeatureResult has no `accepted`: a rejected vector is Status.FAILED (LAP_NULL_EXCESS
         # over the NULL ceiling, or FEATURE_001 when a NULL had no train median to impute from).
         if fres.status is Status.FAILED:
             stats[f"vec_{fres.error_code.value if fres.error_code else 'FAILED'}"] += 1
             continue
-        rows.append(
-            {
-                "season": season, "circuit": circuit, "driver": driver, "lap": lap_no,
-                "circuit_type": circuit_type,
-                **{fid: fres.feature_vector.get(fid) for fid in FEATURE_IDS},
-            }
-        )
+        row = {k: v for k, v in rec.items() if not k.startswith("_")}
+        row.update({fid: fres.feature_vector.get(fid) for fid in FEATURE_IDS})
+        rows.append(row)
     stats["vectors_built"] += len(rows)
     return rows, stats
 
@@ -362,50 +416,36 @@ def main() -> None:
     held_out = set(config.held_out_circuits)
     totals: dict[str, int] = defaultdict(int)
 
-    # ---- PASS 1: raw values -> TRAIN-ONLY median table (non-negotiable #2) -------------------
-    print("\n[pass 1/2] raw features for the train-only median table")
-    raw_rows: list[dict[str, Any]] = []
+    # ---- EXTRACT: resample + validate + F03a/F03b, once per lap ------------------------------
+    print(f"\n[1/3] extracting features from {len(units)} driver-sessions")
+    records: list[dict[str, Any]] = []
     for i, (season, circuit, driver, pq) in enumerate(units, 1):
-        if circuit in held_out:
-            continue  # held-out NEVER contributes to the median table
-        rows, stats = build_session_rows(pq, season, circuit, driver, config, None, log_path, hz)
-        raw_rows.extend(rows)
+        recs, stats = extract_session(pq, season, circuit, driver, config, log_path, hz)
+        records.extend(recs)
         for k, v in stats.items():
             totals[k] += v
-        if i % 50 == 0:
-            print(f"  {i}/{len(units)} sessions, {len(raw_rows)} train laps")
-    if not raw_rows:
-        print("no clean training laps produced — refusing to write an empty matrix",
-              file=sys.stderr)
+        if i % 100 == 0:
+            print(f"  {i}/{len(units)} sessions, {len(records)} clean laps", flush=True)
+    if not records:
+        print("no clean laps produced — refusing to write an empty matrix", file=sys.stderr)
         raise SystemExit(3)
 
-    raw = pd.DataFrame(raw_rows)
-    raw["circuit_type"] = raw["circuit"].map(_CIRCUIT_TYPE)
-    global_medians = {
-        fid: float(raw[fid].median()) for fid in FEATURE_IDS
-        if fid in raw.columns and raw[fid].notna().any()
-    }
-    dc: dict[tuple[str, str], dict[str, float]] = {}
-    _typed = raw.dropna(subset=["circuit_type"])
-    for (drv, ctype), grp in _typed.groupby(["driver", "circuit_type"]):
-        dc[(str(drv), str(ctype))] = {
-            fid: float(grp[fid].median()) for fid in FEATURE_IDS
-            if fid in grp.columns and grp[fid].notna().any()
-        }
-    medians = FeatureMedians(global_medians=global_medians, driver_circuit_medians=dc)
-    print(f"  medians: {len(global_medians)} global, {len(dc)} driver×circuit-type cells")
+    # ---- MEDIANS: train-only (non-negotiable #2) ----------------------------------------------
+    print(f"\n[2/3] deriving train-only medians from {len(records)} laps")
+    medians = derive_medians(records, held_out)
+    print(f"  medians: {len(medians.global_medians)} global, "
+          f"{len(medians.driver_circuit_medians)} driver×circuit-type cells")
+    if len(medians.global_medians) < len(FEATURE_IDS):
+        missing = [f for f in FEATURE_IDS if f not in medians.global_medians]
+        # An always-NULL feature has no median, so EVERY lap carrying it fails assembly. Loud.
+        print(f"  !! features with NO train median (will fail every lap): {missing}",
+              file=sys.stderr)
 
-    # ---- PASS 2: assemble the real vectors, held-out included (as the test split) ------------
-    print("\n[pass 2/2] assembling 28-feature vectors")
-    all_rows: list[dict[str, Any]] = []
-    totals = defaultdict(int)
-    for i, (season, circuit, driver, pq) in enumerate(units, 1):
-        rows, stats = build_session_rows(pq, season, circuit, driver, config, medians, log_path, hz)
-        all_rows.extend(rows)
-        for k, v in stats.items():
-            totals[k] += v
-        if i % 50 == 0:
-            print(f"  {i}/{len(units)} sessions, {len(all_rows)} vectors")
+    # ---- ASSEMBLE: NULL gate + imputation, held-out included as the test split ----------------
+    print("\n[3/3] assembling 28-feature vectors")
+    all_rows, astats = assemble_rows(records, medians, config, log_path)
+    for k, v in astats.items():
+        totals[k] += v
 
     if not all_rows:
         print("no feature vectors produced — refusing to write an empty matrix", file=sys.stderr)

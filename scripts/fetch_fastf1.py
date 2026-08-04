@@ -53,6 +53,7 @@ _LOCATION_TO_CIRCUIT = {
     "Melbourne": "Australia",
     "Baku": "Azerbaijan",
     "Miami": "Miami",
+    "Miami Gardens": "Miami",           # FastF1 renamed the 2025 Location; same circuit
     "Imola": "Emilia-Romagna",          # Italy's SECOND circuit -- distinct from held-out Monza
     "Monaco": "Monaco",
     "Barcelona": "Spain",

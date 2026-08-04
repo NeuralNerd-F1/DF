@@ -30,7 +30,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.contracts.config import load_config  # noqa: E402
 from app.ml.classifier import ClassifierTrainingError, train_classifier  # noqa: E402
-from app.ml.stylespace import StyleSpaceBuildError, build_style_space  # noqa: E402
+from app.ml.stylespace import (  # noqa: E402
+    StyleSpaceBuildError,
+    StyleSpaceLoadError,
+    build_style_space,
+    load_style_space,
+)
+from app.monitoring.detector import (  # noqa: E402
+    DetectorCalibrationError,
+    calibrate_stint_variation,
+)
+from app.personalisation.engine import (  # noqa: E402
+    PersonalisationTrainingError,
+    train_personalisation,
+)
 
 
 def preflight(matrix: pd.DataFrame, held_out: set[str]) -> list[str]:
@@ -148,6 +161,34 @@ def main() -> None:
             # Non-fatal for the run: the classifier is already trained and on disk.
             print(f"  style space FAILED: {exc.error_code}: {exc}", file=sys.stderr)
             summary["stylespace"] = {"status": "FAILED", "error": str(exc)}
+
+    # ---- F10 degradation calibration ---------------------------------------------------------
+    # Each downstream model is independently non-fatal: a failure here must not discard the
+    # classifier and style space already written to disk. Every outcome lands in the summary.
+    print("\n=== F10 degradation calibration ===")
+    try:
+        dres = calibrate_stint_variation(
+            matrix, config=config, artefact_dir=art_dir, log_path=log_path
+        )
+        print(f"  status     : {dres.status}  -> {art_dir / 'stint_variation.json'}")
+        summary["degradation"] = {"status": str(dres.status)}
+    except DetectorCalibrationError as exc:
+        print(f"  calibration FAILED: {exc.error_code}: {exc}", file=sys.stderr)
+        summary["degradation"] = {"status": "FAILED", "error": str(exc)}
+
+    # ---- F11 personalisation -----------------------------------------------------------------
+    print("\n=== F11 personalisation ===")
+    try:
+        # Needs the style space that was just built — load it back rather than re-fitting.
+        handle = load_style_space(config=config, artefact_dir=art_dir)
+        pres = train_personalisation(
+            matrix, style_handle=handle, config=config, artefact_dir=art_dir, log_path=log_path
+        )
+        print(f"  status     : {pres.status}  -> {art_dir / 'personalisation.pkl'}")
+        summary["personalisation"] = {"status": str(pres.status)}
+    except (PersonalisationTrainingError, StyleSpaceLoadError) as exc:
+        print(f"  personalisation FAILED: {exc}", file=sys.stderr)
+        summary["personalisation"] = {"status": "FAILED", "error": str(exc)}
 
     (art_dir / "train_real_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"

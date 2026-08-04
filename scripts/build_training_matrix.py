@@ -20,9 +20,13 @@ the true information rate stays ~7.5 Hz, and any feature reading high-frequency 
 (modulation rate, jerk) is interpolation-smoothed. Recorded in the matrix metadata.
 
 **2. Train-only medians (non-negotiable #2).** ``assemble_feature_vector`` imputes NULLs from a
-:class:`FeatureMedians` table that must be computed on TRAINING laps only. So this runs TWO passes:
-pass 1 computes raw per-lap feature values and derives medians from the train split alone; pass 2
-assembles the final vectors with those medians injected. Held-out circuits never contribute.
+:class:`FeatureMedians` table that must be computed on TRAINING laps only. The build runs in three
+stages: :func:`extract_session` resamples/validates and computes F03a/F03b ONCE per lap;
+:func:`derive_medians` builds the median table from the train subset of those records alone
+(held-out circuits are filtered out and never contribute); :func:`assemble_rows` then applies the
+§4.5 NULL gate and imputation to every record, held-out included, since those are the test split.
+Features are deliberately computed once, not once per pass -- an earlier two-pass version recomputed
+them purely to assemble the vectors and stretched a four-season build to ~7 hours.
 
 **3. Circuit type.** Nothing in the repo maps a circuit to one of ``config.circuit_types`` -- it is
 always caller-supplied. This module owns that mapping explicitly (``_CIRCUIT_TYPE``); an unmapped
@@ -49,6 +53,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.contracts.config import AppConfig, load_config  # noqa: E402
 from app.contracts.errors import ErrorCode  # noqa: E402
+from app.contracts.logging import DataQualityLogError, log_data_quality  # noqa: E402
 from app.contracts.results import Status  # noqa: E402
 from app.pipeline.features import (  # noqa: E402
     FEATURE_IDS,
@@ -114,6 +119,31 @@ _CIRCUIT_TYPE: dict[str, str] = {
 # proxy and are NOT brake pressure; they should not be interpreted as such.
 _CONTINUOUS = ["Speed", "Throttle", "RPM", "X", "Y", "Brake"]
 _DISCRETE = ["Gear", "DRS"]
+
+# data_quality_log detail tags for the faults this ORCHESTRATOR owns (the pipeline surfaces log
+# their own). Mirrors the REASON_* convention in features.py / normalise.py.
+REASON_SESSION_UNREADABLE = "SESSION_UNREADABLE"  # a driver-session parquet would not read
+REASON_SEASON_ABSENT = "SEASON_ABSENT"            # a requested season has no corpus on disk
+
+
+def record_dq(
+    log_path: Path, *, code: ErrorCode, entity_type: str, entity_id: str, detail: str,
+    fallback_used: bool = False,
+) -> None:
+    """Append one ``data_quality_log`` row for a fault this script owns.
+
+    A build must not die because the audit sink is unwritable, but the sink failing must never be
+    silent either (non-negotiable #1 applies to the logger itself) -- so the ``DataQualityLogError``
+    is surfaced on stderr rather than swallowed.
+    """
+    try:
+        log_data_quality(
+            error_code=code, entity_type=entity_type, entity_id=entity_id,
+            error_detail=detail, fallback_used=fallback_used, log_path=log_path,
+        )
+    except DataQualityLogError as exc:
+        print(f"  !! data_quality_log UNWRITABLE ({exc}); lost row: "
+              f"{code.value} {entity_type}/{entity_id}: {detail}", file=sys.stderr)
 
 
 def resample_lap(lap: pd.DataFrame, hz: int) -> pd.DataFrame:
@@ -353,19 +383,27 @@ def assemble_rows(
     return rows, stats
 
 
-def discover(data_dir: Path, seasons: list[int]) -> list[tuple[int, str, str, Path]]:
-    """(season, circuit, driver, parquet_path) for the requested seasons."""
+def discover(
+    data_dir: Path, seasons: list[int]
+) -> tuple[list[tuple[int, str, str, Path]], list[int]]:
+    """(season, circuit, driver, parquet_path) for the requested seasons, + the absent ones.
+
+    A requested season with no corpus on disk is RETURNED, never quietly skipped: silently
+    dropping a whole season yields a short matrix that looks legitimate (non-negotiable #1).
+    """
     found = []
+    missing: list[int] = []
     for season in seasons:
         sdir = data_dir / str(season)
         if not sdir.is_dir():
+            missing.append(season)
             continue
         for cdir in sorted(sdir.iterdir()):
             if not cdir.is_dir():
                 continue
             for pq in sorted(cdir.glob("*.parquet")):
                 found.append((season, cdir.name, pq.stem, pq))
-    return found
+    return found, missing
 
 
 def stable_core(units: list[tuple[int, str, str, Path]], seasons: list[int]) -> set[str]:
@@ -388,12 +426,27 @@ def main() -> None:
     args = ap.parse_args()
 
     config = load_config(args.config)
-    hz = config.upload.resample_target_hz if config.upload is not None else 50
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     log_path = out_path.parent / "build_dq.jsonl"
 
-    units = discover(Path(args.data_dir), args.seasons)
+    if config.upload is None:
+        # No default: silently resampling at some assumed rate would put an unstated Hz into
+        # every feature in the matrix. The rate is a config value or the build does not run.
+        print("config.upload block absent; resample_target_hz is required (§3.4 RESAMPLED)",
+              file=sys.stderr)
+        raise SystemExit(2)
+    hz = config.upload.resample_target_hz
+
+    units, missing_seasons = discover(Path(args.data_dir), args.seasons)
+    for season in missing_seasons:
+        print(f"!! season {season} has NO corpus under {args.data_dir} — excluded from the matrix",
+              file=sys.stderr)
+        record_dq(
+            log_path, code=ErrorCode.DATA_SOURCE_UNAVAILABLE, entity_type="season",
+            entity_id=str(season),
+            detail=f"{REASON_SEASON_ABSENT}: no directory under {args.data_dir}; season excluded",
+        )
     if not units:
         print(f"no parquet corpus under {args.data_dir} for seasons {args.seasons}",
               file=sys.stderr)
@@ -420,7 +473,21 @@ def main() -> None:
     print(f"\n[1/3] extracting features from {len(units)} driver-sessions")
     records: list[dict[str, Any]] = []
     for i, (season, circuit, driver, pq) in enumerate(units, 1):
-        recs, stats = extract_session(pq, season, circuit, driver, config, log_path, hz)
+        try:
+            recs, stats = extract_session(pq, season, circuit, driver, config, log_path, hz)
+        except Exception as exc:  # noqa: BLE001 - one bad parquet must not void a multi-hour build
+            # A truncated/corrupt file (e.g. an interrupted Stage A write) is a per-session fault,
+            # not a build fault: count it, log it with a typed code, and keep going. Crashing here
+            # would discard every session already extracted, none of it yet on disk.
+            totals["session_unreadable"] += 1
+            print(f"  !! session unreadable, skipped: {pq} ({type(exc).__name__}: {exc})",
+                  file=sys.stderr)
+            record_dq(
+                log_path, code=ErrorCode.CACHE_CORRUPT, entity_type="session",
+                entity_id=f"{season}/{circuit}/{driver}",
+                detail=f"{REASON_SESSION_UNREADABLE}: {type(exc).__name__}: {exc}; session skipped",
+            )
+            continue
         records.extend(recs)
         for k, v in stats.items():
             totals[k] += v

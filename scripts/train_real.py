@@ -1,9 +1,15 @@
-"""Stage C of real-data training: the training matrix -> the F06 classifier + F08 style space.
+"""Stage C of real-data training: the training matrix -> the four trained models.
 
 Consumes what ``scripts/build_training_matrix.py`` (Stage B) wrote and calls the REAL training
-surfaces -- :func:`train_classifier` and :func:`build_style_space`. It fits nothing itself: the
-normalisation artefact, the held-out quarantine, the calibration carve and the MLflow logging all
-happen inside those functions, exactly as they do for a synthetic run.
+surfaces -- :func:`train_classifier` (F06), :func:`build_style_space` (F08),
+:func:`calibrate_stint_variation` (F10) and :func:`train_personalisation` (F11). It fits nothing
+itself: the normalisation artefact, the held-out quarantine, the calibration carve and the MLflow
+logging all happen inside those functions, exactly as they do for a synthetic run.
+
+The classifier is fatal (nothing downstream is meaningful without it, exit 5); the other three are
+independently non-fatal, so a late failure never discards artefacts already on disk. Any stage
+failing still exits non-zero (6) once the summary is written -- a caller reading only the exit code
+must not mistake three dead models for a clean run.
 
 Artefacts land in a SEPARATE directory (default ``artefacts/real``) so a real-data run never
 overwrites the synthetic bundle the demo currently serves. Promote deliberately, not by accident.
@@ -189,11 +195,30 @@ def main() -> None:
     except (PersonalisationTrainingError, StyleSpaceLoadError) as exc:
         print(f"  personalisation FAILED: {exc}", file=sys.stderr)
         summary["personalisation"] = {"status": "FAILED", "error": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - see below; the summary must still be written
+        # train_personalisation's XGBRegressor fits are not themselves wrapped in
+        # PersonalisationTrainingError, so a raw library fault would otherwise escape the typed
+        # clause above and kill the script BEFORE the summary is written -- losing the audit
+        # record of three models that trained cleanly. Caught, typed in the summary, reported.
+        print(f"  personalisation FAILED (untyped {type(exc).__name__}): {exc}", file=sys.stderr)
+        summary["personalisation"] = {
+            "status": "FAILED", "error": f"{type(exc).__name__}: {exc}", "untyped": True,
+        }
 
     (art_dir / "train_real_summary.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"
     )
     print(f"\nsummary -> {art_dir / 'train_real_summary.json'}")
+
+    # A stage that failed must be visible to an automated caller, not just in the summary JSON:
+    # exit 0 on a run where three of four models never trained would read as success.
+    failed = sorted(
+        name for name, res in summary.items()
+        if isinstance(res, dict) and res.get("status") == "FAILED"
+    )
+    if failed:
+        print(f"\nstages FAILED: {', '.join(failed)}", file=sys.stderr)
+        raise SystemExit(6)
 
 
 if __name__ == "__main__":

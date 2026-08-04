@@ -52,6 +52,20 @@ from app.personalisation.engine import (  # noqa: E402
 )
 
 
+def failed_stages(summary: dict[str, object]) -> list[str]:
+    """Stage names in ``summary`` that recorded a FAILED status, sorted.
+
+    DEGRADED is deliberately NOT failure: a model that trained and reported a missed target is a
+    research finding (§11.1), and a run of DEGRADED models must still exit 0. Only a stage that
+    did not produce a model counts. Non-stage summary entries (``matrix``, ``n_vectors``) are
+    scalars, not dicts, and are skipped.
+    """
+    return sorted(
+        name for name, res in summary.items()
+        if isinstance(res, dict) and res.get("status") == "FAILED"
+    )
+
+
 def preflight(matrix: pd.DataFrame, held_out: set[str]) -> list[str]:
     """Structural problems that would make a trained model's headline number meaningless."""
     problems: list[str] = []
@@ -212,10 +226,7 @@ def main() -> None:
 
     # A stage that failed must be visible to an automated caller, not just in the summary JSON:
     # exit 0 on a run where three of four models never trained would read as success.
-    failed = sorted(
-        name for name, res in summary.items()
-        if isinstance(res, dict) and res.get("status") == "FAILED"
-    )
+    failed = failed_stages(summary)
     if failed:
         print(f"\nstages FAILED: {', '.join(failed)}", file=sys.stderr)
         raise SystemExit(6)

@@ -124,6 +124,12 @@ _DISCRETE = ["Gear", "DRS"]
 # their own). Mirrors the REASON_* convention in features.py / normalise.py.
 REASON_SESSION_UNREADABLE = "SESSION_UNREADABLE"  # a driver-session parquet would not read
 REASON_SEASON_ABSENT = "SEASON_ABSENT"            # a requested season has no corpus on disk
+REASON_CONTEXT_ABSENT = "CONTEXT_COLUMN_ABSENT"   # parquet lacks a column F10/F11 need
+REASON_CIRCUIT_TYPE_ABSENT = "CIRCUIT_TYPE_ABSENT"  # circuit outside _CIRCUIT_TYPE
+REASON_NO_TRAIN_MEDIAN = "NO_TRAIN_MEDIAN"        # feature un-imputable for the whole run
+
+# The per-lap context columns Stage A's contract guarantees and F10/F11 consume.
+_CONTEXT_COLS = ("stint", "tyre_age", "compound", "track_status", "lap_time")
 
 
 def record_dq(
@@ -277,8 +283,20 @@ def extract_session(
 
     # Per-lap context (constant within a lap): stint/tyre-age drive the F03b slopes below, and
     # the rest are carried onto the output rows for F10/F11.
-    ctx_cols = [c for c in ("stint", "tyre_age", "compound", "track_status", "lap_time")
-                if c in frame.columns]
+    ctx_cols = [c for c in _CONTEXT_COLS if c in frame.columns]
+    absent_ctx = [c for c in _CONTEXT_COLS if c not in frame.columns]
+    if absent_ctx:
+        # Stage A's _CONTRACT_COLS guarantees these columns, so a parquet without one is a corpus
+        # integrity fault. The session still yields features, but EVERY lap of it would carry
+        # context=None into F10/F11 — degrade loudly rather than silently (non-negotiable #1).
+        stats["ctx_columns_absent"] += 1
+        record_dq(
+            log_path, code=ErrorCode.CACHE_CORRUPT, entity_type="session",
+            entity_id=f"{season}/{circuit}/{driver}",
+            detail=(f"{REASON_CONTEXT_ABSENT}: {absent_ctx} absent from the parquet; "
+                    "None for every lap of this session"),
+            fallback_used=True,
+        )
     lap_ctx = frame.drop_duplicates("lap").set_index("lap")[ctx_cols].to_dict("index")
     lap_stint = lap_ctx
     stints: dict[float, list[StintLap]] = defaultdict(list)
@@ -355,6 +373,24 @@ def derive_medians(records: list[dict[str, Any]], held_out: set[str]) -> Feature
             if fid in grp.columns and grp[fid].notna().any()
         }
     return FeatureMedians(global_medians=global_medians, driver_circuit_medians=dc)
+
+
+def report_missing_medians(medians: FeatureMedians, log_path: Path) -> list[str]:
+    """Features with no train median anywhere in the corpus, one audit row each.
+
+    Each lap's rejection is already logged individually by ``assemble_feature_vector``
+    (``FEATURE_001``), but the systemic cause — this feature is un-imputable for the WHOLE run, so
+    every lap carrying it as NULL will fail — needs one persistent row of its own. Without it the
+    audit trail shows thousands of symptoms and no diagnosis.
+    """
+    missing = [fid for fid in FEATURE_IDS if fid not in medians.global_medians]
+    for fid in missing:
+        record_dq(
+            log_path, code=ErrorCode.FEATURE_001, entity_type="training_run", entity_id=fid,
+            detail=(f"{REASON_NO_TRAIN_MEDIAN}: no train value for {fid} anywhere in the corpus; "
+                    "every lap carrying it as NULL fails assembly"),
+        )
+    return missing
 
 
 def assemble_rows(
@@ -457,6 +493,17 @@ def main() -> None:
     if unmapped:
         print(f"!! circuits with NO circuit_type mapping (rows will carry None): {unmapped}",
               file=sys.stderr)
+    for circuit in unmapped:
+        # circuit_type=None means no driver×circuit-type imputation cell, so every NULL on this
+        # circuit imputes from the GLOBAL table instead — a documented fallback, and one that
+        # belongs in the audit trail rather than only on a terminal an operator may not be watching.
+        record_dq(
+            log_path, code=ErrorCode.NORMALISATION_FALLBACK, entity_type="circuit",
+            entity_id=circuit,
+            detail=(f"{REASON_CIRCUIT_TYPE_ABSENT}: '{circuit}' not in _CIRCUIT_TYPE; "
+                    "laps carry circuit_type=None and impute from the global median table"),
+            fallback_used=True,
+        )
 
     units = [u for u in units if u[2] in core]
     if args.limit_units:
@@ -502,10 +549,9 @@ def main() -> None:
     medians = derive_medians(records, held_out)
     print(f"  medians: {len(medians.global_medians)} global, "
           f"{len(medians.driver_circuit_medians)} driver×circuit-type cells")
-    if len(medians.global_medians) < len(FEATURE_IDS):
-        missing = [f for f in FEATURE_IDS if f not in medians.global_medians]
-        # An always-NULL feature has no median, so EVERY lap carrying it fails assembly. Loud.
-        print(f"  !! features with NO train median (will fail every lap): {missing}",
+    missing_medians = report_missing_medians(medians, log_path)
+    if missing_medians:
+        print(f"  !! features with NO train median (will fail every lap): {missing_medians}",
               file=sys.stderr)
 
     # ---- ASSEMBLE: NULL gate + imputation, held-out included as the test split ----------------

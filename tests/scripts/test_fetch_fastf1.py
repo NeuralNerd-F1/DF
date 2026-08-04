@@ -133,6 +133,53 @@ def test_as_float_marks_a_missing_numeric() -> None:
     assert pd.isna(ff._as_float(None))
 
 
+# --- a skipped driver says WHY -----------------------------------------------------------------
+
+
+class _FakeLaps:
+    """The slice of the FastF1 Laps API ``_driver_frame`` touches on its early-return paths."""
+
+    def __init__(self, n: int, telemetry: object) -> None:
+        self._n, self._telemetry = n, telemetry
+
+    def __len__(self) -> int:
+        return self._n
+
+    def get_telemetry(self) -> object:
+        if isinstance(self._telemetry, Exception):
+            raise self._telemetry
+        return self._telemetry
+
+
+def test_driver_frame_reports_the_telemetry_exception() -> None:
+    """"skipped" alone cannot be triaged months later — the manifest must distinguish a network
+    fault from a FastF1 parsing bug, so the exception type and message are carried out."""
+    frame, n_laps, reason = ff._driver_frame(_FakeLaps(57, KeyError("SessionTime")))
+
+    assert frame.empty
+    assert n_laps == 57
+    assert reason is not None
+    assert "get_telemetry raised" in reason
+    assert "KeyError" in reason
+    assert "SessionTime" in reason
+
+
+@pytest.mark.parametrize("telemetry", [None, pd.DataFrame()])
+def test_driver_frame_distinguishes_empty_telemetry(telemetry: object) -> None:
+    _frame, n_laps, reason = ff._driver_frame(_FakeLaps(20, telemetry))
+
+    assert n_laps == 20
+    assert reason == "telemetry empty"
+
+
+def test_driver_frame_reports_a_driver_with_no_laps() -> None:
+    frame, n_laps, reason = ff._driver_frame(_FakeLaps(0, None))
+
+    assert frame.empty
+    assert n_laps == 0
+    assert reason == "no lap rows for this driver"
+
+
 # --- rate-limit retry: waits are announced, exhaustion is loud --------------------------------
 
 

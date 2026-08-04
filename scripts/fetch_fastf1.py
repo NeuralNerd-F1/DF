@@ -145,7 +145,7 @@ def _col(tel: pd.DataFrame, name: str) -> np.ndarray:
     return pd.to_numeric(tel[name], errors="coerce").to_numpy(dtype=float)
 
 
-def _driver_frame(lap_rows: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+def _driver_frame(lap_rows: pd.DataFrame) -> tuple[pd.DataFrame, int, str | None]:
     """Build one driver's contract frame: every lap's telemetry samples, stacked.
 
     ONE ``get_telemetry()`` call for the whole driver, then lap numbers are assigned to samples
@@ -158,23 +158,31 @@ def _driver_frame(lap_rows: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     resample to a uniform grid is Stage B's job (§3.4 RESAMPLED), so the corpus on disk stays a
     faithful record and the resampling policy stays changeable without a re-download.
 
-    Returns ``(frame, n_laps_without_telemetry)`` -- the second value is COUNTED and reported
-    rather than silently dropped.
+    Returns ``(frame, n_laps_without_telemetry, reason)`` -- the count is COUNTED and reported
+    rather than silently dropped, and ``reason`` says WHY an empty frame came back (``None`` on
+    success). Without it the manifest records that a driver was skipped but not whether it was a
+    network fault, a FastF1 parsing bug, or a session with no usable lap clock.
     """
     if len(lap_rows) == 0:
-        return pd.DataFrame(columns=_CONTRACT_COLS), 0
+        return pd.DataFrame(columns=_CONTRACT_COLS), 0, "no lap rows for this driver"
     try:
         tel = lap_rows.get_telemetry()
-    except Exception:  # whole-driver telemetry unavailable -- never fabricate samples
-        return pd.DataFrame(columns=_CONTRACT_COLS), len(lap_rows)
+    except Exception as e:  # noqa: BLE001 - whole-driver telemetry unavailable; never fabricate
+        return (
+            pd.DataFrame(columns=_CONTRACT_COLS), len(lap_rows),
+            f"get_telemetry raised {type(e).__name__}: {e}",
+        )
     if tel is None or len(tel) == 0:
-        return pd.DataFrame(columns=_CONTRACT_COLS), len(lap_rows)
+        return pd.DataFrame(columns=_CONTRACT_COLS), len(lap_rows), "telemetry empty"
 
     starts = lap_rows["LapStartTime"].dt.total_seconds().to_numpy(dtype=float)
     lap_no = lap_rows["LapNumber"].to_numpy(dtype=float)
     finite = np.isfinite(starts)
     if not finite.any():  # no usable lap clock -> cannot attribute samples to laps
-        return pd.DataFrame(columns=_CONTRACT_COLS), len(lap_rows)
+        return (
+            pd.DataFrame(columns=_CONTRACT_COLS), len(lap_rows),
+            "no finite LapStartTime; samples cannot be attributed to laps",
+        )
     starts, lap_no = starts[finite], lap_no[finite]
     order = np.argsort(starts)
     starts, lap_no = starts[order], lap_no[order]
@@ -183,7 +191,10 @@ def _driver_frame(lap_rows: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     idx = np.searchsorted(starts, sess_s, side="right") - 1
     keep = idx >= 0  # samples before the first lap start belong to no lap -> dropped, counted
     if not keep.any():
-        return pd.DataFrame(columns=_CONTRACT_COLS), len(lap_rows)
+        return (
+            pd.DataFrame(columns=_CONTRACT_COLS), len(lap_rows),
+            "every telemetry sample precedes the first lap start",
+        )
     idx = idx[keep]
     tel = tel.loc[keep]
     assigned_lap = lap_no[idx]
@@ -232,7 +243,7 @@ def _driver_frame(lap_rows: pd.DataFrame) -> tuple[pd.DataFrame, int]:
         }
     )
     laps_with_samples = frame["lap"].nunique()
-    return frame[_CONTRACT_COLS], max(0, len(lap_rows) - laps_with_samples)
+    return frame[_CONTRACT_COLS], max(0, len(lap_rows) - laps_with_samples), None
 
 
 def fetch_race(season: int, event_round: int, circuit: str, out_dir: Path) -> dict:
@@ -245,11 +256,12 @@ def fetch_race(season: int, event_round: int, circuit: str, out_dir: Path) -> di
     written, samples, skipped_drivers, no_tel_total = 0, 0, [], 0
     for drv in sorted(drivers):
         lap_rows = session.laps.pick_drivers(drv)
-        frame, no_tel = _driver_frame(lap_rows)
+        frame, no_tel, reason = _driver_frame(lap_rows)
         no_tel_total += no_tel
         if frame.empty:
-            skipped_drivers.append(drv)
-            print(f"    {drv}: no telemetry, skipped")
+            # Record WHY, not just that: "skipped" alone cannot be triaged months later.
+            skipped_drivers.append({"driver": drv, "reason": reason or "unknown"})
+            print(f"    {drv}: no telemetry, skipped ({reason})")
             continue
         frame.to_parquet(dest / f"{drv}.parquet", index=False)
         written += 1

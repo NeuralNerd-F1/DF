@@ -222,6 +222,106 @@ def test_assemble_rows_assembles_held_out_laps(
     assert {r["circuit"] for r in rows} == {"Belgium", "Italy"}
 
 
+# --- systemic faults get a persistent row, not just a terminal warning -----------------------
+
+
+def test_report_missing_medians_logs_one_row_per_un_imputable_feature(tmp_path: Path) -> None:
+    """A feature with no train median fails EVERY lap that carries it as NULL. The individual
+    FEATURE_001 rows record the symptom; this records the diagnosis."""
+    log = tmp_path / "dq.jsonl"
+    medians = FeatureMedians(global_medians={fid: 1.0 for fid in FEATURE_IDS[2:]})
+
+    missing = btm.report_missing_medians(medians, log)
+
+    assert missing == list(FEATURE_IDS[:2])
+    rows = read_dq(log)
+    assert [r["entity_id"] for r in rows] == list(FEATURE_IDS[:2])
+    assert all(r["error_code"] == ErrorCode.FEATURE_001.value for r in rows)
+    assert all(r["entity_type"] == "training_run" for r in rows)
+    assert all(btm.REASON_NO_TRAIN_MEDIAN in r["error_detail"] for r in rows)
+
+
+def test_report_missing_medians_is_silent_when_every_feature_has_one(tmp_path: Path) -> None:
+    log = tmp_path / "dq.jsonl"
+
+    assert btm.report_missing_medians(_medians(), log) == []
+    assert read_dq(log) == []
+
+
+def test_main_logs_an_unmapped_circuit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An unmapped circuit yields circuit_type=None, so its laps impute from the GLOBAL table
+    rather than a driver×circuit-type cell — a real fallback that belongs in the audit trail."""
+    corpus = _corpus(tmp_path / "c", {2024: {"Ruritania": ["VER"]}})
+    out = tmp_path / "out" / "m.parquet"
+
+    with pytest.raises(SystemExit):
+        _run_main(monkeypatch, seasons="2024", data_dir=str(corpus), out=str(out))
+
+    rows = [
+        r for r in read_dq(out.parent / "build_dq.jsonl")
+        if r["error_code"] == ErrorCode.NORMALISATION_FALLBACK.value
+    ]
+    assert [r["entity_id"] for r in rows] == ["Ruritania"]
+    assert btm.REASON_CIRCUIT_TYPE_ABSENT in rows[0]["error_detail"]
+    assert rows[0]["fallback_used"] is True
+
+
+def test_extract_session_reports_an_absent_context_column(
+    scripts_config: AppConfig, tmp_path: Path
+) -> None:
+    """Stage A's contract guarantees the context columns. A parquet without one still yields
+    features, but every lap of that session carries context=None into F10/F11 — so the gap is
+    logged and tallied rather than inferred downstream."""
+    frame = pd.concat([telemetry_lap(i, lap_time=1.9) for i in range(1, 31)], ignore_index=True)
+    frame = frame.drop(columns=["stint"])
+    pq = tmp_path / "VER.parquet"
+    frame.to_parquet(pq, index=False)
+    log = tmp_path / "dq.jsonl"
+
+    records, stats = btm.extract_session(
+        pq, 2024, "Bahrain", "VER", scripts_config, log, hz=50,
+    )
+
+    assert stats["ctx_columns_absent"] == 1
+    rows = [r for r in read_dq(log) if r["error_code"] == ErrorCode.CACHE_CORRUPT.value]
+    assert len(rows) == 1
+    assert btm.REASON_CONTEXT_ABSENT in rows[0]["error_detail"]
+    assert "stint" in rows[0]["error_detail"]
+    assert rows[0]["fallback_used"] is True
+    assert records and all(r["stint"] is None for r in records)
+
+
+def test_extract_session_is_quiet_when_the_context_is_complete(
+    scripts_config: AppConfig, tmp_path: Path
+) -> None:
+    frame = pd.concat([telemetry_lap(i, lap_time=1.9) for i in range(1, 31)], ignore_index=True)
+    pq = tmp_path / "VER.parquet"
+    frame.to_parquet(pq, index=False)
+    log = tmp_path / "dq.jsonl"
+
+    records, stats = btm.extract_session(
+        pq, 2024, "Bahrain", "VER", scripts_config, log, hz=50,
+    )
+
+    assert "ctx_columns_absent" not in stats
+    assert not [r for r in read_dq(log) if r["error_code"] == ErrorCode.CACHE_CORRUPT.value]
+    assert records and all(r["stint"] == 1 for r in records)
+
+
+def test_extract_session_counts_an_empty_parquet(
+    scripts_config: AppConfig, tmp_path: Path
+) -> None:
+    pq = tmp_path / "EMPTY.parquet"
+    pd.DataFrame(columns=list(telemetry_lap(1).columns)).to_parquet(pq, index=False)
+
+    records, stats = btm.extract_session(
+        pq, 2024, "Bahrain", "VER", scripts_config, tmp_path / "dq.jsonl", hz=50,
+    )
+
+    assert records == []
+    assert stats["empty_parquet"] == 1
+
+
 # --- discover / stable_core -----------------------------------------------------------------
 
 

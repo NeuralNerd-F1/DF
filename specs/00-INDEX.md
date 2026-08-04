@@ -66,6 +66,21 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F18 POLISH — 2026-07-29 (style/style-space-explainability):** frontend-only explainability pass on
+  Screen 5 — the scatter rendered as unlabelled coloured dots with nothing on screen saying what a dot
+  *is*. Adds `StyleSpaceLegend` (every plotted driver + team colour, doubling as a hover/select picker,
+  shared state with the scene) and an `style-space-about` caption. **No backend, config, or error-code
+  change** (same green-field pattern as F18/F19). **Divergence #78 — the caption never names the active
+  projection engine.** `/stylespace` returns `drivers[]`/`unknown_drivers[]` coordinates *only*; it does
+  **not** report whether `StyleSpaceHandle.engine` was `"umap"` or the `UMAP_FALLBACK` PCA path, so any
+  UI copy asserting "projected by UMAP" would silently misreport a fallback run — exactly the failure the
+  §5 no-silent-failure contract forbids. The copy therefore stays hedged ("UMAP, or its PCA fallback")
+  and is unit-tested to remain so. **Seam for a later feature:** surface `engine` (+ `model_version`) on
+  `StyleSpaceResponse` and let the caption name the real engine, with the PCA path visibly flagged.
+  Caption facts pinned to the F08 contract: fingerprint = **56-dim** `[mean(F01..F28), std(F01..F28)]`
+  (not 28), compressed to 5D — the WebGL scene plots **3 of those 5** (`coords_5d`), the D3 fallback plots
+  `coords_2d`. Copy is **mode-aware**: the 2D fallback renders no unknown-driver marker and has no orbit,
+  so it claims neither.
 - **F20 BUILT — 2026-07-26 (worktree-F20-evaluation-build): DONE.** `app/eval/evaluate.py` — the §11
   evaluation framework: one **async orchestrator** `run_full_evaluation(matrix, *, config, artefact_dir,
   teams, log_path, classifier_result) → EvaluationReport` over the four §11 pillars + the F09 ablation.

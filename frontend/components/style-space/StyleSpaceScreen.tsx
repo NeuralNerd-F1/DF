@@ -12,6 +12,7 @@ import { DriverSidebar } from './DriverSidebar';
 import { DriverTooltip } from './DriverTooltip';
 import { SeasonFilter } from './SeasonFilter';
 import { StyleSpace2D } from './StyleSpace2D';
+import { StyleSpaceLegend } from './StyleSpaceLegend';
 import { TeammateLinesToggle } from './TeammateLinesToggle';
 import { UnknownProjectionPanel } from './UnknownProjectionPanel';
 
@@ -63,11 +64,33 @@ export function StyleSpaceScreen({
 
   return (
     <main className="mx-auto max-w-6xl p-6" data-testid="style-space-screen" data-mode={mode}>
-      <header className="mb-4 flex flex-wrap items-center gap-3">
+      <header className="mb-2 flex flex-wrap items-center gap-3">
         <h1 className="font-mono text-lg uppercase tracking-wide text-accent">Style Space</h1>
         <TeammateLinesToggle value={showTeammates} onChange={setShowTeammates} />
         <SeasonFilter />
       </header>
+
+      {/* What the dots are + where they come from — the scene is otherwise unlabelled coloured dots.
+          Every claim here is mode-aware and engine-honest: /stylespace returns coordinates only, not
+          which engine produced them (UMAP or the PCA fallback), so the copy never names one. */}
+      <p
+        className="mb-4 max-w-3xl font-mono text-[11px] leading-relaxed text-text-secondary"
+        data-testid="style-space-about"
+      >
+        Each point is one driver&apos;s <span className="text-text-primary">behavioural fingerprint</span>{' '}
+        — the mean <em>and</em> spread of their 28 per-lap features (throttle, braking, cornering, tyre
+        usage…) over the season, a 56-number summary. The style-space model (UMAP, or its PCA fallback)
+        compresses that to 5 dimensions;{' '}
+        {mode === 'webgl'
+          ? 'this scene plots 3 of them. Drag to orbit, scroll to zoom'
+          : 'this is the flat 2D projection of the same model'}
+        . Points that sit close together drive alike;{' '}
+        <span className="text-text-primary">colour marks the constructor</span>. Hover or pick a driver
+        for its nearest neighbours
+        {mode === 'webgl' ? '; a projected unknown driver appears as a drifting white sphere' : ''}.
+        Showing <span className="text-text-primary">{nodes.length}</span> drivers from the loaded
+        dataset.
+      </p>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
         <div className="relative rounded-lg border border-border bg-card p-2">
@@ -101,6 +124,12 @@ export function StyleSpaceScreen({
 
         <div className="space-y-4">
           {selectedNode ? <DriverSidebar node={selectedNode} onClose={() => setSelected(null)} /> : null}
+          <StyleSpaceLegend
+            nodes={nodes}
+            selected={selected}
+            onHover={setHovered}
+            onSelect={setSelected}
+          />
           <UnknownProjectionPanel onProjected={onProjected} />
         </div>
       </div>

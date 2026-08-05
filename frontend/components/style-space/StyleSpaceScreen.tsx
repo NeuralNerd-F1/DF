@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { EmptyState } from '@/components/ds/EmptyState';
 import type { DriverSummary, StyleSpaceResponse, UnknownFingerprintResponse } from '@/lib/api/types';
@@ -39,7 +39,17 @@ export function StyleSpaceScreen({
   );
   const teammates = useMemo(() => teammatePairs(nodes), [nodes]);
 
-  const [mode, setMode] = useState<'webgl' | '2d'>(() => forceMode ?? (hasWebGL() ? 'webgl' : '2d'));
+  // Start in the 2D fallback and upgrade AFTER mount, never during the first render. hasWebGL() is
+  // false on the server (no document) and true in a real browser, so probing it in the initial state
+  // made the server and client first renders disagree — data-mode, the mode-aware caption below and
+  // the whole scene subtree — which React reports as a hydration mismatch and recovers from by
+  // throwing away the server HTML and re-rendering the root on the client. Seeding both renders with
+  // the same value and switching in an effect keeps hydration clean; the 2D frame is a correct
+  // intermediate state (it is the documented fallback), not a placeholder.
+  const [mode, setMode] = useState<'webgl' | '2d'>(forceMode ?? '2d');
+  useEffect(() => {
+    if (forceMode === undefined && hasWebGL()) setMode('webgl');
+  }, [forceMode]);
   const [hovered, setHovered] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [showTeammates, setShowTeammates] = useState(false);

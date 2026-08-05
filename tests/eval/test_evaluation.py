@@ -444,17 +444,25 @@ def test_no_fit_or_metric_maths_in_evaluate() -> None:
 
 # --- real numbers: artefact-gated (skipped offline, mirrors F15's rate tests) --------------------
 @pytest.mark.artefacts
+@pytest.mark.xfail(
+    reason="F20 divergence #54 — the real §11 assertions still need the held-out evaluation "
+    "matrix wired in; XFAIL keeps that outstanding rather than letting it read as covered",
+    strict=False,
+)
 async def test_real_full_run(cfg: AppConfig, tmp_path: Path) -> None:
     """The real §11 numbers require the committed champion / umap / detector / normalisation
-    artefacts AND a held-out matrix — none are committed, so this skips offline (the honest deferred
-    state, divergence #54). When present, it asserts real macro-F1 vs 0.78, Procrustes var vs 0.05,
-    lead time ∈ [2, 5], and the two §11.4 rate extensions."""
+    artefacts AND a held-out matrix. Offline it skips (no artefacts); with a bundle promoted into
+    ``artefacts/`` it reaches the placeholder below and reports XFAIL — the honest deferred state
+    (divergence #54), visible in the run rather than hidden by a skip or masked by a red suite.
+    When wired, it asserts real macro-F1 vs 0.78, Procrustes var vs 0.05, lead time ∈ [2, 5], and
+    the two §11.4 rate extensions; passing then surfaces as XPASS, which is the signal to drop this
+    marker."""
     assert cfg.classifier is not None and cfg.stylespace is not None
     art = Path(cfg.paths.artefacts_dir)
     champion = art / cfg.classifier.model_artefact_filename
     umap = art / cfg.stylespace.umap_model_filename
     if not (champion.is_file() and umap.is_file()):
         pytest.skip("model artefacts absent — real §11 numbers need the committed artefacts (F20)")
-    raise AssertionError(  # pragma: no cover - only reached with committed artefacts + a matrix
+    raise AssertionError(
         "real full-run assertions need the held-out evaluation matrix (supply it here when built)"
     )

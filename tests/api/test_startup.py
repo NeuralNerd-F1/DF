@@ -1,25 +1,44 @@
 """Best-effort startup (§8.1 / acceptance criterion #1).
 
-No model artefacts are committed and no ``APEX_DATABASE_URL`` is set in the test env, so
-``load_state`` against the real repo config must **degrade every handle to ``None`` without
-crashing** — the app still boots and ``/health`` reports the outage as 503 rather than the process
-dying at startup. The degrade is NOT silent: each failed load writes a ``data_quality_log`` row.
+With no model artefacts and no ``APEX_DATABASE_URL``, ``load_state`` must **degrade every handle to
+``None`` without crashing** — the app still boots and ``/health`` reports the outage as 503 rather
+than the process dying at startup. The degrade is NOT silent: each failed load writes a
+``data_quality_log`` row.
+
+The "no artefacts" precondition is CONSTRUCTED here (``artefacts_dir`` → tmp, DSN unset), not
+assumed of the checkout. These tests previously redirected only the log path and passed because
+``artefacts/`` happened to be empty; the moment a real bundle was promoted into it they failed,
+asserting ``None`` against a genuinely loaded classifier. A test that only passes on an empty
+working tree is not testing the degrade path.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from app.api.deps import AppState, load_state
 from app.api.main import create_app
 from app.contracts.config import load_config
 
+DSN_ENV_VARS = ("APEX_DATABASE_URL", "APEX_REDIS_URL")
 
-def test_load_state_degrades_every_handle_to_none(tmp_path: Path, repo_config_path: Path) -> None:
-    """Fresh checkout (no artefacts, no DSN) → all handles/engine None, no exception raised."""
+
+def _bare_config(tmp_path: Path, repo_config_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Real repo config with every external dependency pointed somewhere empty."""
+    for var in DSN_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
     config = load_config(repo_config_path)
-    dq_log = tmp_path / "dq.jsonl"
-    config.paths.data_quality_log = str(dq_log)
+    config.paths.data_quality_log = str(tmp_path / "dq.jsonl")
+    config.paths.artefacts_dir = str(tmp_path / "artefacts")  # empty → nothing to load
+    return config
+
+
+def test_load_state_degrades_every_handle_to_none(
+    tmp_path: Path, repo_config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fresh checkout (no artefacts, no DSN) → all handles/engine None, no exception raised."""
+    config = _bare_config(tmp_path, repo_config_path, monkeypatch)
 
     state = load_state(config)  # must NOT raise
 
@@ -34,11 +53,12 @@ def test_load_state_degrades_every_handle_to_none(tmp_path: Path, repo_config_pa
     assert state.db_breaker is None
 
 
-def test_startup_degrade_is_logged_not_silent(tmp_path: Path, repo_config_path: Path) -> None:
+def test_startup_degrade_is_logged_not_silent(
+    tmp_path: Path, repo_config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Each missing component writes a data_quality_log row — the outage is observable (#1)."""
-    config = load_config(repo_config_path)
-    dq_log = tmp_path / "dq.jsonl"
-    config.paths.data_quality_log = str(dq_log)
+    config = _bare_config(tmp_path, repo_config_path, monkeypatch)
+    dq_log = Path(config.paths.data_quality_log)
 
     load_state(config)
 

@@ -101,17 +101,29 @@ def _make_stint(
 
     Each driver gets a large, distinct base offset (a stable standardised direction) plus small
     per-lap jitter. F01/F06 additionally rise at the calibration-mean tyre-age slope so the
-    detector's F27/F28 slope component stays ~0 (|z|~0). From ``drift_from`` a **bidirectional**
-    ramp is added to the other cosine features (half +, half -), which rotates the standardised
-    vector strongly away from the within-stint baseline — a rising cosine deviation that can cross
-    τ on the cosine term alone (a one-sided ramp saturates near dev~0.29 < τ)."""
+    detector's F27/F28 slope component stays ~0 (|z|~0). From ``drift_from`` a **uniform negative**
+    ramp is added to the other cosine features, which drives the standardised vector through zero
+    and out the far side — anti-parallel to the baseline — so the cosine deviation rises toward its
+    ceiling of ~2.0 and crosses τ on the cosine term alone.
+
+    The sign pattern is the load-bearing choice, and it is a geometric consequence rather than a
+    tuning knob. Every feature sits at ``mean + delta``, so the standardised baseline points along
+    the all-ones direction. A BIDIRECTIONAL ramp (half +, half -) drives the vector toward a
+    half-plus/half-minus pattern, which is ORTHOGONAL to all-ones: cosine distance ceilings at ~1.0
+    no matter how large the magnitude grows. Against the real 2022-2025 calibration (τ ~1.17-1.71
+    per driver) that ceiling is unreachable — measured peaks were 0.36 (VER) and 0.70 (ALO), and
+    100x more drift moved them <0.05. A UNIFORM ramp instead flips the vector once the ramp exceeds
+    ``delta``, giving a ~2.0 ceiling that clears every driver's τ with room to spare (measured
+    2.06-2.35). An earlier revision used the bidirectional form against the previous synthetic
+    calibration; that is why the note here once claimed the one-sided ramp saturates."""
     rng = np.random.default_rng(GEN_SEED + driver_idx)
     delta = 12.0 + 6.0 * driver_idx  # distinct per-driver base offset
     f27_rate = float(slope["F27"]["mean"])  # throttle_mean (F01) slope vs tyre age
     f28_rate = float(slope["F28"]["mean"])  # brake_peak_mean (F06) slope vs tyre age
-    # Bidirectional drift over the cosine core minus the two slope-source features.
+    # Uniform-negative drift over the cosine core minus the two slope-source features (see the
+    # docstring: a bidirectional ramp ceilings at cosine distance ~1.0, below every real τ).
     drift_feats = [f for f in cosine if f not in _SLOPE_SOURCE]
-    drift_sign = {f: (1.0 if j % 2 == 0 else -1.0) for j, f in enumerate(drift_feats)}
+    drift_sign = {f: -1.0 for f in drift_feats}
 
     rows: list[tuple[int, dict[str, float]]] = []
     for i in range(N_LAPS):
@@ -190,8 +202,9 @@ def _tune_drift(
     fs, cosine, slope = scale
     delta = 12.0 + 6.0 * driver_idx
     best: tuple[float, list, float] | None = None  # (score, rows, mag)
-    # Bidirectional drift only rotates strongly once it exceeds the per-driver base (~delta): the
-    # grid runs well past 1x, since the drift must push the negative half below zero to reach tau.
+    alerting = 0
+    # The drift only rotates the vector past tau once the ramp exceeds the per-driver base (~delta),
+    # so the grid runs well past 1x; below the flip point the deviation barely moves at all.
     for frac in np.linspace(0.5, 6.0, 24):
         mag = float(frac) * delta / N_LAPS
         rows = _make_stint(
@@ -199,11 +212,22 @@ def _tune_drift(
         )
         res = _run_detector(rows, driver, handle, config)
         alert = _first_alert_lap(res.laps)
+        alerting += alert is not None
         # Prefer an ALERT that exists and is closest to the target; penalise no-alert heavily.
         score = abs((alert if alert is not None else 999) - target_lap)
         if best is None or score < best[0]:
             best = (score, rows, mag)
     assert best is not None
+    if alerting == 0:
+        # Every candidate failed to alert, so `best` is just the first grid point — seeding it
+        # would write a flat NOMINAL race that looks like a healthy stint rather than a broken
+        # generator. Fail loudly instead of silently shipping a demo with nothing to demo.
+        raise SystemExit(
+            f"{driver}: no drift magnitude in the sweep produced an ALERT (target lap "
+            f"{target_lap}). The detector calibration in {VAR_PATH.name} has probably moved -- "
+            "check tau against the achievable cosine deviation before widening the grid; a "
+            "bidirectional drift sign ceilings at ~1.0 and cannot cross a larger tau."
+        )
     return best[1], best[2]
 
 

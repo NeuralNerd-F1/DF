@@ -250,6 +250,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Segments
+         * @description The curated held-out sample laps for the Prediction screen. 200 with [] when the profiles
+         *     artefact is absent — the screen then explains there is nothing to pick, exactly like an empty
+         *     driver grid; a missing *demo* source is not a service failure.
+         */
+        get: operations["list_segments_segments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stylespace": {
         parameters: {
             query?: never;
@@ -259,6 +281,29 @@ export interface paths {
         };
         /** Stylespace */
         get: operations["stylespace_stylespace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tyres": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tyre Wear
+         * @description Per-driver, per-compound stint degradation (Screen 4). Served from the startup-loaded
+         *     profiles artefact; absent artefact → an empty map, never fabricated curves. A malformed
+         *     per-compound block is skipped WITH a data_quality_log row — a screen fed by this endpoint
+         *     can trust every curve it does receive.
+         */
+        get: operations["tyre_wear_tyres_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -403,6 +448,10 @@ export interface components {
             shap_radar?: {
                 [key: string]: number;
             };
+            /** Shap Signed */
+            shap_signed?: {
+                [key: string]: number;
+            };
             stability?: components["schemas"]["StabilityResponse"] | null;
             /** Vector 5D */
             vector_5d: number[];
@@ -498,6 +547,10 @@ export interface components {
         };
         /** PredictResponse */
         PredictResponse: {
+            /** Class Probabilities */
+            class_probabilities?: {
+                [key: string]: number;
+            };
             /** Confidence */
             confidence: number;
             confidence_state: components["schemas"]["ConfidenceState"] | null;
@@ -538,6 +591,39 @@ export interface components {
         ReplayResponse: {
             /** Laps */
             laps?: components["schemas"]["ReplayLap"][];
+        };
+        /**
+         * SampleSegmentSchema
+         * @description One real held-out lap for the Prediction screen's picker (profiles artefact). The raw
+         *     per-lap features go straight back into POST /predict; ``true_driver`` is the matrix's ground
+         *     truth so the screen can grade the prediction — a held-out lap, so grading it is a genuine
+         *     generalisation test, not a replay of training data.
+         */
+        SampleSegmentSchema: {
+            /** Circuit */
+            circuit: string;
+            /** Features */
+            features?: {
+                [key: string]: number | null;
+            };
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Lap Number
+             * @default 0
+             */
+            lap_number: number;
+            /** Season */
+            season: number;
+            /**
+             * Session
+             * @default
+             */
+            session: string;
+            /** True Driver */
+            true_driver: string;
         };
         /** SetupParameterSchema */
         SetupParameterSchema: {
@@ -638,6 +724,72 @@ export interface components {
             driver: string;
             /** Probability */
             probability: number;
+        };
+        /**
+         * TyreCompoundStatsSchema
+         * @description Stint-degradation statistics for one (driver, compound), from clean train laps.
+         *
+         *     All pace numbers are **net** within-stint drift: the matrix carries no fuel-load channel, so
+         *     fuel burn (which makes cars faster) and tyre wear (slower) are combined, and the true tyre
+         *     component is larger than each number — the screen states this rather than correcting it with
+         *     an invented constant. ``cliff_age`` is ``None`` when no acceleration past the linear trend was
+         *     detected; most curves are near-linear and a decorative cliff would be detection theatre.
+         *     ``f27_median``/``f28_median`` are the pipeline's own behavioural tyre-age slopes (throttle /
+         *     brake adaptation per lap of age).
+         */
+        TyreCompoundStatsSchema: {
+            /** Cliff Age */
+            cliff_age?: number | null;
+            /** Curve */
+            curve?: components["schemas"]["TyreCurvePointSchema"][];
+            /** Deg Slope S Per Lap */
+            deg_slope_s_per_lap: number;
+            /** F27 Median */
+            f27_median?: number | null;
+            /** F28 Median */
+            f28_median?: number | null;
+            /** Fuel Slope S Per Lap */
+            fuel_slope_s_per_lap?: number | null;
+            /** Max Stint Len */
+            max_stint_len: number;
+            /** Median Stint Len */
+            median_stint_len: number;
+            /** N Laps */
+            n_laps: number;
+            /** N Stints */
+            n_stints: number;
+            /** Total Delta S */
+            total_delta_s: number;
+        };
+        /**
+         * TyreCurvePointSchema
+         * @description One tyre age on the aggregated degradation curve: the median lap-time delta versus each
+         *     stint's own early-lap baseline, with the IQR and the lap count behind the point.
+         */
+        TyreCurvePointSchema: {
+            /** Age */
+            age: number;
+            /** Delta S */
+            delta_s: number;
+            /** N */
+            n: number;
+            /** Q25 */
+            q25: number;
+            /** Q75 */
+            q75: number;
+        };
+        /**
+         * TyreWearResponse
+         * @description GET /tyres — per-driver, per-compound stint degradation from the profiles artefact.
+         *     ``drivers`` is empty when the artefact is absent (the screen explains, nothing is invented).
+         */
+        TyreWearResponse: {
+            /** Drivers */
+            drivers?: {
+                [key: string]: {
+                    [key: string]: components["schemas"]["TyreCompoundStatsSchema"];
+                };
+            };
         };
         /** UnknownFingerprintRequest */
         UnknownFingerprintRequest: {
@@ -1092,6 +1244,26 @@ export interface operations {
             };
         };
     };
+    list_segments_segments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleSegmentSchema"][];
+                };
+            };
+        };
+    };
     stylespace_stylespace_get: {
         parameters: {
             query?: never;
@@ -1108,6 +1280,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StyleSpaceResponse"];
+                };
+            };
+        };
+    };
+    tyre_wear_tyres_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TyreWearResponse"];
                 };
             };
         };

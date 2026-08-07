@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,13 @@ class DriverProfilesUnavailableError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class DriverProfile:
     """One driver's facts. Every optional field is ``None`` when the artefact could not measure it
-    (too few laps for a within-session SD, or a driver the champion's summary never scored)."""
+    (too few laps for a within-session SD, or a driver the champion's summary never scored).
+
+    ``shap_signed_mean`` is the mean **signed** SHAP per feature over the driver's sampled laps —
+    positive pushes the champion toward this driver, negative away. It comes from the beeswarm
+    artefact via the build script; an artefact built without one carries ``{}`` and the profile
+    screen omits the signed panel rather than inventing directions.
+    """
 
     laps_analysed: int
     seasons: tuple[int, ...]
@@ -49,6 +55,11 @@ class DriverProfile:
     lap_time_consistency_s: float | None
     identification_f1: float | None
     feature_percentile: Mapping[str, float]
+    shap_signed_mean: Mapping[str, float] = field(default_factory=dict)
+    # Per-compound stint-degradation stats (curve, slope, cliff, F27/F28 medians). Carried as the
+    # artefact's raw mapping — the /tyres route validates the shape into its typed schema, so the
+    # loader stays a reader, not a re-modeller. {} = matrix had no usable stints for this driver.
+    tyre_wear: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,12 +77,30 @@ class DriverSignal:
 
 
 @dataclass(frozen=True, slots=True)
+class SampleSegment:
+    """One real held-out lap for the Prediction screen's picker. ``true_driver`` is the matrix's
+    ground truth — the screen grades the classifier against it after predicting. Features are the
+    RAW per-lap values (None = the lap's genuine NULL); /predict normalises them exactly as the
+    evaluation pipeline does."""
+
+    id: str
+    label: str
+    circuit: str
+    season: int
+    session: str
+    lap_number: int
+    true_driver: str
+    features: Mapping[str, float | None]
+
+
+@dataclass(frozen=True, slots=True)
 class DriverProfiles:
     content_hash: str
     n_laps: int
     held_out_circuits: tuple[str, ...]
     source_matrix: str
     by_code: Mapping[str, DriverProfile]
+    segments: tuple[SampleSegment, ...] = ()
 
     def get(self, code: str) -> DriverProfile | None:
         return self.by_code.get(code)
@@ -83,6 +112,12 @@ def _profile_from_json(raw: Any) -> DriverProfile:
     percentile = raw.get("feature_percentile") or {}
     if not isinstance(percentile, dict):
         raise DriverProfilesUnavailableError("feature_percentile is not an object")
+    signed = raw.get("shap_signed_mean") or {}
+    if not isinstance(signed, dict):
+        raise DriverProfilesUnavailableError("shap_signed_mean is not an object")
+    wear = raw.get("tyre_wear") or {}
+    if not isinstance(wear, dict):
+        raise DriverProfilesUnavailableError("tyre_wear is not an object")
     return DriverProfile(
         laps_analysed=int(raw["laps_analysed"]),
         seasons=tuple(int(s) for s in raw.get("seasons") or ()),
@@ -90,11 +125,31 @@ def _profile_from_json(raw: Any) -> DriverProfile:
         lap_time_consistency_s=_opt_float(raw.get("lap_time_consistency_s")),
         identification_f1=_opt_float(raw.get("identification_f1")),
         feature_percentile={str(k): float(v) for k, v in percentile.items()},
+        shap_signed_mean={str(k): float(v) for k, v in signed.items()},
+        tyre_wear=wear,
     )
 
 
 def _opt_float(value: Any) -> float | None:
     return None if value is None else float(value)
+
+
+def _segment_from_json(raw: Any) -> SampleSegment:
+    if not isinstance(raw, dict):
+        raise DriverProfilesUnavailableError(f"segment is {type(raw).__name__}, not an object")
+    features = raw.get("features") or {}
+    if not isinstance(features, dict):
+        raise DriverProfilesUnavailableError("segment features is not an object")
+    return SampleSegment(
+        id=str(raw["id"]),
+        label=str(raw["label"]),
+        circuit=str(raw["circuit"]),
+        season=int(raw["season"]),
+        session=str(raw.get("session", "")),
+        lap_number=int(raw.get("lap_number", 0)),
+        true_driver=str(raw["true_driver"]),
+        features={str(k): _opt_float(v) for k, v in features.items()},
+    )
 
 
 def load_driver_profiles(
@@ -144,12 +199,21 @@ def load_driver_profiles(
     if not by_code:
         raise _fail("driver profiles artefact carries no drivers")
 
+    raw_segments = payload.get("segments") or []
+    if not isinstance(raw_segments, list):
+        raise _fail("segments is not a list")
+    try:
+        segments = tuple(_segment_from_json(raw) for raw in raw_segments)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _fail(f"segments malformed: {type(exc).__name__}: {exc}") from exc
+
     return DriverProfiles(
         content_hash=str(payload.get("content_hash", "")),
         n_laps=int(payload.get("n_laps", 0)),
         held_out_circuits=tuple(str(c) for c in payload.get("held_out_circuits") or ()),
         source_matrix=str(payload.get("source_matrix", "")),
         by_code=by_code,
+        segments=segments,
     )
 
 

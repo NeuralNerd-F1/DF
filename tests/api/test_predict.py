@@ -106,3 +106,52 @@ async def test_predict_too_many_feature_keys_is_400(api: SimpleNamespace) -> Non
     r = await api.client.post("/predict", json=body)
     assert r.status_code == 400
     assert r.json()["error_code"] == "INVALID_INPUT"
+
+
+# --- GET /segments + class_probabilities (Prediction screen) ----------------------------------
+
+
+async def test_segments_empty_without_profiles(api: SimpleNamespace) -> None:
+    """No profiles artefact → 200 [] — a missing demo source is not a service failure."""
+    r = await api.client.get("/segments")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+async def test_segments_serve_the_curated_laps(api: SimpleNamespace) -> None:
+    from app.api.profiles import DriverProfiles, SampleSegment
+
+    api.state.driver_profiles = DriverProfiles(
+        content_hash="abc",
+        n_laps=1,
+        held_out_circuits=("Belgium",),
+        source_matrix="m.parquet",
+        by_code={},
+        segments=(
+            SampleSegment(
+                id="Belgium-2022-VER-34",
+                label="Belgium 2022 · Race · Lap 34",
+                circuit="Belgium",
+                season=2022,
+                session="Race",
+                lap_number=34,
+                true_driver="VER",
+                features={"F01": 62.1, "F02": None},
+            ),
+        ),
+    )
+    body = (await api.client.get("/segments")).json()
+    assert len(body) == 1
+    assert body[0]["true_driver"] == "VER"
+    assert body[0]["features"] == {"F01": 62.1, "F02": None}
+
+
+async def test_predict_serialises_the_full_class_distribution(api: SimpleNamespace) -> None:
+    """PredictResponse carries every class the model scored, not just the top-3."""
+    _predictor(api, fake_prediction(confidence=0.91))
+    r = await api.client.post("/predict", json=_BODY)
+    assert r.status_code == 200
+    probs = r.json()["class_probabilities"]
+    assert set(probs) == {"VER", "HAM"}  # the result's full distribution, every class present
+    assert probs["VER"] == 0.91
+    assert abs(sum(probs.values()) - 1.0) < 1e-9

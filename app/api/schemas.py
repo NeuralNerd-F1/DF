@@ -89,9 +89,73 @@ class PredictResponse(ApiModel):
     confidence: float
     confidence_state: ConfidenceState | None
     top_3: list[TopK] = Field(default_factory=list)
+    # The FULL calibrated distribution (sums to ~1.0) — the inference result always computes it;
+    # serialising it lets the screen show every class instead of an implied "rest is nothing".
+    class_probabilities: dict[str, float] = Field(default_factory=dict)
     shap_values: dict[str, float] | None = None
     shap_available: bool = False
     model_version: str
+
+
+class TyreCurvePointSchema(ApiModel):
+    """One tyre age on the aggregated degradation curve: the median lap-time delta versus each
+    stint's own early-lap baseline, with the IQR and the lap count behind the point."""
+
+    age: int
+    delta_s: float
+    q25: float
+    q75: float
+    n: int
+
+
+class TyreCompoundStatsSchema(ApiModel):
+    """Stint-degradation statistics for one (driver, compound), from clean train laps.
+
+    All pace numbers are **net** within-stint drift: the matrix carries no fuel-load channel, so
+    fuel burn (which makes cars faster) and tyre wear (slower) are combined, and the true tyre
+    component is larger than each number — the screen states this rather than correcting it with
+    an invented constant. ``cliff_age`` is ``None`` when no acceleration past the linear trend was
+    detected; most curves are near-linear and a decorative cliff would be detection theatre.
+    ``f27_median``/``f28_median`` are the pipeline's own behavioural tyre-age slopes (throttle /
+    brake adaptation per lap of age).
+    """
+
+    n_laps: int
+    n_stints: int
+    median_stint_len: int
+    max_stint_len: int
+    deg_slope_s_per_lap: float
+    total_delta_s: float
+    # The stripped per-race-lap fuel term (median across this group's races) — reported so the
+    # screen can state the correction it is standing on.
+    fuel_slope_s_per_lap: float | None = None
+    cliff_age: int | None = None
+    curve: list[TyreCurvePointSchema] = Field(default_factory=list)
+    f27_median: float | None = None
+    f28_median: float | None = None
+
+
+class TyreWearResponse(ApiModel):
+    """GET /tyres — per-driver, per-compound stint degradation from the profiles artefact.
+    ``drivers`` is empty when the artefact is absent (the screen explains, nothing is invented)."""
+
+    drivers: dict[str, dict[str, TyreCompoundStatsSchema]] = Field(default_factory=dict)
+
+
+class SampleSegmentSchema(ApiModel):
+    """One real held-out lap for the Prediction screen's picker (profiles artefact). The raw
+    per-lap features go straight back into POST /predict; ``true_driver`` is the matrix's ground
+    truth so the screen can grade the prediction — a held-out lap, so grading it is a genuine
+    generalisation test, not a replay of training data."""
+
+    id: str
+    label: str
+    circuit: str
+    season: int
+    session: str = ""
+    lap_number: int = 0
+    true_driver: str
+    features: dict[str, float | None] = Field(default_factory=dict)
 
 
 # --- GET /drivers, /drivers/{id}/fingerprint, /setup, /stability --------------------------------
@@ -154,6 +218,11 @@ class FingerprintResponse(ApiModel):
     shap_radar: dict[str, float] = Field(default_factory=dict)
     nl_description: str = ""
     stability: StabilityResponse | None = None
+    # Mean SIGNED SHAP per feature over the driver's sampled laps (profiles artefact, sourced from
+    # the F07 beeswarm): positive = pushes the champion toward this driver, negative = away. Empty
+    # when the artefact is absent or predates the signed fill — the profile screen then omits the
+    # confirms/argues panel, never derives a sign from the unsigned shap_radar magnitudes.
+    shap_signed: dict[str, float] = Field(default_factory=dict)
 
 
 class SetupResponse(ApiModel):

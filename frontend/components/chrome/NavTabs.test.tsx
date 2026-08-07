@@ -31,8 +31,8 @@ describe('NavTabs', () => {
   it('lights the matching tab for every top-level screen', () => {
     for (const [path, label] of [
       ['/compare', 'Comparison'],
-      ['/style-space', 'Style Space'],
-      ['/ingest', 'Prediction + Ingest'],
+      ['/ingest', 'Prediction + Setup'],
+      ['/tyres', 'Tyre Wear'],
       ['/replay', 'Replay'],
     ] as const) {
       usePathname.mockReturnValue(path);

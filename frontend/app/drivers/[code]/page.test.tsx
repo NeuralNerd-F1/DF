@@ -13,9 +13,10 @@ vi.mock('@/lib/api/endpoints', () => ({
   getFingerprint: vi.fn(),
   getDrivers: vi.fn(),
   getSetup: vi.fn(),
+  getStyleSpace: vi.fn(),
 }));
 
-import { getDrivers, getFingerprint, getSetup } from '@/lib/api/endpoints';
+import { getDrivers, getFingerprint, getSetup, getStyleSpace } from '@/lib/api/endpoints';
 
 import DriverProfilePage from './page';
 
@@ -28,6 +29,7 @@ const fingerprint = {
     driver_id: 'VER',
     vector_5d: [0.1, 0.2, 0.3, 0.4, 0.5],
     shap_radar: { throttle: 0.9, braking: 0.3, speed: 0.7, gear: 0.4, engine: 0.6, cornering: 0.5 },
+    shap_signed: { F16: 0.455, F02: 0.317 },
     nl_description: 'Aggressive on throttle.',
     stability: {
       driver_id: 'VER',
@@ -43,7 +45,23 @@ const drivers = {
   status: 200,
   partial: false,
   flags: [],
-  data: [{ id: 'VER', code: 'VER', team: 'Red Bull', radar_values: fingerprint.data.shap_radar }],
+  data: [
+    {
+      id: 'VER',
+      code: 'VER',
+      team: 'Red Bull',
+      full_name: 'Max Verstappen',
+      radar_values: fingerprint.data.shap_radar,
+      signature: [{ feature: 'F02', attribution: 1.14, percentile: 1.0 }],
+      profile: {
+        laps_analysed: 4116,
+        seasons: [2022, 2025],
+        n_circuits: 23,
+        lap_time_consistency_s: 1.14,
+        identification_f1: 0.53,
+      },
+    },
+  ],
 };
 const setup = {
   ok: true as const,
@@ -59,10 +77,10 @@ const setup = {
         kind: 'DEGREES',
         value: 6,
         value_range: null,
-        category: 'aero',
+        category: null,
         confidence: 0.9,
         rating: 'HIGH',
-        unit: 'deg',
+        unit: 'degrees',
         fia_min: 0,
         fia_max: 12,
         constraint_flags: [],
@@ -76,34 +94,51 @@ const setup = {
     model_version: 'v',
   },
 };
+const styleSpace = {
+  ok: true as const,
+  status: 200,
+  partial: false,
+  flags: [],
+  data: {
+    drivers: [
+      { id: 'VER', code: 'VER', coords_2d: [1, 2], coords_5d: [0, 0, 0, 0, 0], season: null },
+      { id: 'LEC', code: 'LEC', coords_2d: [3, 1], coords_5d: [0, 0, 0, 0, 0], season: null },
+    ],
+  },
+};
 
 beforeEach(() => {
-  (getFingerprint as Mock).mockReset();
-  (getDrivers as Mock).mockReset();
-  (getSetup as Mock).mockReset();
+  for (const fn of [getFingerprint, getDrivers, getSetup, getStyleSpace]) {
+    (fn as Mock).mockReset();
+  }
+  (getFingerprint as Mock).mockResolvedValue(fingerprint);
+  (getDrivers as Mock).mockResolvedValue(drivers);
+  (getSetup as Mock).mockResolvedValue(setup);
+  (getStyleSpace as Mock).mockResolvedValue(styleSpace);
 });
 
 describe('DriverProfilePage (Screen 2)', () => {
-  it('renders the profile: radar, NL, setup panel, multi-season, and honest per-lap/corner states', async () => {
-    (getFingerprint as Mock).mockResolvedValue(fingerprint);
-    (getDrivers as Mock).mockResolvedValue(drivers);
-    (getSetup as Mock).mockResolvedValue(setup);
-
+  it('renders header, style profile, signal weights, facts, setup and style map', async () => {
     render(await DriverProfilePage({ params: { code: 'VER' } }));
 
-    expect(screen.getByTestId('profile-radar')).toBeInTheDocument();
-    expect(screen.getByTestId('nl')).toHaveTextContent('Aggressive on throttle.');
-    expect(screen.getByTestId('setup-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('multiseason-panel')).toHaveTextContent('0.88');
-    // honest unavailable states (div #48 / #49)
-    expect(screen.getByTestId('beeswarm-panel')).toHaveTextContent('not yet available');
-    expect(screen.getByTestId('corner-tabs')).toHaveTextContent('not yet available');
+    expect(screen.getByTestId('profile-header')).toHaveTextContent('Max Verstappen');
+    expect(screen.getByTestId('style-profile-card')).toBeInTheDocument();
+    expect(screen.getByTestId('signal-weights-card')).toBeInTheDocument();
+    expect(screen.getByTestId('driver-summary')).toHaveTextContent('Aggressive on throttle.');
+    expect(screen.getByTestId('facts-card')).toHaveTextContent('4,116');
+    expect(screen.getByTestId('setup-card')).toBeInTheDocument();
+    expect(screen.getByTestId('setup-param-front_wing_angle')).toHaveTextContent('6.0 degrees');
+    expect(screen.getByTestId('style-map-card')).toBeInTheDocument();
+    expect(screen.getByTestId('style-dot-VER')).toHaveAttribute('data-highlight');
   });
 
   it('renders a PageError when the driver is not found (404)', async () => {
-    (getFingerprint as Mock).mockResolvedValue({ ok: false, code: 'NOT_FOUND', detail: 'nope', status: 404 });
-    (getDrivers as Mock).mockResolvedValue(drivers);
-    (getSetup as Mock).mockResolvedValue({ ok: false, code: 'NOT_FOUND', detail: '', status: 404 });
+    (getFingerprint as Mock).mockResolvedValue({
+      ok: false,
+      code: 'NOT_FOUND',
+      detail: 'nope',
+      status: 404,
+    });
 
     render(await DriverProfilePage({ params: { code: 'ZZZ' } }));
     expect(screen.getByTestId('error-card')).toBeInTheDocument();
@@ -111,9 +146,12 @@ describe('DriverProfilePage (Screen 2)', () => {
   });
 
   it('shows an ErrorCard (not "no data") when setup is a real outage — HIGH-3', async () => {
-    (getFingerprint as Mock).mockResolvedValue(fingerprint);
-    (getDrivers as Mock).mockResolvedValue(drivers);
-    (getSetup as Mock).mockResolvedValue({ ok: false, code: 'DB_UNAVAILABLE', detail: 'db down', status: 503 });
+    (getSetup as Mock).mockResolvedValue({
+      ok: false,
+      code: 'DB_UNAVAILABLE',
+      detail: 'db down',
+      status: 503,
+    });
 
     render(await DriverProfilePage({ params: { code: 'VER' } }));
     expect(screen.getByTestId('error-code')).toHaveTextContent('DB_UNAVAILABLE');

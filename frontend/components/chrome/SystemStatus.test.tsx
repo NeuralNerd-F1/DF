@@ -41,9 +41,16 @@ describe('SystemStatus — claims resolved from the real /health, never assumed'
     expect(screen.getByTestId('system-status')).toHaveTextContent(/api offline/i);
   });
 
-  it('renders the probing state before the response lands (hydration-safe initial)', () => {
-    getHealth.mockReturnValue(new Promise(() => {}));
+  it('renders the probing state before the response lands (hydration-safe initial)', async () => {
+    // A controllable deferred, NOT a never-resolving promise — a promise that never settles keeps
+    // the worker's event loop alive after the test and hangs the whole suite run.
+    let resolve!: (v: unknown) => void;
+    getHealth.mockReturnValue(new Promise((r) => (resolve = r)));
     render(<SystemStatus />);
     expect(screen.getByTestId('system-status')).toHaveAttribute('data-status', 'probing');
+    resolve({ ok: false, code: 'API_ERROR', detail: 'released' });
+    await waitFor(() =>
+      expect(screen.getByTestId('system-status')).toHaveAttribute('data-status', 'offline'),
+    );
   });
 });

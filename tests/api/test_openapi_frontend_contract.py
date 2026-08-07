@@ -43,7 +43,8 @@ def test_driver_profile_and_signal_schemas_carry_the_overview_fields() -> None:
 
 def test_fingerprint_response_fields() -> None:
     props = _schemas()["FingerprintResponse"]["properties"]
-    for field in ("vector_5d", "shap_radar", "nl_description", "stability"):
+    # shap_signed = the profile screen's confirms/argues panel source
+    for field in ("vector_5d", "shap_radar", "shap_signed", "nl_description", "stability"):
         assert field in props, f"FingerprintResponse lost {field!r} — breaks the Driver Profile"
 
 
@@ -51,6 +52,21 @@ def test_setup_parameter_fields() -> None:
     props = _schemas()["SetupParameterSchema"]["properties"]
     for field in ("name", "value", "value_range", "rating", "confidence", "shap_available"):
         assert field in props, f"SetupParameterSchema lost {field!r} — breaks the setup panel"
+
+
+def test_tyre_wear_schema_carries_the_screen_fields() -> None:
+    schemas = _schemas()
+    for field in (
+        "n_stints", "median_stint_len", "deg_slope_s_per_lap", "total_delta_s",
+        "fuel_slope_s_per_lap", "cliff_age", "curve",
+    ):
+        assert field in schemas["TyreCompoundStatsSchema"]["properties"], (
+            f"TyreCompoundStatsSchema lost {field!r} — breaks the Tyre Wear screen"
+        )
+    for field in ("age", "delta_s", "q25", "q75", "n"):
+        assert field in schemas["TyreCurvePointSchema"]["properties"], (
+            f"TyreCurvePointSchema lost {field!r} — breaks the degradation chart"
+        )
 
 
 def test_stability_fields() -> None:

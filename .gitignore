@@ -33,3 +33,4 @@ Thumbs.db
 .api.log
 .api.err
 frontend/.dev.log
+.pytest.out

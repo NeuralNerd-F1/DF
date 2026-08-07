@@ -54,6 +54,27 @@ from app.pipeline.features import FEATURE_IDS  # noqa: E402
 # dropped from the median rather than contributing a one- or two-lap "SD".
 MIN_LAPS_PER_GROUP = 5
 
+# --- Tyre-wear derivation constants ----------------------------------------------------------
+# Dry slicks only: wet-weather laps answer a different question (track state, not tyre wear).
+DRY_COMPOUNDS = ("SOFT", "MEDIUM", "HARD")
+# A stint shorter than this cannot anchor a baseline AND show drift beyond it.
+MIN_STINT_CLEAN_LAPS = 8
+# A curve point needs this many laps across stints, or it is noise presented as signal.
+MIN_LAPS_PER_AGE = 8
+# The stint's pace baseline = its first N observed tyre ages AT OR ABOVE this age. Age-1 laps
+# carry out-lap/warm-up time and belong in the curve as data, never in the baseline.
+BASELINE_AGES = 2
+BASELINE_MIN_AGE = 2
+# A race needs at least this many laps (across the field) to estimate its fuel slope.
+MIN_RACE_LAPS_FOR_FUEL = 60
+# Cliff detection: the linear reference is fitted on this leading fraction of the curve...
+CLIFF_FIT_FRACTION = 0.6
+# ...and a cliff needs the median delta to exceed the linear prediction by at least this many
+# seconds (or 4 robust SDs of the fit residuals, whichever is larger) for 2 consecutive ages.
+CLIFF_MIN_EXCESS_S = 0.30
+CLIFF_MAD_MULTIPLIER = 4.0
+CLIFF_CONSECUTIVE = 2
+
 # Grouping key for the within-session SD. `session` distinguishes FP/Q/R inside one race weekend,
 # which carry very different fuel loads and therefore very different lap-time spreads.
 _SESSION_KEYS = ("season", "circuit", "session")
@@ -141,6 +162,263 @@ def feature_percentiles(train: pd.DataFrame, drivers: list[str]) -> dict[str, di
     return out
 
 
+def signed_shap_means(beeswarm_path: Path) -> dict[str, dict[str, float]]:
+    """Mean **signed** SHAP per (driver, feature) from the F07 beeswarm artefact, or ``{}``.
+
+    The DB's ``shap_global`` stores mean |SHAP| — magnitude only. The beeswarm artefact keeps the
+    per-lap signed values, so their mean per feature says which way the feature pushes the
+    champion's log-odds for that driver's own laps: positive = toward the driver (confirms),
+    negative = away (argues against). This is the only place the sign is computed; it is never
+    inferred from the magnitude. Absent/malformed artefact degrades to empty with a warning —
+    the profile screen then omits the signed panel instead of faking directions.
+    """
+    def warn(detail: str) -> None:
+        print(f"WARNING: {detail} — shap_signed_mean omitted", file=sys.stderr)
+
+    if not beeswarm_path.exists():
+        warn(f"{beeswarm_path} not found")
+        return {}
+    try:
+        beeswarm = json.loads(beeswarm_path.read_text(encoding="utf-8"))
+        points = beeswarm["points"]
+        frame = pd.DataFrame(points, columns=["driver", "feature_id", "shap"])
+    except (OSError, json.JSONDecodeError, KeyError, ValueError) as exc:
+        warn(f"{beeswarm_path} unreadable ({exc})")
+        return {}
+    if frame.empty:
+        warn(f"{beeswarm_path} carries no points")
+        return {}
+    means = frame.groupby(["driver", "feature_id"], observed=True)["shap"].mean()
+    out: dict[str, dict[str, float]] = {}
+    for (driver, feature), value in means.items():
+        if np.isfinite(value):
+            out.setdefault(str(driver), {})[str(feature)] = float(value)
+    return out
+
+
+def _detect_cliff(ages: list[int], deltas: list[float]) -> int | None:
+    """First tyre age where the aggregated delta curve accelerates clearly past its linear trend.
+
+    The reference line is fitted on the leading ``CLIFF_FIT_FRACTION`` of the curve; a cliff is
+    called only when the median delta exceeds the line's prediction by ``max(CLIFF_MIN_EXCESS_S,
+    CLIFF_MAD_MULTIPLIER × residual MAD)`` for ``CLIFF_CONSECUTIVE`` consecutive ages. Returns
+    ``None`` when the criterion never fires — most driver/compound curves are near-linear and an
+    "estimated cliff" on those would be decoration, not detection.
+    """
+    n_fit = int(len(ages) * CLIFF_FIT_FRACTION)
+    if n_fit < 3 or len(ages) - n_fit < CLIFF_CONSECUTIVE:
+        return None
+    x = np.asarray(ages[:n_fit], dtype=float)
+    y = np.asarray(deltas[:n_fit], dtype=float)
+    slope, intercept = np.polyfit(x, y, 1)
+    residuals = y - (slope * x + intercept)
+    mad = float(np.median(np.abs(residuals - np.median(residuals))))
+    threshold = max(CLIFF_MIN_EXCESS_S, CLIFF_MAD_MULTIPLIER * 1.4826 * mad)
+
+    run = 0
+    for age, delta in zip(ages[n_fit:], deltas[n_fit:], strict=True):
+        predicted = slope * age + intercept
+        if delta - predicted > threshold:
+            run += 1
+            if run >= CLIFF_CONSECUTIVE:
+                return int(ages[n_fit:][ages[n_fit:].index(age) - CLIFF_CONSECUTIVE + 1])
+        else:
+            run = 0
+    return None
+
+
+def race_fuel_slopes(laps: pd.DataFrame) -> dict[tuple[int, str], float]:
+    """Per-race fuel slope (s per race lap), identified from the multi-stint structure.
+
+    Within one stint, tyre age and race lap rise in lockstep — fuel and tyre are perfectly
+    collinear and cannot be separated. Across a WHOLE race they decouple: pit stops reset tyre
+    age while the race lap keeps counting, so a regression over all of a race's clean dry laps
+    (per-driver demeaned, so car/driver pace differences drop out) of
+
+        lap_time ~ b_fuel * lap_number + b_tyre * tyre_age
+
+    identifies the fuel term from exactly those resets. ``b_fuel`` is pooled across the field —
+    fuel burn is a property of the race, not the driver. Races with too few laps or a singular
+    design (nobody pitted) are omitted; their laps are then excluded from the tyre curves rather
+    than corrected with a number from a different circuit.
+    """
+    slopes: dict[tuple[int, str], float] = {}
+    for (season, circuit), race in laps.groupby(["season", "circuit"], observed=True):
+        if len(race) < MIN_RACE_LAPS_FOR_FUEL:
+            continue
+        # Demean per driver: absorbs car pace so the fit sees only within-driver evolution.
+        demeaned = race[["lap_time_s", "lap_number", "tyre_age"]].astype(float).copy()
+        for col in demeaned.columns:
+            demeaned[col] = demeaned[col] - demeaned.groupby(race["driver"], observed=True)[
+                col
+            ].transform("mean")
+        x = demeaned[["lap_number", "tyre_age"]].to_numpy()
+        # A race where lap_number and tyre_age stay collinear (no pit stops in the clean laps)
+        # cannot separate the two — detectable as a near-degenerate design matrix.
+        if np.linalg.matrix_rank(x) < 2 or np.linalg.cond(x.T @ x) > 1e6:
+            continue
+        coef, *_ = np.linalg.lstsq(x, demeaned["lap_time_s"].to_numpy(), rcond=None)
+        slopes[(int(season), str(circuit))] = float(coef[0])
+    return slopes
+
+
+def tyre_wear(train: pd.DataFrame) -> dict[str, dict[str, dict]]:
+    """Per (driver, compound) stint-degradation statistics from clean RACE laps.
+
+    The naive within-stint pace slope is a fuel/tyre blend — and on this data the blend is
+    dominated by fuel (net curves FALL as the car burns ~1.5 kg/lap). So the model corrects it:
+    :func:`race_fuel_slopes` identifies each race's fuel term from its pit-stop structure, the
+    correction ``lap_time − b_fuel × lap_number`` strips it, and everything below (baselines,
+    curves, slopes, cliffs) runs on the corrected times. Races whose fuel term cannot be
+    identified are excluded, not guessed. Age-1 laps stay in the curve (the out-lap/warm-up cost
+    is real data) but never anchor a baseline.
+
+    F27/F28 (the pipeline's own behavioural tyre-age slopes: throttle and brake adaptation) are
+    aggregated per compound as medians — the behavioural half of the tyre story, and the part
+    APEX is actually about.
+    """
+    required = {"compound", "stint", "tyre_age", "lap_time_s", "lap_number", "session"}
+    if not required.issubset(train.columns):
+        print(f"WARNING: matrix lacks {sorted(required - set(train.columns))} — tyre_wear omitted",
+              file=sys.stderr)
+        return {}
+
+    laps = train[
+        (train["session"] == "R")  # races only: multi-stint fuel structure + long stints
+        & train["compound"].isin(DRY_COMPOUNDS)
+        & np.isfinite(train["lap_time_s"])
+        & train["tyre_age"].notna()
+        & train["lap_number"].notna()
+    ].copy()
+    laps["tyre_age"] = laps["tyre_age"].astype(int)
+
+    fuel = race_fuel_slopes(laps)
+    covered = np.array(
+        [(int(s), str(c)) in fuel for s, c in laps[["season", "circuit"]].to_numpy()]
+    )
+    dropped = int((~covered).sum())
+    if dropped:
+        print(f"tyre_wear: {dropped} laps dropped (fuel slope unidentifiable)", file=sys.stderr)
+    laps = laps[covered]
+    if laps.empty:
+        print("WARNING: no fuel-corrected race laps — tyre_wear omitted", file=sys.stderr)
+        return {}
+    fuel_of = laps.apply(lambda r: fuel[(int(r["season"]), str(r["circuit"]))], axis=1)
+    laps["corrected_s"] = laps["lap_time_s"] - fuel_of * laps["lap_number"].astype(float)
+
+    out: dict[str, dict[str, dict]] = {}
+    stint_keys = ["season", "circuit", "session", "stint"]
+    for (driver, compound), group in laps.groupby(["driver", "compound"], observed=True):
+        stint_slopes: list[float] = []
+        stint_lengths: list[int] = []
+        delta_rows: list[pd.DataFrame] = []
+        for _, stint in group.groupby(stint_keys, observed=True):
+            if len(stint) < MIN_STINT_CLEAN_LAPS:
+                continue
+            stint = stint.sort_values("tyre_age")
+            # Baseline from the earliest ages past warm-up; a stint with no post-warm-up laps
+            # cannot anchor a delta and is skipped.
+            eligible = sorted(a for a in stint["tyre_age"].unique() if a >= BASELINE_MIN_AGE)
+            if not eligible:
+                continue
+            baseline_ages = eligible[:BASELINE_AGES]
+            baseline = float(stint[stint["tyre_age"].isin(baseline_ages)]["corrected_s"].median())
+            body = stint[stint["tyre_age"] >= BASELINE_MIN_AGE]  # slope past warm-up only
+            slope = float(np.polyfit(body["tyre_age"], body["corrected_s"], 1)[0])
+            stint_slopes.append(slope)
+            stint_lengths.append(int(len(stint)))
+            delta_rows.append(
+                pd.DataFrame(
+                    {"tyre_age": stint["tyre_age"], "delta": stint["corrected_s"] - baseline}
+                )
+            )
+        if not stint_slopes:
+            continue
+
+        deltas = pd.concat(delta_rows, ignore_index=True)
+        per_age = deltas.groupby("tyre_age")["delta"]
+        counts = per_age.count()
+        ages = sorted(int(a) for a in counts[counts >= MIN_LAPS_PER_AGE].index)
+        curve = [
+            {
+                "age": age,
+                "delta_s": float(per_age.median()[age]),
+                "q25": float(per_age.quantile(0.25)[age]),
+                "q75": float(per_age.quantile(0.75)[age]),
+                "n": int(counts[age]),
+            }
+            for age in ages
+        ]
+
+        median_len = int(np.median(stint_lengths))
+        slope_s_per_lap = float(np.median(stint_slopes))
+        group_fuel = [
+            fuel[(int(s), str(c))] for s, c in group[["season", "circuit"]].drop_duplicates().values
+        ]
+        stats: dict = {
+            "n_laps": int(len(group)),
+            "n_stints": len(stint_slopes),
+            "median_stint_len": median_len,
+            "max_stint_len": int(max(stint_lengths)),
+            "deg_slope_s_per_lap": slope_s_per_lap,
+            "total_delta_s": slope_s_per_lap * max(0, median_len - 1),
+            "fuel_slope_s_per_lap": float(np.median(group_fuel)) if group_fuel else None,
+            "cliff_age": _detect_cliff([c["age"] for c in curve], [c["delta_s"] for c in curve]),
+            "curve": curve,
+        }
+        for fid, key in (("F27", "f27_median"), ("F28", "f28_median")):
+            stats[key] = (
+                float(group[fid].median())
+                if fid in group.columns and group[fid].notna().any()
+                else None
+            )
+        out.setdefault(str(driver), {})[str(compound)] = stats
+    return out
+
+
+def sample_segments(matrix_path: Path, held_out: set[str], seed: int) -> list[dict]:
+    """One real held-out clean lap per driver — the Prediction screen's segment picker.
+
+    Held-out laps (Belgium/Italy — circuits no model ever trained on) are the honest choice for a
+    "watch the classifier work" demo: the prediction is a genuine generalisation test, and the
+    matrix records the true driver so the screen can grade the answer. Selection is seeded, so the
+    artefact — and therefore the screen — is reproducible from the repo. Raw features go out as
+    written (NaN → null); /predict applies the promoted normalisation exactly as evaluation does.
+    """
+    matrix = pd.read_parquet(matrix_path)
+    pool = matrix[(matrix["split"] != "train") & matrix["is_clean"]]
+    pool = pool[pool["circuit"].isin(held_out)]
+    if pool.empty:
+        print("WARNING: no held-out clean laps — segments omitted", file=sys.stderr)
+        return []
+
+    session_names = {"R": "Race", "Q": "Qualifying", "S": "Sprint"}
+    rng = np.random.default_rng(seed)
+    segments: list[dict] = []
+    for driver, group in pool.groupby("driver", sort=True):
+        row = group.iloc[int(rng.integers(len(group)))]
+        features = {
+            fid: (None if pd.isna(row[fid]) else float(row[fid]))
+            for fid in FEATURE_IDS
+            if fid in row.index
+        }
+        session = session_names.get(str(row["session"]), str(row["session"]))
+        circuit, season, lap = str(row["circuit"]), int(row["season"]), int(row["lap_number"])
+        segments.append(
+            {
+                "id": f"{circuit}-{season}-{driver}-{lap}",
+                "label": f"{circuit} {season} · {session} · Lap {lap}",
+                "circuit": str(row["circuit"]),
+                "season": int(row["season"]),
+                "session": session,
+                "lap_number": int(row["lap_number"]),
+                "true_driver": str(driver),
+                "features": features,
+            }
+        )
+    return segments
+
+
 def per_driver_f1(summary_path: Path) -> dict[str, float]:
     """The champion's held-out per-driver F1, or ``{}`` when the summary is absent/unreadable.
 
@@ -167,9 +445,15 @@ def per_driver_f1(summary_path: Path) -> dict[str, float]:
     return {str(k): float(v) for k, v in scores.items() if isinstance(v, (int, float))}
 
 
-def build_profiles(train: pd.DataFrame, f1_by_driver: dict[str, float]) -> dict[str, dict]:
+def build_profiles(
+    train: pd.DataFrame,
+    f1_by_driver: dict[str, float],
+    shap_signed: dict[str, dict[str, float]] | None = None,
+) -> dict[str, dict]:
     drivers = sorted(train["driver"].unique().tolist())
     percentiles = feature_percentiles(train, drivers)
+    signed = shap_signed or {}
+    wear = tyre_wear(train)
 
     profiles: dict[str, dict] = {}
     for driver in drivers:
@@ -181,6 +465,8 @@ def build_profiles(train: pd.DataFrame, f1_by_driver: dict[str, float]) -> dict[
             "lap_time_consistency_s": lap_time_consistency(rows),
             "identification_f1": f1_by_driver.get(driver),
             "feature_percentile": percentiles.get(driver, {}),
+            "shap_signed_mean": signed.get(driver, {}),
+            "tyre_wear": wear.get(driver, {}),
         }
     return profiles
 
@@ -194,6 +480,7 @@ def main() -> int:
     parser.add_argument(
         "--summary", type=Path, default=Path("artefacts/real/train_real_summary.json")
     )
+    parser.add_argument("--beeswarm", type=Path, default=Path("artefacts/shap_beeswarm.json"))
     parser.add_argument("--out", type=Path, default=Path("artefacts/driver_profiles.json"))
     args = parser.parse_args()
 
@@ -201,7 +488,10 @@ def main() -> int:
     held_out = set(config.held_out_circuits)
 
     train = load_matrix(args.matrix, held_out)
-    profiles = build_profiles(train, per_driver_f1(args.summary))
+    profiles = build_profiles(
+        train, per_driver_f1(args.summary), signed_shap_means(args.beeswarm)
+    )
+    segments = sample_segments(args.matrix, held_out, seed=config.seeds.numpy)
 
     payload = {
         "source_matrix": str(args.matrix).replace("\\", "/"),
@@ -210,6 +500,7 @@ def main() -> int:
         "n_laps": int(len(train)),
         "min_laps_per_consistency_group": MIN_LAPS_PER_GROUP,
         "drivers": profiles,
+        "segments": segments,
     }
     # Hash the content, then attach it — the same self-describing pattern normalisation.json uses,
     # so a stale artefact served against a regenerated matrix is detectable rather than plausible.

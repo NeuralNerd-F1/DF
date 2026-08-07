@@ -24,7 +24,12 @@ from app.api.deps import (
     get_predictor,
 )
 from app.api.errors import ApiError, invalid_input
-from app.api.schemas import PredictRequest, PredictResponse, TopK
+from app.api.schemas import (
+    PredictRequest,
+    PredictResponse,
+    SampleSegmentSchema,
+    TopK,
+)
 from app.cache.redis import RedisCache
 from app.contracts.enums import Status
 from app.contracts.errors import ErrorCode
@@ -85,6 +90,7 @@ async def post_predict(
             confidence=result.confidence,
             confidence_state=result.confidence_state,
             top_3=[TopK(driver=d, probability=p) for d, p in result.top_3],
+            class_probabilities=dict(result.probabilities),
             shap_values=shap_values,
             shap_available=shap_available,
             model_version=result.model_version,
@@ -111,3 +117,28 @@ async def post_predict(
     resp = PredictResponse(**payload)
     metrics_mod.observe_confidence(resp.confidence)
     return resp
+
+
+@router.get("/segments", response_model=list[SampleSegmentSchema])
+async def list_segments(
+    state: AppState = Depends(get_apex_state),
+) -> list[SampleSegmentSchema]:
+    """The curated held-out sample laps for the Prediction screen. 200 with [] when the profiles
+    artefact is absent — the screen then explains there is nothing to pick, exactly like an empty
+    driver grid; a missing *demo* source is not a service failure."""
+    profiles = state.driver_profiles
+    if profiles is None:
+        return []
+    return [
+        SampleSegmentSchema(
+            id=s.id,
+            label=s.label,
+            circuit=s.circuit,
+            season=s.season,
+            session=s.session,
+            lap_number=s.lap_number,
+            true_driver=s.true_driver,
+            features=dict(s.features),
+        )
+        for s in profiles.segments
+    ]

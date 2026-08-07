@@ -1,45 +1,40 @@
 import Link from 'next/link';
 
-import { CornerTabs } from '@/components/driver-profile/CornerTabs';
-import { MultiSeasonPanel } from '@/components/driver-profile/MultiSeasonPanel';
-import { NlDescription } from '@/components/driver-profile/NlDescription';
-import { ProfileRadar } from '@/components/driver-profile/ProfileRadar';
-import { SetupPanel } from '@/components/driver-profile/SetupPanel';
-import { ShapBeeswarmPanel } from '@/components/driver-profile/ShapBeeswarmPanel';
+import { FactsCard } from '@/components/driver-profile/FactsCard';
+import { ProfileHeader } from '@/components/driver-profile/ProfileHeader';
+import { SetupList } from '@/components/driver-profile/SetupList';
+import { SignalWeightsCard } from '@/components/driver-profile/SignalWeightsCard';
+import { StyleMapCard } from '@/components/driver-profile/StyleMapCard';
+import { StyleProfileCard } from '@/components/driver-profile/StyleProfileCard';
 import { PageError } from '@/components/ds/PageError';
-import { getDrivers, getFingerprint, getSetup } from '@/lib/api/endpoints';
-import { RADAR_DOMAINS, type DriverSummary } from '@/lib/api/types';
+import { getDrivers, getFingerprint, getSetup, getStyleSpace } from '@/lib/api/endpoints';
 import { DEFAULT_CIRCUIT } from '@/lib/design/circuits';
+import { gridRelativeRadar } from '@/lib/design/radar';
+import { teamColour } from '@/lib/design/teams';
 
 export const dynamic = 'force-dynamic';
 
-// Field mean per domain over the 8 drivers (F16 spec div #51) — client-derived display value. A
-// domain with NO numeric data is OMITTED (not defaulted to 0) so the tooltip hides its mean line
-// rather than showing a fabricated "field mean 0.00" (failsafe MEDIUM).
-function fieldMeanOf(drivers: DriverSummary[]): Record<string, number> {
-  const mean: Record<string, number> = {};
-  for (const k of RADAR_DOMAINS) {
-    const xs = drivers
-      .map((d) => d.radar_values?.[k])
-      .filter((v): v is number => typeof v === 'number');
-    if (xs.length) mean[k] = xs.reduce((a, b) => a + b, 0) / xs.length;
-  }
-  return mean;
-}
-
+// Screen 2 — Driver Profile. Four independent data sources, each degrading on its own: the
+// fingerprint (radar + signed SHAP + NL summary) is load-bearing and errors the page; the drivers
+// list (identity, facts, grid-relative radar scale), setup and style space each degrade to an
+// honest note without taking the rest of the screen down.
 export default async function DriverProfilePage({ params }: { params: { code: string } }) {
   const code = params.code;
-  const [fp, driversRes, setupRes] = await Promise.all([
+  const [fp, driversRes, setupRes, styleRes] = await Promise.all([
     getFingerprint(code),
     getDrivers(),
     getSetup(code, DEFAULT_CIRCUIT),
+    getStyleSpace(),
   ]);
 
   if (!fp.ok) {
     return (
-      <main className="mx-auto max-w-6xl p-6">
-        <Link href="/" className="font-mono text-xs text-accent hover:underline">
-          ← Driver Overview
+      <main className="mx-auto max-w-7xl p-6">
+        <Link
+          href="/"
+          className="font-mono text-[11px] uppercase tracking-[0.15em] text-accent hover:underline"
+        >
+          ← Back to overview
         </Link>
         <div className="mt-4">
           <PageError code={fp.code} detail={fp.detail} />
@@ -48,42 +43,71 @@ export default async function DriverProfilePage({ params }: { params: { code: st
     );
   }
 
-  // Only compute a field mean when there is a real, non-empty field to average (failsafe MEDIUM):
-  // otherwise the tooltip shows no mean line rather than a fabricated one.
-  const fieldMean =
-    driversRes.ok && driversRes.data.length > 0 ? fieldMeanOf(driversRes.data) : undefined;
+  const drivers = driversRes.ok ? driversRes.data : [];
+  const driver = drivers.find((d) => d.code === code) ?? {
+    id: code,
+    code,
+    team: null,
+    full_name: null,
+    radar_values: fp.data.shap_radar ?? {},
+    signature: [],
+    profile: null,
+  };
+  const colour = teamColour(driver.team);
+  // Grid-relative scale needs the whole grid; with only this driver available the radar scales
+  // against itself (its strongest domain = 100) — stated by the card caption either way.
+  const radar = gridRelativeRadar(drivers.length > 0 ? drivers : [driver])[code];
 
   return (
-    <main className="mx-auto max-w-6xl p-6">
-      <Link href="/" className="font-mono text-xs text-accent hover:underline">
-        ← Driver Overview
-      </Link>
-      <h1 className="mb-4 mt-2 font-mono text-2xl text-text-primary">{code}</h1>
+    <main className="mx-auto max-w-7xl p-6">
+      <ProfileHeader driver={driver} />
       {fp.flags.includes('STALE_DATA') ? (
-        <p data-testid="stale" className="mb-2 text-[10px] text-accent-deep">
+        <p data-testid="stale" className="mb-3 font-mono text-[10px] uppercase tracking-[0.14em] text-accent-deep">
           Showing cached data.
         </p>
       ) : null}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Left — the data-backed panel */}
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_1.15fr_0.95fr]">
+        <StyleProfileCard radar={radar} colour={colour} code={code} />
+        <SignalWeightsCard
+          code={code}
+          shapSigned={fp.data.shap_signed ?? {}}
+          nlDescription={fp.data.nl_description ?? ''}
+          signature={driver.signature ?? []}
+        />
         <div className="space-y-4">
-          <ProfileRadar values={fp.data.shap_radar ?? {}} fieldMean={fieldMean} />
-          <NlDescription text={fp.data.nl_description ?? ''} />
-          {setupRes.ok ? (
-            <SetupPanel setup={setupRes.data} />
-          ) : setupRes.code === 'NOT_FOUND' ? (
-            <p className="text-xs text-text-secondary">No setup data for {DEFAULT_CIRCUIT}.</p>
-          ) : (
-            // A real outage (5xx/DB/network) is an error, NOT honest absence (failsafe HIGH-3).
-            <PageError code={setupRes.code} detail={setupRes.detail} />
-          )}
+          <FactsCard driver={driver} stability={fp.data.stability} />
+          <section className="rounded-md border border-border bg-card p-4" data-testid="setup-card">
+            <h2 className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-text-secondary">
+              Setup recommendation
+            </h2>
+            {setupRes.ok ? (
+              <SetupList setup={setupRes.data} />
+            ) : setupRes.code === 'NOT_FOUND' ? (
+              <p className="font-mono text-[11px] text-text-secondary">
+                No setup data for {DEFAULT_CIRCUIT}.
+              </p>
+            ) : (
+              // A real outage (5xx/DB/network) is an error, NOT honest absence (failsafe HIGH-3).
+              <PageError code={setupRes.code} detail={setupRes.detail} />
+            )}
+          </section>
         </div>
-        {/* Right — multi-season + honest-unavailable per-lap / corner views */}
-        <div className="space-y-4">
-          <MultiSeasonPanel stability={fp.data.stability} />
-          <ShapBeeswarmPanel laps={[]} />
-          <CornerTabs />
-        </div>
+      </div>
+
+      <div className="mt-4">
+        {styleRes.ok ? (
+          <StyleMapCard style={styleRes.data} summaries={drivers} highlight={code} />
+        ) : (
+          <section className="rounded-md border border-border bg-card p-4">
+            <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-text-secondary">
+              Style map
+            </h2>
+            <div className="mt-2">
+              <PageError code={styleRes.code} detail={styleRes.detail} />
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );

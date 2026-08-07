@@ -168,3 +168,233 @@ def test_build_profiles_keeps_unscored_drivers_null(tmp_path: Path) -> None:
     assert profiles["VER"]["identification_f1"] == 0.53
     assert profiles["UNK"]["identification_f1"] is None
     assert profiles["UNK"]["laps_analysed"] == 1
+
+
+# --- signed_shap_means: sign comes ONLY from the beeswarm -------------------------------------
+
+
+def test_signed_means_average_per_driver_feature(tmp_path: Path) -> None:
+    import json
+
+    beeswarm = {
+        "drivers": ["VER"],
+        "features": ["F01"],
+        "points": [
+            {"driver": "VER", "feature_id": "F01", "feature_value": 1.0, "shap": 0.4},
+            {"driver": "VER", "feature_id": "F01", "feature_value": 2.0, "shap": -0.2},
+            {"driver": "LEC", "feature_id": "F02", "feature_value": 3.0, "shap": -0.3},
+        ],
+    }
+    path = tmp_path / "bees.json"
+    path.write_text(json.dumps(beeswarm), encoding="utf-8")
+    out = bdp.signed_shap_means(path)
+    assert out["VER"]["F01"] == pytest.approx(0.1)  # mean of +0.4 and -0.2 — sign preserved
+    assert out["LEC"]["F02"] == pytest.approx(-0.3)
+
+
+def test_signed_means_degrade_to_empty_with_warning(tmp_path: Path, capsys) -> None:
+    """Missing or malformed beeswarm → {} + stderr warning; the screen then omits the signed
+    panel instead of faking directions."""
+    assert bdp.signed_shap_means(tmp_path / "absent.json") == {}
+    (tmp_path / "bad.json").write_text("{not json", encoding="utf-8")
+    assert bdp.signed_shap_means(tmp_path / "bad.json") == {}
+    err = capsys.readouterr().err
+    assert err.count("shap_signed_mean omitted") == 2
+
+
+def test_build_profiles_carries_signed_means_per_driver(tmp_path: Path) -> None:
+    train = pd.concat(
+        [matrix_rows(driver="VER", F01=1.0), matrix_rows(driver="UNK", F01=2.0)],
+        ignore_index=True,
+    )
+    profiles = bdp.build_profiles(train, {}, {"VER": {"F01": 0.25}})
+    assert profiles["VER"]["shap_signed_mean"] == {"F01": 0.25}
+    assert profiles["UNK"]["shap_signed_mean"] == {}  # absent driver -> empty, never borrowed
+
+
+# --- sample_segments: real held-out laps for the Prediction screen ----------------------------
+
+
+def test_segments_come_only_from_clean_held_out_laps(tmp_path: Path) -> None:
+    m = pd.concat(
+        [
+            matrix_rows(driver="VER", circuit="Bahrain", split="train", F01=1.0),
+            matrix_rows(driver="VER", circuit="Belgium", split="test", F01=2.0),
+            matrix_rows(driver="LEC", circuit="Italy", split="test", F01=3.0),
+        ],
+        ignore_index=True,
+    )
+    m["lap_number"] = [10, 20, 30]
+    dirty = matrix_rows(driver="LEC", circuit="Belgium", split="test", F01=9.0)
+    dirty["is_clean"] = False
+    dirty["lap_number"] = 40
+    m = pd.concat([m, dirty], ignore_index=True)
+    path = tmp_path / "m.parquet"
+    m.to_parquet(path)
+
+    segments = bdp.sample_segments(path, HELD_OUT, seed=42)
+    by_driver = {s["true_driver"]: s for s in segments}
+    assert set(by_driver) == {"VER", "LEC"}
+    assert by_driver["VER"]["circuit"] == "Belgium"  # never the train lap
+    assert by_driver["LEC"]["lap_number"] == 30  # never the dirty lap
+    assert by_driver["VER"]["features"]["F01"] == 2.0  # raw value carried as-is
+
+
+def test_segments_selection_is_seeded_deterministic(tmp_path: Path) -> None:
+    rows = []
+    for lap in range(1, 9):
+        r = matrix_rows(driver="VER", circuit="Belgium", split="test", F01=float(lap))
+        r["lap_number"] = lap
+        rows.append(r)
+    path = tmp_path / "m.parquet"
+    pd.concat(rows, ignore_index=True).to_parquet(path)
+    first = bdp.sample_segments(path, HELD_OUT, seed=42)
+    second = bdp.sample_segments(path, HELD_OUT, seed=42)
+    assert first == second  # reproducibility — the artefact is stable for a given matrix + seed
+
+
+def test_segments_nan_features_become_null_not_zero(tmp_path: Path) -> None:
+    m = matrix_rows(driver="VER", circuit="Belgium", split="test", F01=np.nan)
+    m["lap_number"] = 5
+    path = tmp_path / "m.parquet"
+    m.to_parquet(path)
+    segments = bdp.sample_segments(path, HELD_OUT, seed=42)
+    assert segments[0]["features"]["F01"] is None  # a genuine NULL, never a fabricated 0.0
+
+
+def test_segments_empty_pool_warns_and_returns_empty(tmp_path: Path, capsys) -> None:
+    path = tmp_path / "m.parquet"
+    matrix_rows(split="train").assign(lap_number=1).to_parquet(path)
+    assert bdp.sample_segments(path, HELD_OUT, seed=42) == []
+    assert "segments omitted" in capsys.readouterr().err
+
+
+# --- tyre wear: the fuel-corrected degradation model ------------------------------------------
+
+
+def race_laps(
+    *,
+    driver: str = "VER",
+    compound: str = "MEDIUM",
+    stint: int = 1,
+    start_lap: int = 1,
+    n: int = 10,
+    base: float = 90.0,
+    fuel: float = -0.06,
+    tyre: float = 0.05,
+    circuit: str = "Bahrain",
+    season: int = 2024,
+) -> pd.DataFrame:
+    """Clean race laps whose lap time is base + fuel*lap_number + tyre*tyre_age exactly."""
+    rows = []
+    for i in range(n):
+        lap_number = start_lap + i
+        age = i + 1
+        rows.append(
+            {
+                "season": season,
+                "circuit": circuit,
+                "driver": driver,
+                "session": "R",
+                "split": "train",
+                "is_clean": True,
+                "compound": compound,
+                "stint": stint,
+                "tyre_age": age,
+                "lap_number": lap_number,
+                "lap_time_s": base + fuel * lap_number + tyre * age,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def two_stint_race(driver: str = "VER", tyre: float = 0.05, fuel: float = -0.06) -> pd.DataFrame:
+    """One driver, two stints — the pit stop resets tyre age, which identifies the fuel term."""
+    return pd.concat(
+        [
+            race_laps(driver=driver, stint=1, start_lap=1, n=18, tyre=tyre, fuel=fuel),
+            race_laps(driver=driver, stint=2, start_lap=19, n=18, tyre=tyre, fuel=fuel),
+        ],
+        ignore_index=True,
+    )
+
+
+def test_fuel_slope_identified_from_pit_stop_structure() -> None:
+    """With two stints, lap_number and tyre_age decouple and the fuel term is recovered."""
+    race = pd.concat([two_stint_race("VER"), two_stint_race("LEC")], ignore_index=True)
+    slopes = bdp.race_fuel_slopes(race)
+    assert slopes[(2024, "Bahrain")] == pytest.approx(-0.06, abs=1e-6)
+
+
+def test_single_stint_race_is_skipped_not_guessed() -> None:
+    """One stint → tyre age and race lap are collinear; the race must be omitted, not fitted."""
+    race = pd.concat(
+        [
+            race_laps(driver="VER", stint=1, n=30),
+            race_laps(driver="LEC", stint=1, n=30),
+        ],
+        ignore_index=True,
+    )
+    assert bdp.race_fuel_slopes(race) == {}
+
+
+def test_tyre_wear_recovers_the_true_tyre_slope() -> None:
+    """The fuel-corrected within-stint slope equals the constructed tyre term, not the net."""
+    train = pd.concat([two_stint_race("VER"), two_stint_race("LEC")], ignore_index=True)
+    out = bdp.tyre_wear(train)
+    stats = out["VER"]["MEDIUM"]
+    assert stats["deg_slope_s_per_lap"] == pytest.approx(0.05, abs=1e-6)
+    assert stats["fuel_slope_s_per_lap"] == pytest.approx(-0.06, abs=1e-6)
+    assert stats["n_stints"] == 2
+
+
+def test_tyre_wear_baseline_excludes_the_warm_up_lap() -> None:
+    """Age-1 carries out-lap time; it must appear in the curve but never anchor the baseline.
+
+    Counts are per (driver, compound): four two-stint races per driver → 8 laps per tyre age,
+    clearing MIN_LAPS_PER_AGE so the curve exists.
+    """
+    circuits = ("Bahrain", "Austria", "Japan", "Brazil")
+    race = pd.concat(
+        [
+            pd.concat(
+                [
+                    race_laps(driver=d, stint=1, start_lap=1, n=18, circuit=c),
+                    race_laps(driver=d, stint=2, start_lap=19, n=18, circuit=c),
+                ],
+                ignore_index=True,
+            )
+            for d in ("VER", "LEC")
+            for c in circuits
+        ],
+        ignore_index=True,
+    )
+    race.loc[race["tyre_age"] == 1, "lap_time_s"] += 3.0  # warm-up cost on every age-1 lap
+    out = bdp.tyre_wear(race)
+    curve = {c["age"]: c["delta_s"] for c in out["VER"]["MEDIUM"]["curve"]}
+    assert curve[1] == pytest.approx(3.0 + 0.05 * (1 - 2.5), abs=0.05)  # warm-up visible in curve
+    assert abs(curve[2]) < 0.1  # baseline anchored past the warm-up → age-2 delta ≈ 0
+
+
+def test_tyre_wear_excludes_wet_and_non_race_laps() -> None:
+    train = pd.concat(
+        [
+            two_stint_race("VER"),
+            two_stint_race("LEC"),
+            race_laps(driver="VER", compound="INTERMEDIATE", stint=3, start_lap=40, n=10),
+        ],
+        ignore_index=True,
+    )
+    quali = race_laps(driver="VER", stint=1, n=10)
+    quali["session"] = "Q"
+    train = pd.concat([train, quali], ignore_index=True)
+    out = bdp.tyre_wear(train)
+    assert set(out["VER"]) == {"MEDIUM"}  # no INTERMEDIATE block, no quali contamination
+
+
+def test_detect_cliff_fires_only_on_real_acceleration() -> None:
+    ages = list(range(2, 22))
+    linear = [0.05 * a for a in ages]
+    assert bdp._detect_cliff(ages, linear) is None  # near-linear → no decorative cliff
+    cliffed = [0.05 * a + (1.5 if a >= 17 else 0.0) for a in ages]
+    assert bdp._detect_cliff(ages, cliffed) == 17

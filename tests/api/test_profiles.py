@@ -141,3 +141,96 @@ def test_top_signals_empty_or_absent_attribution_returns_empty() -> None:
 def test_top_signals_ignores_non_numeric_values() -> None:
     out = top_signals({"F01": 0.5, "F02": "bad"}, None)  # type: ignore[dict-item]
     assert [s.feature for s in out] == ["F01"]
+
+
+def test_load_parses_shap_signed_mean(cfg: AppConfig, tmp_path: Path) -> None:
+    payload = {
+        "drivers": {
+            "VER": {
+                "laps_analysed": 10,
+                "seasons": [2024],
+                "n_circuits": 1,
+                "lap_time_consistency_s": None,
+                "identification_f1": None,
+                "feature_percentile": {},
+                "shap_signed_mean": {"F01": -0.25, "F16": 0.455},
+            }
+        }
+    }
+    write_artefact(tmp_path, payload)
+    profiles = load_driver_profiles(config=cfg, artefact_dir=tmp_path)
+    ver = profiles.get("VER")
+    assert ver is not None
+    assert ver.shap_signed_mean == {"F01": -0.25, "F16": 0.455}  # sign survives the round trip
+
+
+def test_load_pre_signed_artefact_defaults_to_empty(cfg: AppConfig, tmp_path: Path) -> None:
+    """An artefact built before the signed fill parses with {} — old artefacts stay loadable."""
+    write_artefact(tmp_path, VALID)  # VALID has no shap_signed_mean key
+    ver = load_driver_profiles(config=cfg, artefact_dir=tmp_path).get("VER")
+    assert ver is not None
+    assert ver.shap_signed_mean == {}
+
+
+def test_load_parses_segments(cfg: AppConfig, tmp_path: Path) -> None:
+    payload = {
+        "drivers": VALID["drivers"],
+        "segments": [
+            {
+                "id": "Belgium-2022-VER-34",
+                "label": "Belgium 2022 · Race · Lap 34",
+                "circuit": "Belgium",
+                "season": 2022,
+                "session": "Race",
+                "lap_number": 34,
+                "true_driver": "VER",
+                "features": {"F01": 62.1, "F02": None},
+            }
+        ],
+    }
+    write_artefact(tmp_path, payload)
+    profiles = load_driver_profiles(config=cfg, artefact_dir=tmp_path)
+    assert len(profiles.segments) == 1
+    seg = profiles.segments[0]
+    assert seg.true_driver == "VER"
+    assert seg.features["F01"] == 62.1
+    assert seg.features["F02"] is None  # a lap's genuine NULL survives the round trip
+
+
+def test_load_segmentless_artefact_defaults_to_empty(cfg: AppConfig, tmp_path: Path) -> None:
+    write_artefact(tmp_path, VALID)  # no segments key
+    assert load_driver_profiles(config=cfg, artefact_dir=tmp_path).segments == ()
+
+
+def test_load_malformed_segments_raise_coded(cfg: AppConfig, tmp_path: Path) -> None:
+    write_artefact(tmp_path, {"drivers": VALID["drivers"], "segments": [{"id": "x"}]})
+    with pytest.raises(DriverProfilesUnavailableError):
+        load_driver_profiles(config=cfg, artefact_dir=tmp_path)
+    assert read_dq(cfg.paths.data_quality_log)[-1]["error_code"] == "DATA_SOURCE_UNAVAILABLE"
+
+
+def test_load_parses_tyre_wear_passthrough(cfg: AppConfig, tmp_path: Path) -> None:
+    payload = {
+        "drivers": {
+            "VER": {
+                "laps_analysed": 10,
+                "seasons": [2024],
+                "n_circuits": 1,
+                "lap_time_consistency_s": None,
+                "identification_f1": None,
+                "feature_percentile": {},
+                "tyre_wear": {"MEDIUM": {"n_laps": 100, "deg_slope_s_per_lap": 0.06}},
+            }
+        }
+    }
+    write_artefact(tmp_path, payload)
+    ver = load_driver_profiles(config=cfg, artefact_dir=tmp_path).get("VER")
+    assert ver is not None
+    assert ver.tyre_wear["MEDIUM"]["deg_slope_s_per_lap"] == 0.06  # raw mapping passthrough
+
+
+def test_load_non_dict_tyre_wear_raises_coded(cfg: AppConfig, tmp_path: Path) -> None:
+    payload = {"drivers": {"VER": {"laps_analysed": 1, "tyre_wear": ["nope"]}}}
+    write_artefact(tmp_path, payload)
+    with pytest.raises(DriverProfilesUnavailableError):
+        load_driver_profiles(config=cfg, artefact_dir=tmp_path)

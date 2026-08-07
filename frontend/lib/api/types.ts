@@ -5,6 +5,8 @@ import type { components } from './schema';
 export type ErrorCode = components['schemas']['ErrorCode'];
 export type ConfidenceState = components['schemas']['ConfidenceState'];
 export type DriverSummary = components['schemas']['DriverSummary'];
+export type DriverSignal = components['schemas']['DriverSignalSchema'];
+export type DriverProfile = components['schemas']['DriverProfileSchema'];
 export type FingerprintResponse = components['schemas']['FingerprintResponse'];
 export type StabilityResponse = components['schemas']['StabilityResponse'];
 export type SetupResponse = components['schemas']['SetupResponse'];
@@ -15,6 +17,10 @@ export type HealthResponse = components['schemas']['HealthResponse'];
 
 // F17 — Screen 3 (Ingestion & Prediction) + Screen 4 reuse. Aliased from the SAME generated
 // components; no backend change (div #53). The snapshot already carries these (F13/F14 defined them).
+export type SampleSegment = components['schemas']['SampleSegmentSchema'];
+export type TyreWearResponse = components['schemas']['TyreWearResponse'];
+export type TyreCompoundStats = components['schemas']['TyreCompoundStatsSchema'];
+export type TyreCurvePoint = components['schemas']['TyreCurvePointSchema'];
 export type PredictRequest = components['schemas']['PredictRequest'];
 export type PredictResponse = components['schemas']['PredictResponse'];
 export type TopK = components['schemas']['TopK'];

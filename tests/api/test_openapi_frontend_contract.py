@@ -24,13 +24,27 @@ def _schemas() -> dict:
 
 def test_driver_summary_carries_the_command_centre_fields() -> None:
     props = _schemas()["DriverSummary"]["properties"]
-    for field in ("id", "code", "team", "radar_values"):  # team = the F16 seam
-        assert field in props, f"DriverSummary lost {field!r} — breaks the Command Centre"
+    # team = the F16 seam; full_name/signature/profile = the Driver Overview card sources
+    for field in ("id", "code", "team", "full_name", "radar_values", "signature", "profile"):
+        assert field in props, f"DriverSummary lost {field!r} — breaks the Driver Overview"
+
+
+def test_driver_profile_and_signal_schemas_carry_the_overview_fields() -> None:
+    schemas = _schemas()
+    for field in ("laps_analysed", "seasons", "lap_time_consistency_s", "identification_f1"):
+        assert field in schemas["DriverProfileSchema"]["properties"], (
+            f"DriverProfileSchema lost {field!r} — breaks the overview stats row"
+        )
+    for field in ("feature", "attribution", "percentile"):
+        assert field in schemas["DriverSignalSchema"]["properties"], (
+            f"DriverSignalSchema lost {field!r} — breaks the key signals"
+        )
 
 
 def test_fingerprint_response_fields() -> None:
     props = _schemas()["FingerprintResponse"]["properties"]
-    for field in ("vector_5d", "shap_radar", "nl_description", "stability"):
+    # shap_signed = the profile screen's confirms/argues panel source
+    for field in ("vector_5d", "shap_radar", "shap_signed", "nl_description", "stability"):
         assert field in props, f"FingerprintResponse lost {field!r} — breaks the Driver Profile"
 
 
@@ -38,6 +52,21 @@ def test_setup_parameter_fields() -> None:
     props = _schemas()["SetupParameterSchema"]["properties"]
     for field in ("name", "value", "value_range", "rating", "confidence", "shap_available"):
         assert field in props, f"SetupParameterSchema lost {field!r} — breaks the setup panel"
+
+
+def test_tyre_wear_schema_carries_the_screen_fields() -> None:
+    schemas = _schemas()
+    for field in (
+        "n_stints", "median_stint_len", "deg_slope_s_per_lap", "total_delta_s",
+        "fuel_slope_s_per_lap", "cliff_age", "curve",
+    ):
+        assert field in schemas["TyreCompoundStatsSchema"]["properties"], (
+            f"TyreCompoundStatsSchema lost {field!r} — breaks the Tyre Wear screen"
+        )
+    for field in ("age", "delta_s", "q25", "q75", "n"):
+        assert field in schemas["TyreCurvePointSchema"]["properties"], (
+            f"TyreCurvePointSchema lost {field!r} — breaks the degradation chart"
+        )
 
 
 def test_stability_fields() -> None:

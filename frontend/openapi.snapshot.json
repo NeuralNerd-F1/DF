@@ -126,6 +126,86 @@
         "title": "DataQualitySchema",
         "type": "object"
       },
+      "DriverProfileSchema": {
+        "additionalProperties": false,
+        "description": "Dataset + evaluation facts for one driver, sourced from ``driver_profiles.json``.\n\nEvery optional field is ``None`` for an honest \"not measured\", never 0.0: a driver with too few\nlaps for a within-session SD and a driver who laps identically every time must not render the\nsame. ``identification_f1`` is the champion's **held-out** per-driver F1 \u2014 a driver the summary\nnever scored keeps ``None`` rather than borrowing a training-split number.",
+        "properties": {
+          "identification_f1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identification F1"
+          },
+          "lap_time_consistency_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lap Time Consistency S"
+          },
+          "laps_analysed": {
+            "title": "Laps Analysed",
+            "type": "integer"
+          },
+          "n_circuits": {
+            "default": 0,
+            "title": "N Circuits",
+            "type": "integer"
+          },
+          "seasons": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Seasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "laps_analysed"
+        ],
+        "title": "DriverProfileSchema",
+        "type": "object"
+      },
+      "DriverSignalSchema": {
+        "additionalProperties": false,
+        "description": "One feature the champion attributes most to a driver, plus where they rank on it.\n\n``attribution`` is mean |SHAP| \u2014 a magnitude, so it never implies a direction. ``percentile`` is\nthe driver's rank on that feature against the rest of the grid (0 = lowest mean, 1 = highest)\nand is ``None`` when the profiles artefact carries no rank, so the screen names the feature\nwithout claiming which way it points.",
+        "properties": {
+          "attribution": {
+            "title": "Attribution",
+            "type": "number"
+          },
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "percentile": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentile"
+          }
+        },
+        "required": [
+          "feature",
+          "attribution"
+        ],
+        "title": "DriverSignalSchema",
+        "type": "object"
+      },
       "DriverSummary": {
         "additionalProperties": false,
         "properties": {
@@ -133,9 +213,30 @@
             "title": "Code",
             "type": "string"
           },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriverProfileSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "radar_values": {
             "additionalProperties": {
@@ -143,6 +244,13 @@
             },
             "title": "Radar Values",
             "type": "object"
+          },
+          "signature": {
+            "items": {
+              "$ref": "#/components/schemas/DriverSignalSchema"
+            },
+            "title": "Signature",
+            "type": "array"
           },
           "team": {
             "anyOf": [
@@ -256,6 +364,13 @@
               "type": "number"
             },
             "title": "Shap Radar",
+            "type": "object"
+          },
+          "shap_signed": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Shap Signed",
             "type": "object"
           },
           "stability": {
@@ -514,6 +629,13 @@
       "PredictResponse": {
         "additionalProperties": false,
         "properties": {
+          "class_probabilities": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Class Probabilities",
+            "type": "object"
+          },
           "confidence": {
             "title": "Confidence",
             "type": "number"
@@ -648,6 +770,65 @@
           }
         },
         "title": "ReplayResponse",
+        "type": "object"
+      },
+      "SampleSegmentSchema": {
+        "additionalProperties": false,
+        "description": "One real held-out lap for the Prediction screen's picker (profiles artefact). The raw\nper-lap features go straight back into POST /predict; ``true_driver`` is the matrix's ground\ntruth so the screen can grade the prediction \u2014 a held-out lap, so grading it is a genuine\ngeneralisation test, not a replay of training data.",
+        "properties": {
+          "circuit": {
+            "title": "Circuit",
+            "type": "string"
+          },
+          "features": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Features",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "lap_number": {
+            "default": 0,
+            "title": "Lap Number",
+            "type": "integer"
+          },
+          "season": {
+            "title": "Season",
+            "type": "integer"
+          },
+          "session": {
+            "default": "",
+            "title": "Session",
+            "type": "string"
+          },
+          "true_driver": {
+            "title": "True Driver",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "circuit",
+          "season",
+          "true_driver"
+        ],
+        "title": "SampleSegmentSchema",
         "type": "object"
       },
       "SetupParameterSchema": {
@@ -946,6 +1127,150 @@
         "title": "TopK",
         "type": "object"
       },
+      "TyreCompoundStatsSchema": {
+        "additionalProperties": false,
+        "description": "Stint-degradation statistics for one (driver, compound), from clean train laps.\n\nAll pace numbers are **net** within-stint drift: the matrix carries no fuel-load channel, so\nfuel burn (which makes cars faster) and tyre wear (slower) are combined, and the true tyre\ncomponent is larger than each number \u2014 the screen states this rather than correcting it with\nan invented constant. ``cliff_age`` is ``None`` when no acceleration past the linear trend was\ndetected; most curves are near-linear and a decorative cliff would be detection theatre.\n``f27_median``/``f28_median`` are the pipeline's own behavioural tyre-age slopes (throttle /\nbrake adaptation per lap of age).",
+        "properties": {
+          "cliff_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cliff Age"
+          },
+          "curve": {
+            "items": {
+              "$ref": "#/components/schemas/TyreCurvePointSchema"
+            },
+            "title": "Curve",
+            "type": "array"
+          },
+          "deg_slope_s_per_lap": {
+            "title": "Deg Slope S Per Lap",
+            "type": "number"
+          },
+          "f27_median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "F27 Median"
+          },
+          "f28_median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "F28 Median"
+          },
+          "fuel_slope_s_per_lap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fuel Slope S Per Lap"
+          },
+          "max_stint_len": {
+            "title": "Max Stint Len",
+            "type": "integer"
+          },
+          "median_stint_len": {
+            "title": "Median Stint Len",
+            "type": "integer"
+          },
+          "n_laps": {
+            "title": "N Laps",
+            "type": "integer"
+          },
+          "n_stints": {
+            "title": "N Stints",
+            "type": "integer"
+          },
+          "total_delta_s": {
+            "title": "Total Delta S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "n_laps",
+          "n_stints",
+          "median_stint_len",
+          "max_stint_len",
+          "deg_slope_s_per_lap",
+          "total_delta_s"
+        ],
+        "title": "TyreCompoundStatsSchema",
+        "type": "object"
+      },
+      "TyreCurvePointSchema": {
+        "additionalProperties": false,
+        "description": "One tyre age on the aggregated degradation curve: the median lap-time delta versus each\nstint's own early-lap baseline, with the IQR and the lap count behind the point.",
+        "properties": {
+          "age": {
+            "title": "Age",
+            "type": "integer"
+          },
+          "delta_s": {
+            "title": "Delta S",
+            "type": "number"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "q25": {
+            "title": "Q25",
+            "type": "number"
+          },
+          "q75": {
+            "title": "Q75",
+            "type": "number"
+          }
+        },
+        "required": [
+          "age",
+          "delta_s",
+          "q25",
+          "q75",
+          "n"
+        ],
+        "title": "TyreCurvePointSchema",
+        "type": "object"
+      },
+      "TyreWearResponse": {
+        "additionalProperties": false,
+        "description": "GET /tyres \u2014 per-driver, per-compound stint degradation from the profiles artefact.\n``drivers`` is empty when the artefact is absent (the screen explains, nothing is invented).",
+        "properties": {
+          "drivers": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/TyreCompoundStatsSchema"
+              },
+              "type": "object"
+            },
+            "title": "Drivers",
+            "type": "object"
+          }
+        },
+        "title": "TyreWearResponse",
+        "type": "object"
+      },
       "UnknownFingerprintRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1202,7 +1527,7 @@
     },
     "/drivers": {
       "get": {
-        "description": "200 always \u2014 an empty array if the fingerprints table is empty (\u00a78.5). Deterministic: each\ndriver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (\u00a711).",
+        "description": "200 always \u2014 an empty array if the fingerprints table is empty (\u00a78.5). Deterministic: each\ndriver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (\u00a711).\n\nThe DB supplies identity + radar; the startup-loaded profiles artefact supplies the lap counts,\nlap-time consistency and per-driver held-out F1. The two are independent \u2014 an absent artefact\nleaves ``profile`` null and ``signature`` empty without touching the rest of the row, so this\nendpoint never fails because a *supplementary* source is missing.",
         "operationId": "list_drivers_drivers_get",
         "responses": {
           "200": {
@@ -1662,6 +1987,32 @@
         ]
       }
     },
+    "/segments": {
+      "get": {
+        "description": "The curated held-out sample laps for the Prediction screen. 200 with [] when the profiles\nartefact is absent \u2014 the screen then explains there is nothing to pick, exactly like an empty\ndriver grid; a missing *demo* source is not a service failure.",
+        "operationId": "list_segments_segments_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SampleSegmentSchema"
+                  },
+                  "title": "Response List Segments Segments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Segments",
+        "tags": [
+          "predict"
+        ]
+      }
+    },
     "/stylespace": {
       "get": {
         "operationId": "stylespace_stylespace_get",
@@ -1680,6 +2031,28 @@
         "summary": "Stylespace",
         "tags": [
           "style"
+        ]
+      }
+    },
+    "/tyres": {
+      "get": {
+        "description": "Per-driver, per-compound stint degradation (Screen 4). Served from the startup-loaded\nprofiles artefact; absent artefact \u2192 an empty map, never fabricated curves. A malformed\nper-compound block is skipped WITH a data_quality_log row \u2014 a screen fed by this endpoint\ncan trust every curve it does receive.",
+        "operationId": "tyre_wear_tyres_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TyreWearResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Tyre Wear",
+        "tags": [
+          "drivers"
         ]
       }
     }

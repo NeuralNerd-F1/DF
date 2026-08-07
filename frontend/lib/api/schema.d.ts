@@ -32,6 +32,11 @@ export interface paths {
          * List Drivers
          * @description 200 always — an empty array if the fingerprints table is empty (§8.5). Deterministic: each
          *     driver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (§11).
+         *
+         *     The DB supplies identity + radar; the startup-loaded profiles artefact supplies the lap counts,
+         *     lap-time consistency and per-driver held-out F1. The two are independent — an absent artefact
+         *     leaves ``profile`` null and ``signature`` empty without touching the rest of the row, so this
+         *     endpoint never fails because a *supplementary* source is missing.
          */
         get: operations["list_drivers_drivers_get"];
         put?: never;
@@ -245,6 +250,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Segments
+         * @description The curated held-out sample laps for the Prediction screen. 200 with [] when the profiles
+         *     artefact is absent — the screen then explains there is nothing to pick, exactly like an empty
+         *     driver grid; a missing *demo* source is not a service failure.
+         */
+        get: operations["list_segments_segments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stylespace": {
         parameters: {
             query?: never;
@@ -254,6 +281,29 @@ export interface paths {
         };
         /** Stylespace */
         get: operations["stylespace_stylespace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tyres": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tyre Wear
+         * @description Per-driver, per-compound stint degradation (Screen 4). Served from the startup-loaded
+         *     profiles artefact; absent artefact → an empty map, never fabricated curves. A malformed
+         *     per-compound block is skipped WITH a data_quality_log row — a screen fed by this endpoint
+         *     can trust every curve it does receive.
+         */
+        get: operations["tyre_wear_tyres_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -320,16 +370,62 @@ export interface components {
             /** N Laps Used */
             n_laps_used: number;
         };
+        /**
+         * DriverProfileSchema
+         * @description Dataset + evaluation facts for one driver, sourced from ``driver_profiles.json``.
+         *
+         *     Every optional field is ``None`` for an honest "not measured", never 0.0: a driver with too few
+         *     laps for a within-session SD and a driver who laps identically every time must not render the
+         *     same. ``identification_f1`` is the champion's **held-out** per-driver F1 — a driver the summary
+         *     never scored keeps ``None`` rather than borrowing a training-split number.
+         */
+        DriverProfileSchema: {
+            /** Identification F1 */
+            identification_f1?: number | null;
+            /** Lap Time Consistency S */
+            lap_time_consistency_s?: number | null;
+            /** Laps Analysed */
+            laps_analysed: number;
+            /**
+             * N Circuits
+             * @default 0
+             */
+            n_circuits: number;
+            /** Seasons */
+            seasons?: number[];
+        };
+        /**
+         * DriverSignalSchema
+         * @description One feature the champion attributes most to a driver, plus where they rank on it.
+         *
+         *     ``attribution`` is mean |SHAP| — a magnitude, so it never implies a direction. ``percentile`` is
+         *     the driver's rank on that feature against the rest of the grid (0 = lowest mean, 1 = highest)
+         *     and is ``None`` when the profiles artefact carries no rank, so the screen names the feature
+         *     without claiming which way it points.
+         */
+        DriverSignalSchema: {
+            /** Attribution */
+            attribution: number;
+            /** Feature */
+            feature: string;
+            /** Percentile */
+            percentile?: number | null;
+        };
         /** DriverSummary */
         DriverSummary: {
             /** Code */
             code: string;
+            /** Full Name */
+            full_name?: string | null;
             /** Id */
             id: string;
+            profile?: components["schemas"]["DriverProfileSchema"] | null;
             /** Radar Values */
             radar_values?: {
                 [key: string]: number;
             };
+            /** Signature */
+            signature?: components["schemas"]["DriverSignalSchema"][];
             /** Team */
             team?: string | null;
         };
@@ -350,6 +446,10 @@ export interface components {
             nl_description: string;
             /** Shap Radar */
             shap_radar?: {
+                [key: string]: number;
+            };
+            /** Shap Signed */
+            shap_signed?: {
                 [key: string]: number;
             };
             stability?: components["schemas"]["StabilityResponse"] | null;
@@ -447,6 +547,10 @@ export interface components {
         };
         /** PredictResponse */
         PredictResponse: {
+            /** Class Probabilities */
+            class_probabilities?: {
+                [key: string]: number;
+            };
             /** Confidence */
             confidence: number;
             confidence_state: components["schemas"]["ConfidenceState"] | null;
@@ -487,6 +591,39 @@ export interface components {
         ReplayResponse: {
             /** Laps */
             laps?: components["schemas"]["ReplayLap"][];
+        };
+        /**
+         * SampleSegmentSchema
+         * @description One real held-out lap for the Prediction screen's picker (profiles artefact). The raw
+         *     per-lap features go straight back into POST /predict; ``true_driver`` is the matrix's ground
+         *     truth so the screen can grade the prediction — a held-out lap, so grading it is a genuine
+         *     generalisation test, not a replay of training data.
+         */
+        SampleSegmentSchema: {
+            /** Circuit */
+            circuit: string;
+            /** Features */
+            features?: {
+                [key: string]: number | null;
+            };
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Lap Number
+             * @default 0
+             */
+            lap_number: number;
+            /** Season */
+            season: number;
+            /**
+             * Session
+             * @default
+             */
+            session: string;
+            /** True Driver */
+            true_driver: string;
         };
         /** SetupParameterSchema */
         SetupParameterSchema: {
@@ -587,6 +724,72 @@ export interface components {
             driver: string;
             /** Probability */
             probability: number;
+        };
+        /**
+         * TyreCompoundStatsSchema
+         * @description Stint-degradation statistics for one (driver, compound), from clean train laps.
+         *
+         *     All pace numbers are **net** within-stint drift: the matrix carries no fuel-load channel, so
+         *     fuel burn (which makes cars faster) and tyre wear (slower) are combined, and the true tyre
+         *     component is larger than each number — the screen states this rather than correcting it with
+         *     an invented constant. ``cliff_age`` is ``None`` when no acceleration past the linear trend was
+         *     detected; most curves are near-linear and a decorative cliff would be detection theatre.
+         *     ``f27_median``/``f28_median`` are the pipeline's own behavioural tyre-age slopes (throttle /
+         *     brake adaptation per lap of age).
+         */
+        TyreCompoundStatsSchema: {
+            /** Cliff Age */
+            cliff_age?: number | null;
+            /** Curve */
+            curve?: components["schemas"]["TyreCurvePointSchema"][];
+            /** Deg Slope S Per Lap */
+            deg_slope_s_per_lap: number;
+            /** F27 Median */
+            f27_median?: number | null;
+            /** F28 Median */
+            f28_median?: number | null;
+            /** Fuel Slope S Per Lap */
+            fuel_slope_s_per_lap?: number | null;
+            /** Max Stint Len */
+            max_stint_len: number;
+            /** Median Stint Len */
+            median_stint_len: number;
+            /** N Laps */
+            n_laps: number;
+            /** N Stints */
+            n_stints: number;
+            /** Total Delta S */
+            total_delta_s: number;
+        };
+        /**
+         * TyreCurvePointSchema
+         * @description One tyre age on the aggregated degradation curve: the median lap-time delta versus each
+         *     stint's own early-lap baseline, with the IQR and the lap count behind the point.
+         */
+        TyreCurvePointSchema: {
+            /** Age */
+            age: number;
+            /** Delta S */
+            delta_s: number;
+            /** N */
+            n: number;
+            /** Q25 */
+            q25: number;
+            /** Q75 */
+            q75: number;
+        };
+        /**
+         * TyreWearResponse
+         * @description GET /tyres — per-driver, per-compound stint degradation from the profiles artefact.
+         *     ``drivers`` is empty when the artefact is absent (the screen explains, nothing is invented).
+         */
+        TyreWearResponse: {
+            /** Drivers */
+            drivers?: {
+                [key: string]: {
+                    [key: string]: components["schemas"]["TyreCompoundStatsSchema"];
+                };
+            };
         };
         /** UnknownFingerprintRequest */
         UnknownFingerprintRequest: {
@@ -1041,6 +1244,26 @@ export interface operations {
             };
         };
     };
+    list_segments_segments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleSegmentSchema"][];
+                };
+            };
+        };
+    };
     stylespace_stylespace_get: {
         parameters: {
             query?: never;
@@ -1057,6 +1280,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StyleSpaceResponse"];
+                };
+            };
+        };
+    };
+    tyre_wear_tyres_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TyreWearResponse"];
                 };
             };
         };

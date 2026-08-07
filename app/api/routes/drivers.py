@@ -7,6 +7,7 @@ F11 handle. NL description + multi-season stability are pure F07 functions over 
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import Any
 
 from fastapi import APIRouter, Depends, Response
@@ -21,13 +22,20 @@ from app.api.deps import (
     get_recommender,
 )
 from app.api.errors import not_found, service_unavailable
+from app.api.profiles import top_signals
 from app.api.schemas import (
+    DriverProfileSchema,
+    DriverSignalSchema,
     DriverSummary,
     FingerprintResponse,
     SetupParameterSchema,
     SetupResponse,
     StabilityResponse,
+    TyreCompoundStatsSchema,
+    TyreWearResponse,
 )
+from app.contracts.errors import ErrorCode
+from app.contracts.logging import log_data_quality
 from app.db import models
 
 router = APIRouter(tags=["drivers"])
@@ -41,9 +49,18 @@ def _enum_val(x: Any) -> Any:
 
 
 @router.get("/drivers", response_model=list[DriverSummary])
-async def list_drivers(session: AsyncSession = Depends(get_db_session)) -> list[DriverSummary]:
+async def list_drivers(
+    session: AsyncSession = Depends(get_db_session),
+    state: AppState = Depends(get_apex_state),
+) -> list[DriverSummary]:
     """200 always — an empty array if the fingerprints table is empty (§8.5). Deterministic: each
-    driver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (§11)."""
+    driver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (§11).
+
+    The DB supplies identity + radar; the startup-loaded profiles artefact supplies the lap counts,
+    lap-time consistency and per-driver held-out F1. The two are independent — an absent artefact
+    leaves ``profile`` null and ``signature`` empty without touching the rest of the row, so this
+    endpoint never fails because a *supplementary* source is missing.
+    """
     rows = (
         await session.execute(
             select(models.Driver, models.Fingerprint)
@@ -53,14 +70,32 @@ async def list_drivers(session: AsyncSession = Depends(get_db_session)) -> list[
             )
         )
     ).all()
+    profiles = state.driver_profiles
     out: dict[str, DriverSummary] = {}
     for driver, fp in rows:
+        profile = profiles.get(driver.code) if profiles is not None else None
         # ascending order → the last write per code wins = latest (season, circuit), deterministic
         out[driver.code] = DriverSummary(
             id=driver.code,
             code=driver.code,
             team=driver.team,
+            full_name=driver.full_name,
             radar_values=dict(fp.radar_values or {}),
+            signature=[
+                DriverSignalSchema(
+                    feature=s.feature, attribution=s.attribution, percentile=s.percentile
+                )
+                for s in top_signals(fp.shap_global, profile)
+            ],
+            profile=None
+            if profile is None
+            else DriverProfileSchema(
+                laps_analysed=profile.laps_analysed,
+                seasons=list(profile.seasons),
+                n_circuits=profile.n_circuits,
+                lap_time_consistency_s=profile.lap_time_consistency_s,
+                identification_f1=profile.identification_f1,
+            ),
         )
     return list(out.values())
 
@@ -114,10 +149,14 @@ async def driver_fingerprint(
 
     vec = latest.vector
     vector_5d = list(vec.values()) if isinstance(vec, dict) else list(vec)
+    # Signed attribution from the profiles artefact; a driver (or checkout) without one serialises
+    # {} and the profile screen omits the confirms/argues panel rather than inventing signs.
+    profile = state.driver_profiles.get(driver_id) if state.driver_profiles is not None else None
     return FingerprintResponse(
         driver_id=driver_id,
         vector_5d=vector_5d,
         shap_radar=radar,
+        shap_signed=dict(profile.shap_signed_mean) if profile is not None else {},
         nl_description=nl,
         stability=StabilityResponse(
             driver_id=driver_id,
@@ -210,3 +249,34 @@ async def driver_setup(
         approximation_disclaimer=rec.approximation_disclaimer,
         model_version=rec.model_version,
     )
+
+
+@router.get("/tyres", response_model=TyreWearResponse)
+async def tyre_wear(state: AppState = Depends(get_apex_state)) -> TyreWearResponse:
+    """Per-driver, per-compound stint degradation (Screen 4). Served from the startup-loaded
+    profiles artefact; absent artefact → an empty map, never fabricated curves. A malformed
+    per-compound block is skipped WITH a data_quality_log row — a screen fed by this endpoint
+    can trust every curve it does receive."""
+    profiles = state.driver_profiles
+    if profiles is None:
+        return TyreWearResponse()
+
+    out: dict[str, dict[str, TyreCompoundStatsSchema]] = {}
+    for code, profile in profiles.by_code.items():
+        compounds: dict[str, TyreCompoundStatsSchema] = {}
+        for compound, raw in profile.tyre_wear.items():
+            try:
+                compounds[str(compound)] = TyreCompoundStatsSchema.model_validate(raw)
+            except Exception as exc:  # malformed artefact block → logged skip, not a 500
+                with suppress(Exception):
+                    log_data_quality(
+                        error_code=ErrorCode.DATA_SOURCE_UNAVAILABLE,
+                        entity_type="tyre_wear",
+                        entity_id=f"{code}/{compound}",
+                        error_detail=f"malformed tyre_wear block: {type(exc).__name__}: {exc}",
+                        fallback_used=True,
+                        log_path=state.config.paths.data_quality_log,
+                    )
+        if compounds:
+            out[code] = compounds
+    return TyreWearResponse(drivers=out)

@@ -41,6 +41,9 @@ module.exports = {
         // Wired to next/font CSS variables in app/layout.tsx.
         sans: ['var(--font-inter)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['var(--font-jetbrains-mono)', 'ui-monospace', 'monospace'],
+        // Condensed display face — driver numbers, names, screen titles (the reference look:
+        // condensed display type set against wide-tracked mono micro-labels).
+        display: ['var(--font-display)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       // F19 (Screen 6 §10.7): the degradation alert banner "animates down" on fire. A design token,
       // not a component literal — matches how all motion constants live outside components (div #70).

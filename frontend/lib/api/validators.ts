@@ -6,12 +6,37 @@ import { z } from 'zod';
 
 const radar = z.record(z.number());
 
+// One feature the champion attributes to a driver. `percentile` is nullish because the profiles
+// artefact may carry no grid rank for that feature — the card then names it without a direction.
+const zDriverSignal = z
+  .object({
+    feature: z.string(),
+    attribution: z.number(),
+    percentile: z.number().nullish(),
+  })
+  .passthrough();
+
+// Dataset + evaluation facts. Every optional number is nullish, NOT defaulted to 0: "not measured"
+// and "measured as zero" must stay distinguishable all the way to the pixel.
+const zDriverProfile = z
+  .object({
+    laps_analysed: z.number(),
+    seasons: z.array(z.number()).optional(),
+    n_circuits: z.number().optional(),
+    lap_time_consistency_s: z.number().nullish(),
+    identification_f1: z.number().nullish(),
+  })
+  .passthrough();
+
 export const zDriverSummary = z
   .object({
     id: z.string(),
     code: z.string(),
     team: z.string().nullish(),
+    full_name: z.string().nullish(),
     radar_values: radar.optional(),
+    signature: z.array(zDriverSignal).optional(),
+    profile: zDriverProfile.nullish(),
   })
   .passthrough();
 export const zDriverSummaryList = z.array(zDriverSummary);
@@ -31,6 +56,9 @@ export const zFingerprint = z
     driver_id: z.string(),
     vector_5d: z.array(z.number()),
     shap_radar: radar.optional(),
+    // Signed per-feature attribution — may be absent on a checkout without the profiles artefact;
+    // the screen must then omit the confirms/argues panel, so absence stays representable.
+    shap_signed: z.record(z.number()).optional(),
     nl_description: z.string().optional(),
     stability: zStability.nullish(),
   })
@@ -113,10 +141,52 @@ export const zPredict = z
     confidence: z.number(),
     confidence_state: z.string().nullish(),
     top_3: z.array(zTopK).optional(),
+    // Full calibrated distribution — optional so older payloads (and caches) stay valid.
+    class_probabilities: z.record(z.number()).optional(),
     shap_values: z.record(z.number()).nullish(),
     shap_available: z.boolean().optional(),
     model_version: z.string(),
   })
+  .passthrough();
+
+// GET /segments — curated held-out sample laps for the Prediction screen picker. Features are
+// nullable per-lap raw values; true_driver is the matrix ground truth used to grade the answer.
+export const zSegment = z
+  .object({
+    id: z.string(),
+    label: z.string(),
+    circuit: z.string(),
+    season: z.number(),
+    session: z.string().optional(),
+    lap_number: z.number().optional(),
+    true_driver: z.string(),
+    features: z.record(z.number().nullable()).optional(),
+  })
+  .passthrough();
+export const zSegmentList = z.array(zSegment);
+
+// GET /tyres — per-driver/compound stint degradation. Curve points carry their own lap counts;
+// cliff_age is nullish because most corrected curves are near-linear and honestly cliff-free.
+const zTyreCurvePoint = z
+  .object({ age: z.number(), delta_s: z.number(), q25: z.number(), q75: z.number(), n: z.number() })
+  .passthrough();
+const zTyreCompound = z
+  .object({
+    n_laps: z.number(),
+    n_stints: z.number(),
+    median_stint_len: z.number(),
+    max_stint_len: z.number(),
+    deg_slope_s_per_lap: z.number(),
+    total_delta_s: z.number(),
+    fuel_slope_s_per_lap: z.number().nullish(),
+    cliff_age: z.number().nullish(),
+    curve: z.array(zTyreCurvePoint).optional(),
+    f27_median: z.number().nullish(),
+    f28_median: z.number().nullish(),
+  })
+  .passthrough();
+export const zTyreWear = z
+  .object({ drivers: z.record(z.record(zTyreCompound)).optional() })
   .passthrough();
 
 // POST /fingerprint/unknown (F08). radar_values/style_description are returned EMPTY by the route

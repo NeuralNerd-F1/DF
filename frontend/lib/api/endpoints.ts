@@ -3,6 +3,8 @@
 import { fetchApi } from './client';
 import type { ApiResult } from './errors';
 import type {
+  SampleSegment,
+  TyreWearResponse,
   CompareResponse,
   DriverSummary,
   FingerprintResponse,
@@ -60,6 +62,14 @@ export function getCompare(a: string, b: string): Promise<ApiResult<CompareRespo
 }
 
 // --- F17 Screen 3: prediction + ingestion (all POST except getIngestStatus) -----------------------
+
+export function getSegments(): Promise<ApiResult<SampleSegment[]>> {
+  return fetchApi<SampleSegment[]>('/segments', v.zSegmentList);
+}
+
+export function getTyres(): Promise<ApiResult<TyreWearResponse>> {
+  return fetchApi<TyreWearResponse>('/tyres', v.zTyreWear);
+}
 
 export function postPredict(body: PredictRequest): Promise<ApiResult<PredictResponse>> {
   return fetchApi<PredictResponse>('/predict', v.zPredict, jsonPost(body));

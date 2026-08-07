@@ -21,7 +21,10 @@ from app.api.deps import (
     get_recommender,
 )
 from app.api.errors import not_found, service_unavailable
+from app.api.profiles import top_signals
 from app.api.schemas import (
+    DriverProfileSchema,
+    DriverSignalSchema,
     DriverSummary,
     FingerprintResponse,
     SetupParameterSchema,
@@ -41,9 +44,18 @@ def _enum_val(x: Any) -> Any:
 
 
 @router.get("/drivers", response_model=list[DriverSummary])
-async def list_drivers(session: AsyncSession = Depends(get_db_session)) -> list[DriverSummary]:
+async def list_drivers(
+    session: AsyncSession = Depends(get_db_session),
+    state: AppState = Depends(get_apex_state),
+) -> list[DriverSummary]:
     """200 always — an empty array if the fingerprints table is empty (§8.5). Deterministic: each
-    driver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (§11)."""
+    driver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (§11).
+
+    The DB supplies identity + radar; the startup-loaded profiles artefact supplies the lap counts,
+    lap-time consistency and per-driver held-out F1. The two are independent — an absent artefact
+    leaves ``profile`` null and ``signature`` empty without touching the rest of the row, so this
+    endpoint never fails because a *supplementary* source is missing.
+    """
     rows = (
         await session.execute(
             select(models.Driver, models.Fingerprint)
@@ -53,14 +65,32 @@ async def list_drivers(session: AsyncSession = Depends(get_db_session)) -> list[
             )
         )
     ).all()
+    profiles = state.driver_profiles
     out: dict[str, DriverSummary] = {}
     for driver, fp in rows:
+        profile = profiles.get(driver.code) if profiles is not None else None
         # ascending order → the last write per code wins = latest (season, circuit), deterministic
         out[driver.code] = DriverSummary(
             id=driver.code,
             code=driver.code,
             team=driver.team,
+            full_name=driver.full_name,
             radar_values=dict(fp.radar_values or {}),
+            signature=[
+                DriverSignalSchema(
+                    feature=s.feature, attribution=s.attribution, percentile=s.percentile
+                )
+                for s in top_signals(fp.shap_global, profile)
+            ],
+            profile=None
+            if profile is None
+            else DriverProfileSchema(
+                laps_analysed=profile.laps_analysed,
+                seasons=list(profile.seasons),
+                n_circuits=profile.n_circuits,
+                lap_time_consistency_s=profile.lap_time_consistency_s,
+                identification_f1=profile.identification_f1,
+            ),
         )
     return list(out.values())
 

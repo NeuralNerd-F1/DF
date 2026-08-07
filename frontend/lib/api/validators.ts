@@ -6,12 +6,37 @@ import { z } from 'zod';
 
 const radar = z.record(z.number());
 
+// One feature the champion attributes to a driver. `percentile` is nullish because the profiles
+// artefact may carry no grid rank for that feature — the card then names it without a direction.
+const zDriverSignal = z
+  .object({
+    feature: z.string(),
+    attribution: z.number(),
+    percentile: z.number().nullish(),
+  })
+  .passthrough();
+
+// Dataset + evaluation facts. Every optional number is nullish, NOT defaulted to 0: "not measured"
+// and "measured as zero" must stay distinguishable all the way to the pixel.
+const zDriverProfile = z
+  .object({
+    laps_analysed: z.number(),
+    seasons: z.array(z.number()).optional(),
+    n_circuits: z.number().optional(),
+    lap_time_consistency_s: z.number().nullish(),
+    identification_f1: z.number().nullish(),
+  })
+  .passthrough();
+
 export const zDriverSummary = z
   .object({
     id: z.string(),
     code: z.string(),
     team: z.string().nullish(),
+    full_name: z.string().nullish(),
     radar_values: radar.optional(),
+    signature: z.array(zDriverSignal).optional(),
+    profile: zDriverProfile.nullish(),
   })
   .passthrough();
 export const zDriverSummaryList = z.array(zDriverSummary);

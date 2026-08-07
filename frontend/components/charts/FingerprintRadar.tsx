@@ -5,6 +5,7 @@ import { useRef } from 'react';
 
 import { RADAR_DOMAINS, type RadarDomain } from '@/lib/api/types';
 import { DURATION, STAGGER } from '@/lib/design/animation';
+import { RADAR_MICRO_LABELS } from '@/lib/design/radar';
 import { useIsomorphicLayoutEffect } from '@/lib/useIsomorphicLayoutEffect';
 
 type Props = {
@@ -12,6 +13,8 @@ type Props = {
   size?: number;
   dimmed?: boolean; // reduced-opacity radar (the LOW_CONFIDENCE card still shows it — master §10.2)
   showLabels?: boolean;
+  microLabels?: boolean; // 3-letter axis tags for small radars (overview cards)
+  colour?: string; // SVG paint override (team colour) — attribute-set, so no inline `style` needed
   animate?: boolean; // false in tests → deterministic static render
   staggerMs?: number;
   durationMs?: number;
@@ -34,6 +37,8 @@ export function FingerprintRadar({
   size = 220,
   dimmed = false,
   showLabels = true,
+  microLabels = false,
+  colour,
   animate = true,
   staggerMs = STAGGER.screen2Axis,
   durationMs = DURATION.chart,
@@ -43,7 +48,7 @@ export function FingerprintRadar({
 }: Props) {
   const cx = size / 2;
   const cy = size / 2;
-  const r = size / 2 - (showLabels ? 30 : 8);
+  const r = size / 2 - (showLabels ? 30 : microLabels ? 15 : 8);
   const n = RADAR_DOMAINS.length;
 
   const angle = (i: number): number => -Math.PI / 2 + (i * 2 * Math.PI) / n;
@@ -110,7 +115,7 @@ export function FingerprintRadar({
       ))}
       {RADAR_DOMAINS.map((d, i) => {
         const [ex, ey] = point(i, 1);
-        const [lx, ly] = point(i, 1.2);
+        const [lx, ly] = point(i, microLabels ? 1.24 : 1.2);
         return (
           <g key={d}>
             <line x1={cx} y1={cy} x2={ex} y2={ey} className="stroke-border" strokeWidth={0.5} />
@@ -127,6 +132,17 @@ export function FingerprintRadar({
               >
                 {d}
               </text>
+            ) : microLabels ? (
+              <text
+                x={lx}
+                y={ly}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className="fill-text-secondary font-mono text-[6.5px] tracking-[0.08em]"
+                data-domain={d}
+              >
+                {RADAR_MICRO_LABELS[d]}
+              </text>
             ) : null}
           </g>
         );
@@ -134,7 +150,12 @@ export function FingerprintRadar({
       <polygon
         ref={polyRef}
         points={polygonPoints}
-        className="fill-accent/20 stroke-accent"
+        // Dynamic team colour is set as an SVG paint attribute (the established no-inline-style
+        // pattern); without a colour override the accent classes apply as before.
+        className={colour ? undefined : 'fill-accent/20 stroke-accent'}
+        fill={colour}
+        fillOpacity={colour ? 0.22 : undefined}
+        stroke={colour}
         strokeWidth={1.5}
         data-testid="radar-polygon"
       />
@@ -149,7 +170,8 @@ export function FingerprintRadar({
             cx={x}
             cy={y}
             r={3}
-            className="fill-accent"
+            className={colour ? undefined : 'fill-accent'}
+            fill={colour}
             data-domain={d}
             data-value={clamp01(values[d] ?? 0)}
           />

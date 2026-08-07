@@ -32,6 +32,11 @@ export interface paths {
          * List Drivers
          * @description 200 always — an empty array if the fingerprints table is empty (§8.5). Deterministic: each
          *     driver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (§11).
+         *
+         *     The DB supplies identity + radar; the startup-loaded profiles artefact supplies the lap counts,
+         *     lap-time consistency and per-driver held-out F1. The two are independent — an absent artefact
+         *     leaves ``profile`` null and ``signature`` empty without touching the rest of the row, so this
+         *     endpoint never fails because a *supplementary* source is missing.
          */
         get: operations["list_drivers_drivers_get"];
         put?: never;
@@ -320,16 +325,62 @@ export interface components {
             /** N Laps Used */
             n_laps_used: number;
         };
+        /**
+         * DriverProfileSchema
+         * @description Dataset + evaluation facts for one driver, sourced from ``driver_profiles.json``.
+         *
+         *     Every optional field is ``None`` for an honest "not measured", never 0.0: a driver with too few
+         *     laps for a within-session SD and a driver who laps identically every time must not render the
+         *     same. ``identification_f1`` is the champion's **held-out** per-driver F1 — a driver the summary
+         *     never scored keeps ``None`` rather than borrowing a training-split number.
+         */
+        DriverProfileSchema: {
+            /** Identification F1 */
+            identification_f1?: number | null;
+            /** Lap Time Consistency S */
+            lap_time_consistency_s?: number | null;
+            /** Laps Analysed */
+            laps_analysed: number;
+            /**
+             * N Circuits
+             * @default 0
+             */
+            n_circuits: number;
+            /** Seasons */
+            seasons?: number[];
+        };
+        /**
+         * DriverSignalSchema
+         * @description One feature the champion attributes most to a driver, plus where they rank on it.
+         *
+         *     ``attribution`` is mean |SHAP| — a magnitude, so it never implies a direction. ``percentile`` is
+         *     the driver's rank on that feature against the rest of the grid (0 = lowest mean, 1 = highest)
+         *     and is ``None`` when the profiles artefact carries no rank, so the screen names the feature
+         *     without claiming which way it points.
+         */
+        DriverSignalSchema: {
+            /** Attribution */
+            attribution: number;
+            /** Feature */
+            feature: string;
+            /** Percentile */
+            percentile?: number | null;
+        };
         /** DriverSummary */
         DriverSummary: {
             /** Code */
             code: string;
+            /** Full Name */
+            full_name?: string | null;
             /** Id */
             id: string;
+            profile?: components["schemas"]["DriverProfileSchema"] | null;
             /** Radar Values */
             radar_values?: {
                 [key: string]: number;
             };
+            /** Signature */
+            signature?: components["schemas"]["DriverSignalSchema"][];
             /** Team */
             team?: string | null;
         };

@@ -24,8 +24,21 @@ def _schemas() -> dict:
 
 def test_driver_summary_carries_the_command_centre_fields() -> None:
     props = _schemas()["DriverSummary"]["properties"]
-    for field in ("id", "code", "team", "radar_values"):  # team = the F16 seam
-        assert field in props, f"DriverSummary lost {field!r} — breaks the Command Centre"
+    # team = the F16 seam; full_name/signature/profile = the Driver Overview card sources
+    for field in ("id", "code", "team", "full_name", "radar_values", "signature", "profile"):
+        assert field in props, f"DriverSummary lost {field!r} — breaks the Driver Overview"
+
+
+def test_driver_profile_and_signal_schemas_carry_the_overview_fields() -> None:
+    schemas = _schemas()
+    for field in ("laps_analysed", "seasons", "lap_time_consistency_s", "identification_f1"):
+        assert field in schemas["DriverProfileSchema"]["properties"], (
+            f"DriverProfileSchema lost {field!r} — breaks the overview stats row"
+        )
+    for field in ("feature", "attribution", "percentile"):
+        assert field in schemas["DriverSignalSchema"]["properties"], (
+            f"DriverSignalSchema lost {field!r} — breaks the key signals"
+        )
 
 
 def test_fingerprint_response_fields() -> None:

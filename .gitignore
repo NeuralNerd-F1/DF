@@ -28,3 +28,8 @@ mlruns/
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# Local dev-server logs (Start-Process redirects)
+.api.log
+.api.err
+frontend/.dev.log

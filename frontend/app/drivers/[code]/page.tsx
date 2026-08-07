@@ -39,7 +39,7 @@ export default async function DriverProfilePage({ params }: { params: { code: st
     return (
       <main className="mx-auto max-w-6xl p-6">
         <Link href="/" className="font-mono text-xs text-accent hover:underline">
-          ← Command Centre
+          ← Driver Overview
         </Link>
         <div className="mt-4">
           <PageError code={fp.code} detail={fp.detail} />
@@ -56,7 +56,7 @@ export default async function DriverProfilePage({ params }: { params: { code: st
   return (
     <main className="mx-auto max-w-6xl p-6">
       <Link href="/" className="font-mono text-xs text-accent hover:underline">
-        ← Command Centre
+        ← Driver Overview
       </Link>
       <h1 className="mb-4 mt-2 font-mono text-2xl text-text-primary">{code}</h1>
       {fp.flags.includes('STALE_DATA') ? (

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from fastapi import Depends, Request
 
 from app.api.errors import service_unavailable
+from app.api.profiles import DriverProfiles, load_driver_profiles
 from app.contracts.config import AppConfig
 from app.contracts.errors import ErrorCode
 from app.contracts.logging import log_data_quality
@@ -73,6 +74,10 @@ class AppState:
     # loader; ``None`` in a fresh checkout → the upload returns the cleaning report with feature
     # vectors unavailable, never fabricated). Tests inject a synthetic table.
     medians: FeatureMedians | None = None
+    # Per-driver dataset + evaluation facts read from ``driver_profiles.json`` (build script:
+    # scripts/build_driver_profiles.py). ``None`` = the artefact is absent or unreadable, which
+    # /drivers surfaces as null profile fields rather than zeroed measurements.
+    driver_profiles: DriverProfiles | None = None
 
 
 def get_apex_state(request: Request) -> AppState:
@@ -302,6 +307,11 @@ def load_state(config: AppConfig) -> AppState:
     )
     state.personalisation_handle = _try_load(
         "personalisation", lambda: load_personalisation(config=config), log_path=lp
+    )
+    # Dataset + evaluation facts for /drivers. Absent artefact → None → null profile fields; the
+    # endpoint keeps serving code/team/radar from the DB either way.
+    state.driver_profiles = _try_load(
+        "driver_profiles", lambda: load_driver_profiles(config=config, log_path=lp), log_path=lp
     )
 
     # DB engine (env-only DSN; absent → engine None → /health reports db down).

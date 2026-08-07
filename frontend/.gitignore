@@ -9,3 +9,7 @@ test-results/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local env (Next.js convention — per-machine origins, never committed)
+.env*.local
+.vitest.out

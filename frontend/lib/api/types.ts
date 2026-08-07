@@ -5,6 +5,8 @@ import type { components } from './schema';
 export type ErrorCode = components['schemas']['ErrorCode'];
 export type ConfidenceState = components['schemas']['ConfidenceState'];
 export type DriverSummary = components['schemas']['DriverSummary'];
+export type DriverSignal = components['schemas']['DriverSignalSchema'];
+export type DriverProfile = components['schemas']['DriverProfileSchema'];
 export type FingerprintResponse = components['schemas']['FingerprintResponse'];
 export type StabilityResponse = components['schemas']['StabilityResponse'];
 export type SetupResponse = components['schemas']['SetupResponse'];

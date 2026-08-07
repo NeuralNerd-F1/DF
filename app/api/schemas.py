@@ -95,13 +95,49 @@ class PredictResponse(ApiModel):
 
 
 # --- GET /drivers, /drivers/{id}/fingerprint, /setup, /stability --------------------------------
+class DriverSignalSchema(ApiModel):
+    """One feature the champion attributes most to a driver, plus where they rank on it.
+
+    ``attribution`` is mean |SHAP| — a magnitude, so it never implies a direction. ``percentile`` is
+    the driver's rank on that feature against the rest of the grid (0 = lowest mean, 1 = highest)
+    and is ``None`` when the profiles artefact carries no rank, so the screen names the feature
+    without claiming which way it points.
+    """
+
+    feature: str
+    attribution: float
+    percentile: float | None = None
+
+
+class DriverProfileSchema(ApiModel):
+    """Dataset + evaluation facts for one driver, sourced from ``driver_profiles.json``.
+
+    Every optional field is ``None`` for an honest "not measured", never 0.0: a driver with too few
+    laps for a within-session SD and a driver who laps identically every time must not render the
+    same. ``identification_f1`` is the champion's **held-out** per-driver F1 — a driver the summary
+    never scored keeps ``None`` rather than borrowing a training-split number.
+    """
+
+    laps_analysed: int
+    seasons: list[int] = Field(default_factory=list)
+    n_circuits: int = 0
+    lap_time_consistency_s: float | None = None
+    identification_f1: float | None = None
+
+
 class DriverSummary(ApiModel):
     id: str
     code: str
     # F16 seam: the Command Centre card renders a team-colour bar keyed on the driver's team
     # (master §10.2). The team lives on the F12 ``drivers`` table; unknown drivers have none.
     team: str | None = None
+    full_name: str | None = None
     radar_values: dict[str, float] = Field(default_factory=dict)
+    # Both default to absent so the endpoint keeps its contract on a checkout with no profiles
+    # artefact and no SHAP fill: the card degrades to code + team + radar, never to fabricated
+    # facts. `signature` is [] (nothing to say) and `profile` is null (nothing measured).
+    signature: list[DriverSignalSchema] = Field(default_factory=list)
+    profile: DriverProfileSchema | None = None
 
 
 class StabilityResponse(ApiModel):

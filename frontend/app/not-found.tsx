@@ -8,7 +8,7 @@ export default function NotFound() {
     <main className="mx-auto max-w-6xl p-6">
       <EmptyState message="Page not found." />
       <Link href="/" className="mt-4 inline-block font-mono text-xs text-accent hover:underline">
-        ← Command Centre
+        ← Driver Overview
       </Link>
     </main>
   );

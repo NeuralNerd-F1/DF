@@ -126,6 +126,86 @@
         "title": "DataQualitySchema",
         "type": "object"
       },
+      "DriverProfileSchema": {
+        "additionalProperties": false,
+        "description": "Dataset + evaluation facts for one driver, sourced from ``driver_profiles.json``.\n\nEvery optional field is ``None`` for an honest \"not measured\", never 0.0: a driver with too few\nlaps for a within-session SD and a driver who laps identically every time must not render the\nsame. ``identification_f1`` is the champion's **held-out** per-driver F1 \u2014 a driver the summary\nnever scored keeps ``None`` rather than borrowing a training-split number.",
+        "properties": {
+          "identification_f1": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identification F1"
+          },
+          "lap_time_consistency_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lap Time Consistency S"
+          },
+          "laps_analysed": {
+            "title": "Laps Analysed",
+            "type": "integer"
+          },
+          "n_circuits": {
+            "default": 0,
+            "title": "N Circuits",
+            "type": "integer"
+          },
+          "seasons": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Seasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "laps_analysed"
+        ],
+        "title": "DriverProfileSchema",
+        "type": "object"
+      },
+      "DriverSignalSchema": {
+        "additionalProperties": false,
+        "description": "One feature the champion attributes most to a driver, plus where they rank on it.\n\n``attribution`` is mean |SHAP| \u2014 a magnitude, so it never implies a direction. ``percentile`` is\nthe driver's rank on that feature against the rest of the grid (0 = lowest mean, 1 = highest)\nand is ``None`` when the profiles artefact carries no rank, so the screen names the feature\nwithout claiming which way it points.",
+        "properties": {
+          "attribution": {
+            "title": "Attribution",
+            "type": "number"
+          },
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "percentile": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentile"
+          }
+        },
+        "required": [
+          "feature",
+          "attribution"
+        ],
+        "title": "DriverSignalSchema",
+        "type": "object"
+      },
       "DriverSummary": {
         "additionalProperties": false,
         "properties": {
@@ -133,9 +213,30 @@
             "title": "Code",
             "type": "string"
           },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriverProfileSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "radar_values": {
             "additionalProperties": {
@@ -143,6 +244,13 @@
             },
             "title": "Radar Values",
             "type": "object"
+          },
+          "signature": {
+            "items": {
+              "$ref": "#/components/schemas/DriverSignalSchema"
+            },
+            "title": "Signature",
+            "type": "array"
           },
           "team": {
             "anyOf": [
@@ -1202,7 +1310,7 @@
     },
     "/drivers": {
       "get": {
-        "description": "200 always \u2014 an empty array if the fingerprints table is empty (\u00a78.5). Deterministic: each\ndriver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (\u00a711).",
+        "description": "200 always \u2014 an empty array if the fingerprints table is empty (\u00a78.5). Deterministic: each\ndriver's radar is its LATEST (season, circuit) row, matching /fingerprint and /compare (\u00a711).\n\nThe DB supplies identity + radar; the startup-loaded profiles artefact supplies the lap counts,\nlap-time consistency and per-driver held-out F1. The two are independent \u2014 an absent artefact\nleaves ``profile`` null and ``signature`` empty without touching the rest of the row, so this\nendpoint never fails because a *supplementary* source is missing.",
         "operationId": "list_drivers_drivers_get",
         "responses": {
           "200": {

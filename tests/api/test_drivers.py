@@ -201,3 +201,55 @@ async def test_driver_setup_returns_all_parameters(api: SimpleNamespace) -> None
     assert r.status_code == 200
     assert len(r.json()["parameters"]) == 10
     assert [p["name"] for p in r.json()["parameters"]] == [f"param_{i}" for i in range(10)]
+
+
+# --- /drivers enrichment from the profiles artefact (Driver Overview) --------------------------
+
+
+async def test_list_drivers_without_profiles_serialises_honest_nulls(
+    api: SimpleNamespace,
+) -> None:
+    """A checkout with no profiles artefact still serves the row — profile null, and the
+    signature ranked from the stored shap_global with percentile null (no rank source)."""
+    await seed_fingerprint(api.session_factory, code="VER", shap_global={"F01": 0.2, "F02": 0.9})
+    body = (await api.client.get("/drivers")).json()
+    assert body[0]["profile"] is None
+    assert [s["feature"] for s in body[0]["signature"]] == ["F02", "F01"]
+    assert all(s["percentile"] is None for s in body[0]["signature"])
+
+
+async def test_list_drivers_enriched_from_profiles(api: SimpleNamespace) -> None:
+    """With the artefact loaded, the summary carries the dataset facts and the signature joins
+    the grid percentile; a driver ABSENT from the artefact keeps profile null — never borrowed."""
+    from app.api.profiles import DriverProfile, DriverProfiles
+
+    await seed_fingerprint(api.session_factory, code="VER", shap_global={"F01": 0.2, "F02": 0.9})
+    await seed_fingerprint(api.session_factory, code="UNK", shap_global={"F03": 0.5})
+    api.state.driver_profiles = DriverProfiles(
+        content_hash="abc",
+        n_laps=100,
+        held_out_circuits=("Belgium", "Italy"),
+        source_matrix="m.parquet",
+        by_code={
+            "VER": DriverProfile(
+                laps_analysed=60,
+                seasons=(2022, 2023),
+                n_circuits=5,
+                lap_time_consistency_s=1.14,
+                identification_f1=0.53,
+                feature_percentile={"F02": 1.0},
+            )
+        },
+    )
+    body = {d["code"]: d for d in (await api.client.get("/drivers")).json()}
+    ver = body["VER"]
+    assert ver["profile"] == {
+        "laps_analysed": 60,
+        "seasons": [2022, 2023],
+        "n_circuits": 5,
+        "lap_time_consistency_s": 1.14,
+        "identification_f1": 0.53,
+    }
+    assert ver["signature"][0] == {"feature": "F02", "attribution": 0.9, "percentile": 1.0}
+    assert ver["signature"][1]["percentile"] is None  # F01 has no rank in the artefact
+    assert body["UNK"]["profile"] is None  # not in the artefact -> null, not a neighbour's facts

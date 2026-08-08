@@ -34,3 +34,4 @@ Thumbs.db
 .api.err
 frontend/.dev.log
 .pytest.out
+node_modules/

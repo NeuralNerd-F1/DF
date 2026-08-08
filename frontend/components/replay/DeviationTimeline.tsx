@@ -1,20 +1,27 @@
 'use client';
 
 import type { ReplayLap } from '@/lib/api/types';
-import { ALERT_FILL_CLASS, deviationMax } from '@/lib/replay/replay';
+import { ALERT_FILL_CLASS, gaugeMax, stintThreshold } from '@/lib/replay/replay';
 
-// The tyre-degradation timeline (master §10.7, div #73). A left-building line of deviation_score per
+// The tyre-degradation timeline (master §10.7). A left-building line of deviation_score per
 // replayed lap (deterministic SVG); ALERT laps highlighted/pulsed red; null scores render as GAPS
-// (never 0). The master's dashed τ threshold line is DEFERRED — τ is not exposed per lap — rendered
-// as a labelled note, never a fabricated line. Named seam: ReplayLap.threshold.
+// (never 0). τ ships per lap now (div #73 closed): the master's dashed red threshold line is REAL —
+// the y-scale anchors to τ with headroom (gaugeMax) so the line always sits inside the chart.
 const W = 300;
 const H = 80;
 const PAD = 6;
 
-type Props = { laps: readonly ReplayLap[]; reachedIndex: number; className?: string };
+type Props = {
+  laps: readonly ReplayLap[];
+  reachedIndex: number;
+  className?: string;
+  // compact: grid cells — SVG only, no caption row (the legend text doesn't fit a mini cell).
+  compact?: boolean;
+};
 
-export function DeviationTimeline({ laps, reachedIndex, className = '' }: Props) {
-  const max = deviationMax(laps);
+export function DeviationTimeline({ laps, reachedIndex, className = '', compact = false }: Props) {
+  const max = gaugeMax(laps);
+  const tau = stintThreshold(laps);
   const n = laps.length;
   const xOf = (i: number): number => (n <= 1 ? W / 2 : PAD + (i / (n - 1)) * (W - 2 * PAD));
   const yOf = (s: number): number => H - PAD - (Math.max(0, Math.min(max, s)) / max) * (H - 2 * PAD);
@@ -34,11 +41,36 @@ export function DeviationTimeline({ laps, reachedIndex, className = '' }: Props)
   });
   if (cur.length) segments.push(cur.join(' '));
 
+  const firstLap = laps[0]?.lap_number;
+  const lastLap = laps[n - 1]?.lap_number;
+
   return (
     <div className={className} data-testid="deviation-timeline">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-label="deviation timeline">
+        {tau != null ? (
+          <g data-testid="timeline-threshold-line">
+            <line
+              x1={PAD}
+              y1={yOf(tau)}
+              x2={W - PAD}
+              y2={yOf(tau)}
+              className="stroke-accent"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+            />
+            <text
+              x={W - PAD}
+              y={yOf(tau) - 2.5}
+              textAnchor="end"
+              className="fill-accent font-mono"
+              fontSize={6}
+            >
+              τ {tau.toFixed(2)}
+            </text>
+          </g>
+        ) : null}
         {segments.map((pts, i) => (
-          <polyline key={i} points={pts} fill="none" className="stroke-accent" strokeWidth={1.5} />
+          <polyline key={i} points={pts} fill="none" className="stroke-text-secondary" strokeWidth={1.5} />
         ))}
         {shown.map((lap, i) => {
           const s = lap.deviation_score;
@@ -56,9 +88,17 @@ export function DeviationTimeline({ laps, reachedIndex, className = '' }: Props)
           );
         })}
       </svg>
-      <p className="mt-1 font-mono text-[9px] text-text-secondary" data-testid="timeline-threshold-note">
-        Threshold line unavailable (τ not exposed per lap)
-      </p>
+      {compact ? null : (
+        <div className="mt-1 flex items-baseline justify-between gap-3 font-mono text-[9px] text-text-secondary">
+          <span>{firstLap != null ? `Lap ${firstLap}` : ''}</span>
+          <span data-testid="timeline-caption">
+            {tau != null
+              ? 'deviation per lap · dashed = alert threshold τ · gaps = unscored laps'
+              : 'deviation per lap · gaps = unscored laps · τ unavailable (monitor not activated)'}
+          </span>
+          <span>{lastLap != null ? `Lap ${lastLap}` : ''}</span>
+        </div>
+      )}
     </div>
   );
 }

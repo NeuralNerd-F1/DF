@@ -15,6 +15,7 @@ import type {
   PredictRequest,
   PredictResponse,
   ReplayResponse,
+  SessionSummary,
   SetupResponse,
   StabilityResponse,
   StyleSpaceResponse,
@@ -101,8 +102,13 @@ export function postUpload(file: File): Promise<ApiResult<UploadResponse>> {
 
 // --- F19 Screen 6: historical race replay (F14 → F10) ---------------------------------------------
 // Whole-payload pull: the entire replay (all laps) at once; playback is client-side (div #71). The
-// session/driver are DB UUIDs — no session catalog endpoint exists (div #77). A fresh checkout 503s
-// (no data) until F20 populates the DB; the screen renders that honestly.
+// session comes from the /sessions catalog (div #77 closed); the driver is a code from /drivers.
+// A fresh checkout 503s (no data) until the DB is populated; the screen renders that honestly.
 export function getReplay(sessionId: string, driverId: string): Promise<ApiResult<ReplayResponse>> {
   return fetchApi<ReplayResponse>(`/replay/${enc(sessionId)}/${enc(driverId)}`, v.zReplay);
+}
+
+// GET /sessions — every persisted session with its replayable driver codes (the session picker).
+export function getSessions(): Promise<ApiResult<SessionSummary[]>> {
+  return fetchApi<SessionSummary[]>('/sessions', v.zSessions);
 }

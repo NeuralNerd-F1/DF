@@ -41,31 +41,17 @@ export const ALERT_TEXT_CLASS: Record<AlertTone, string> = {
   idle: 'text-text-secondary',
 };
 
-export function hasAnyAlert(laps: readonly ReplayLap[]): boolean {
-  return laps.some((l) => l.alert_state === 'ALERT');
-}
-
-// The client-derived "laps in alert" (div #74): the CONTIGUOUS ALERT run ending at reachedIndex. If
-// the reached lap is not ALERT, 0. Walks backward through the state sequence — no server field used.
-export function lapsInAlert(laps: readonly ReplayLap[], reachedIndex: number): number {
-  if (reachedIndex < 0 || reachedIndex >= laps.length) return 0;
-  if (laps[reachedIndex]?.alert_state !== 'ALERT') return 0;
-  let n = 0;
-  for (let i = reachedIndex; i >= 0 && laps[i]?.alert_state === 'ALERT'; i--) n++;
-  return n;
-}
-
-// The FIRST reached lap whose state is ALERT — the banner headline. null if none reached yet.
-export function firstAlertLap(laps: readonly ReplayLap[], reachedIndex: number): ReplayLap | null {
-  const limit = Math.min(reachedIndex, laps.length - 1);
-  for (let i = 0; i <= limit; i++) {
-    if (laps[i]?.alert_state === 'ALERT') return laps[i] ?? null;
+// The stint's τ — LapDeviation.threshold is constant per stint but null on BASELINE/SKIPPED laps,
+// so take the first finite value anywhere in the trace. null when the monitor never activated.
+export function stintThreshold(laps: readonly ReplayLap[]): number | null {
+  for (const l of laps) {
+    const t = l.threshold;
+    if (typeof t === 'number' && Number.isFinite(t)) return t;
   }
   return null;
 }
 
-// Gauge/timeline max = the client-derived stint deviation range (div #72), since τ is not exposed.
-// Uses the max finite deviation_score across the replay; falls back to 1 so an all-null replay still
+// The max finite deviation_score across the replay; falls back to 1 so an all-null replay still
 // renders a valid (empty) gauge instead of dividing by zero.
 export function deviationMax(laps: readonly ReplayLap[]): number {
   let m = 0;
@@ -74,6 +60,37 @@ export function deviationMax(laps: readonly ReplayLap[]): number {
     if (typeof s === 'number' && Number.isFinite(s) && s > m) m = s;
   }
   return m > 0 ? m : 1;
+}
+
+// Gauge/timeline scale max. τ now ships per lap (div #72/#73 closed), so the scale is anchored to
+// the REAL threshold: headroom above τ keeps the dashed line inside the chart even before any lap
+// crosses it, and the observed stint range still wins when deviations overshoot τ.
+export const THRESHOLD_HEADROOM = 1.25;
+
+export function gaugeMax(laps: readonly ReplayLap[]): number {
+  const tau = stintThreshold(laps);
+  const observed = deviationMax(laps);
+  return tau != null ? Math.max(observed, tau * THRESHOLD_HEADROOM) : observed;
+}
+
+// The fingerprint drift trail — every reached lap's REAL F08 2D projection (master §10.7 "the
+// fingerprint evolving in real time"). Laps without a snapshot (or non-finite coords) are simply
+// absent from the trail, never fabricated.
+export type DriftPoint = { x: number; y: number; index: number };
+
+export function driftTrail(laps: readonly ReplayLap[], uptoIndex: number): DriftPoint[] {
+  const limit = Math.min(uptoIndex, laps.length - 1);
+  const out: DriftPoint[] = [];
+  for (let i = 0; i <= limit; i++) {
+    const snap = narrowSnapshot(laps[i]?.fingerprint_snapshot);
+    const c = snap?.coords_2d;
+    const x = c?.[0];
+    const y = c?.[1];
+    if (typeof x === 'number' && Number.isFinite(x) && typeof y === 'number' && Number.isFinite(y)) {
+      out.push({ x, y, index: i });
+    }
+  }
+  return out;
 }
 
 // Narrow the open fingerprint_snapshot dict to the three keys it carries (div #75). confidence_state

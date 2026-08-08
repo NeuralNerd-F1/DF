@@ -252,9 +252,23 @@ export const zUpload = z
   .passthrough();
 
 // --- F19 Screen 6 (Historical Race Replay Monitor) ------------------------------------------------
-// GET /replay/{session}/{driver} (F14 → F10). The route forwards only 5 fields per lap; τ and the
-// whole DegradationAlert are dropped (div #72–#75). Guard the load-bearing fields, passthrough rest.
+// GET /replay/{session}/{driver} (F14 → F10). The replay redesign widened the DTO: per-lap τ
+// (threshold) + the full DegradationAlert as of that lap ride along (closes div #72–#74). Guard the
+// load-bearing fields, passthrough rest.
 // `laps` is optional so a valid empty replay ({laps: []}) never trips a false UI_SCHEMA_MISMATCH.
+export const zReplayAlert = z
+  .object({
+    alert_lap: z.number(),
+    first_crossing_lap: z.number(),
+    laps_since_threshold_crossed: z.number(),
+    deviation_score: z.number(),
+    threshold: z.number(),
+    alert_confidence: z.string(),
+    feature_attribution: z.record(z.number()).optional(),
+    top_features: z.array(z.string()).optional(),
+    optimal_window_remaining_laps: z.number().nullish(),
+  })
+  .passthrough();
 export const zReplayLap = z
   .object({
     lap_number: z.number(),
@@ -262,6 +276,8 @@ export const zReplayLap = z
     deviation_score: z.number().nullish(),
     alert_state: z.string(),
     fingerprint_snapshot: z.record(z.unknown()).nullish(),
+    threshold: z.number().nullish(),
+    alert: zReplayAlert.nullish(),
   })
   .passthrough();
 export const zReplay = z
@@ -269,3 +285,18 @@ export const zReplay = z
     laps: z.array(zReplayLap).optional(),
   })
   .passthrough();
+
+// GET /sessions — the session catalog (closes div #77: sessions were listed nowhere). The route
+// returns a bare array; an empty catalog ([]) is honest absence, not a schema mismatch.
+export const zSessionSummary = z
+  .object({
+    id: z.string(),
+    circuit: z.string(),
+    circuit_type: z.string(),
+    season: z.number(),
+    round: z.number(),
+    session_type: z.string(),
+    drivers: z.array(z.object({ code: z.string(), n_laps: z.number() }).passthrough()).optional(),
+  })
+  .passthrough();
+export const zSessions = z.array(zSessionSummary);

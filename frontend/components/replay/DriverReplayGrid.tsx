@@ -7,8 +7,9 @@ import { ErrorCard } from '@/components/ds/ErrorCard';
 import { Skeleton } from '@/components/ds/Skeleton';
 import { getReplay } from '@/lib/api/endpoints';
 import type { ApiResult } from '@/lib/api/errors';
-import type { DriverSummary, ReplayResponse } from '@/lib/api/types';
-import { deviationMax, firstAlertLap, lapsInAlert } from '@/lib/replay/replay';
+import type { ReplayResponse } from '@/lib/api/types';
+import { teamColour } from '@/lib/design/teams';
+import { gaugeMax, stintThreshold } from '@/lib/replay/replay';
 import { usePlayback } from '@/lib/replay/usePlayback';
 import { useReplay } from '@/lib/state/replay';
 
@@ -16,19 +17,21 @@ import { DeviationGauge } from './DeviationGauge';
 import { DeviationTimeline } from './DeviationTimeline';
 import { PlaybackControls } from './PlaybackControls';
 
-// Screen 6 · 8-driver mode (master §10.7, div #76 — the F19b contingency). There is NO batch replay
-// endpoint, so this is an N-parallel getReplay FAN-OUT: one request per /drivers driver, each cell an
-// INDEPENDENT four-state panel (loading / empty / error / success) that resolves and retries on its
-// own. All cells share ONE playback position (the global store) so Play/Pause/Speed/Scrub monitors
-// every driver in lock-step; the shared scrubber spans the longest replay and each cell clamps to its
-// own lap count.
+// Screen 6 · all-drivers mode (master §10.7, div #76 — F19b). There is NO batch replay endpoint,
+// so this is an N-parallel getReplay FAN-OUT: one request per replayable driver in the selected
+// session (their codes come from the /sessions catalog), each cell an INDEPENDENT four-state panel
+// that resolves and retries on its own. All cells share ONE playback position (the global store) so
+// Play/Pause/Speed/Scrub monitors every driver in lock-step; the shared scrubber spans the longest
+// replay and each cell clamps to its own lap count.
+export type GridDriver = { code: string; team?: string | null };
+
 type CellState = { kind: 'loading' } | { kind: 'result'; res: ApiResult<ReplayResponse> };
 
 export function DriverReplayGrid({
   drivers,
   sessionId,
 }: {
-  drivers: DriverSummary[];
+  drivers: GridDriver[];
   sessionId: string;
 }) {
   const [cells, setCells] = useState<CellState[]>(() => drivers.map(() => ({ kind: 'loading' })));
@@ -44,7 +47,7 @@ export function DriverReplayGrid({
         next[i] = { kind: 'loading' };
         return next;
       });
-      getReplay(sessionId, d.id).then((res) => {
+      getReplay(sessionId, d.code).then((res) => {
         setCells((prev) => {
           const next = prev.slice();
           next[i] = { kind: 'result', res };
@@ -74,10 +77,17 @@ export function DriverReplayGrid({
 
   return (
     <div className="space-y-4" data-testid="driver-grid">
-      <PlaybackControls lapCount={maxLaps} currentLapNumber={null} />
+      <section className="rounded-md border border-border bg-card p-4">
+        <PlaybackControls lapCount={maxLaps} currentLapNumber={null} />
+      </section>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {drivers.map((d, i) => (
-          <DriverReplayCell key={d.id} driver={d} state={cells[i] ?? { kind: 'loading' }} onRetry={() => fetchCell(i)} />
+          <DriverReplayCell
+            key={d.code}
+            driver={d}
+            state={cells[i] ?? { kind: 'loading' }}
+            onRetry={() => fetchCell(i)}
+          />
         ))}
       </div>
     </div>
@@ -89,22 +99,45 @@ function DriverReplayCell({
   state,
   onRetry,
 }: {
-  driver: DriverSummary;
+  driver: GridDriver;
   state: CellState;
   onRetry: () => void;
 }) {
   const lapIndex = useReplay((s) => s.lapIndex);
 
+  const colour = teamColour(driver.team);
+  const ruleId = `grid-rule-${driver.code}`;
+
   return (
     <div
       data-testid="grid-cell"
       data-driver={driver.code}
-      className="rounded-lg border border-border bg-card p-3"
+      className="overflow-hidden rounded-md border border-border bg-card"
     >
-      <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono text-xs uppercase text-text-primary">{driver.code}</span>
+      {/* Team rule — solid at the left, fading right (SVG gradient, no inline style). */}
+      <svg viewBox="0 0 100 3" preserveAspectRatio="none" className="h-[3px] w-full" aria-hidden="true">
+        <defs>
+          <linearGradient id={ruleId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor={colour} />
+            <stop offset="0.6" stopColor={colour} stopOpacity={0.9} />
+            <stop offset="1" stopColor={colour} stopOpacity={0.15} />
+          </linearGradient>
+        </defs>
+        <rect width={100} height={3} fill={`url(#${ruleId})`} />
+      </svg>
+      <div className="p-3">
+        <div className="mb-2 flex items-baseline justify-between">
+          <span className="font-mono text-xs uppercase tracking-[0.14em] text-text-primary">
+            {driver.code}
+          </span>
+          {driver.team ? (
+            <span className="font-mono text-[8.5px] uppercase tracking-[0.14em] text-text-secondary">
+              {driver.team}
+            </span>
+          ) : null}
+        </div>
+        <CellBody state={state} lapIndex={lapIndex} onRetry={onRetry} />
       </div>
-      <CellBody state={state} lapIndex={lapIndex} onRetry={onRetry} />
     </div>
   );
 }
@@ -133,8 +166,9 @@ function CellBody({
 
   const idx = Math.min(lapIndex, laps.length - 1);
   const current = laps[idx] ?? null;
-  const max = deviationMax(laps);
-  const alertLap = firstAlertLap(laps, idx);
+  const max = gaugeMax(laps);
+  const tau = stintThreshold(laps);
+  const alert = current?.alert ?? null;
 
   return (
     <div className="space-y-2">
@@ -143,21 +177,23 @@ function CellBody({
           partial replay
         </p>
       ) : null}
-      {alertLap ? (
+      {alert ? (
         <div
           role="alert"
           data-testid="cell-alert"
           className="rounded border-l-2 border-l-accent bg-card px-2 py-1 font-mono text-[9px] text-accent"
         >
-          ALERT · lap {alertLap.lap_number} · {lapsInAlert(laps, idx)} in alert
+          ALERT · lap {alert.alert_lap} · {alert.alert_confidence} · {alert.laps_since_threshold_crossed}{' '}
+          since crossing
         </div>
       ) : null}
       <DeviationGauge
         score={current?.deviation_score ?? null}
         state={current?.alert_state ?? 'INACTIVE'}
         max={max}
+        threshold={tau}
       />
-      <DeviationTimeline laps={laps} reachedIndex={idx} />
+      <DeviationTimeline laps={laps} reachedIndex={idx} compact />
     </div>
   );
 }

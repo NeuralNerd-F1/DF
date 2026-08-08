@@ -36,13 +36,21 @@ if TYPE_CHECKING:
 
 @dataclass
 class ReplayLapData:
-    """One replayed lap → maps to the API ``ReplayLap`` (§8.5)."""
+    """One replayed lap → maps to the API ``ReplayLap`` (§8.5).
+
+    ``threshold`` is the stint's τ (``LapDeviation.threshold``, constant per stint; ``None`` on
+    BASELINE/SKIPPED laps) and ``alert`` the serialised F10 ``DegradationAlert`` *as of this lap's
+    prefix* (``None`` until the alert fires). Forwarding them closes the F19 seams (div #72–#74):
+    the gauge/timeline get a real τ line and the banner gets confidence / feature drivers /
+    pit-window — the detector always computed these; the DTO used to drop them."""
 
     lap_number: int
     feature_vector: dict[str, float | None]
     deviation_score: float | None
     alert_state: str
     fingerprint_snapshot: dict[str, Any] | None = None
+    threshold: float | None = None
+    alert: dict[str, Any] | None = None
 
 
 @dataclass
@@ -207,6 +215,8 @@ async def replay_stint(
                 deviation_score=last.deviation_score if last is not None else None,
                 alert_state=state.value,
                 fingerprint_snapshot=snapshot,
+                threshold=last.threshold if last is not None else None,
+                alert=res.alert.model_dump(mode="json") if res.alert is not None else None,
             )
         )
     return out

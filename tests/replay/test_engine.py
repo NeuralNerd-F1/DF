@@ -92,10 +92,12 @@ def _fake_monitor(monkeypatch: pytest.MonkeyPatch) -> None:
         for col in _SERVING_REQUIRED:
             assert col in frame.columns, f"reconstructed frame missing {col}"
         k = len(frame)
-        last = SimpleNamespace(state=StintMonitorState.NOMINAL, deviation_score=0.01 * k)
+        last = SimpleNamespace(
+            state=StintMonitorState.NOMINAL, deviation_score=0.01 * k, threshold=0.5
+        )
         return SimpleNamespace(
             laps=[last], monitor_state=StintMonitorState.NOMINAL,
-            fingerprint_snapshot=None, fingerprint_available=False,
+            fingerprint_snapshot=None, fingerprint_available=False, alert=None,
         )
 
     monkeypatch.setattr(det, "monitor_stint", fake)
@@ -114,6 +116,55 @@ async def test_contiguous_stint_returns_full_trace(
     # Growing prefix: lap k's deviation = 0.01*k (last-lap of the k-prefix).
     assert res.laps[4].deviation_score == pytest.approx(0.05)
     assert all(lp.alert_state == "NOMINAL" for lp in res.laps)
+    # τ is forwarded per lap (div #72/#73 seam closed); no alert fired → alert stays None.
+    assert all(lp.threshold == pytest.approx(0.5) for lp in res.laps)
+    assert all(lp.alert is None for lp in res.laps)
+
+
+async def test_alert_payload_is_forwarded_from_its_firing_lap(
+    cfg: AppConfig, session_factory: async_sessionmaker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once the k-prefix's monitor carries a DegradationAlert, the replayed lap forwards it as a
+    serialised dict (div #74 seam closed) — earlier laps stay alert=None, never backfilled."""
+    from app.monitoring.detector import AlertConfidence, DegradationAlert
+
+    fire_at = 4
+
+    def fake(frame: Any, **_kw: Any) -> SimpleNamespace:
+        k = len(frame)
+        fired = k >= fire_at
+        state = StintMonitorState.ALERT if fired else StintMonitorState.NOMINAL
+        last = SimpleNamespace(state=state, deviation_score=0.01 * k, threshold=0.5)
+        alert = (
+            DegradationAlert(
+                alert_lap=fire_at, first_crossing_lap=fire_at - 1,
+                laps_since_threshold_crossed=k - fire_at + 1, deviation_score=0.01 * k,
+                threshold=0.5, alert_confidence=AlertConfidence.HIGH,
+                feature_attribution={"F01": 0.01 * k}, top_features=["F01"],
+                optimal_window_remaining_laps=3,
+            )
+            if fired
+            else None
+        )
+        return SimpleNamespace(
+            laps=[last], monitor_state=state,
+            fingerprint_snapshot=None, fingerprint_available=False, alert=alert,
+        )
+
+    monkeypatch.setattr(det, "monitor_stint", fake)
+    sid, did = await _seed(session_factory, lap_numbers=[1, 2, 3, 4, 5])
+    async with session_factory() as s:
+        res = await replay_stint(sid, did, session=s, monitor_handle=None, config=cfg)
+    assert [lp.alert is None for lp in res.laps] == [True, True, True, False, False]
+    fired_lap = res.laps[fire_at - 1]
+    assert fired_lap.alert is not None
+    assert fired_lap.alert["alert_lap"] == fire_at
+    assert fired_lap.alert["alert_confidence"] == "HIGH"  # enum serialised to its value
+    assert fired_lap.alert["top_features"] == ["F01"]
+    assert fired_lap.alert["optimal_window_remaining_laps"] == 3
+    # The as-of-lap payload advances with the prefix (laps_since grows), not a frozen copy.
+    assert res.laps[4].alert is not None
+    assert res.laps[4].alert["laps_since_threshold_crossed"] == 2
 
 
 async def test_unknown_session_or_driver_is_not_found(
@@ -233,3 +284,12 @@ async def test_real_detector_end_to_end(
     assert "ALERT" in states or "WATCH" in states  # drift detected on later laps
     # Real deviations were computed once the monitor activated (not all None).
     assert any(lp.deviation_score is not None for lp in res.laps)
+    # The real detector's τ rides along with every scored lap (div #72/#73 seam closed) …
+    scored = [lp for lp in res.laps if lp.deviation_score is not None]
+    assert scored and all(lp.threshold is not None for lp in scored)
+    # … and if the drift confirmed into ALERT, the real DegradationAlert payload rides along too.
+    alerted = [lp for lp in res.laps if lp.alert_state == "ALERT"]
+    for lp in alerted:
+        assert lp.alert is not None
+        assert lp.alert["alert_confidence"] in {"LOW", "MEDIUM", "HIGH"}
+        assert lp.alert["top_features"]  # attribution names present for the banner

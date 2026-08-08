@@ -5,21 +5,36 @@ import { ALERT_STATES, type ReplayLap } from '@/lib/api/types';
 import {
   alertTone,
   deviationMax,
-  firstAlertLap,
-  hasAnyAlert,
-  lapsInAlert,
+  driftTrail,
+  gaugeMax,
   narrowSnapshot,
+  stintThreshold,
+  THRESHOLD_HEADROOM,
 } from './replay';
 
-const lap = (n: number, state: string, score: number | null): ReplayLap =>
-  ({ lap_number: n, feature_vector: {}, alert_state: state, deviation_score: score, fingerprint_snapshot: null }) as ReplayLap;
+const lap = (
+  n: number,
+  state: string,
+  score: number | null,
+  extra: Partial<ReplayLap> = {},
+): ReplayLap =>
+  ({
+    lap_number: n,
+    feature_vector: {},
+    alert_state: state,
+    deviation_score: score,
+    fingerprint_snapshot: null,
+    threshold: null,
+    alert: null,
+    ...extra,
+  }) as ReplayLap;
 
 const TRACE: ReplayLap[] = [
   lap(1, 'BASELINE', null),
-  lap(2, 'NOMINAL', 0.2),
-  lap(3, 'WATCH', 0.6),
-  lap(4, 'ALERT', 0.9),
-  lap(5, 'ALERT', 0.95),
+  lap(2, 'NOMINAL', 0.2, { threshold: 0.7 }),
+  lap(3, 'WATCH', 0.6, { threshold: 0.7 }),
+  lap(4, 'ALERT', 0.9, { threshold: 0.7 }),
+  lap(5, 'ALERT', 0.95, { threshold: 0.7 }),
 ];
 
 describe('alertTone', () => {
@@ -44,27 +59,13 @@ describe('alertTone', () => {
   });
 });
 
-describe('hasAnyAlert / firstAlertLap', () => {
-  it('detects an ALERT anywhere in the replay', () => {
-    expect(hasAnyAlert(TRACE)).toBe(true);
-    expect(hasAnyAlert(TRACE.slice(0, 3))).toBe(false);
+describe('stintThreshold', () => {
+  it('finds the stint τ past null BASELINE laps (constant per stint)', () => {
+    expect(stintThreshold(TRACE)).toBeCloseTo(0.7);
   });
 
-  it('finds the first ALERT lap up to the reached frontier', () => {
-    expect(firstAlertLap(TRACE, 4)?.lap_number).toBe(4);
-    expect(firstAlertLap(TRACE, 2)).toBeNull(); // WATCH reached, no ALERT yet
-  });
-});
-
-describe('lapsInAlert', () => {
-  it('counts the contiguous ALERT run ending at the reached lap', () => {
-    expect(lapsInAlert(TRACE, 4)).toBe(2); // laps 4 & 5
-    expect(lapsInAlert(TRACE, 3)).toBe(1); // only lap 4 reached
-  });
-
-  it('returns 0 when the reached lap is not ALERT', () => {
-    expect(lapsInAlert(TRACE, 2)).toBe(0);
-    expect(lapsInAlert(TRACE, -1)).toBe(0);
+  it('is null when the monitor never activated (no lap carries τ)', () => {
+    expect(stintThreshold([lap(1, 'BASELINE', null)])).toBeNull();
   });
 });
 
@@ -75,6 +76,52 @@ describe('deviationMax', () => {
 
   it('falls back to 1 when every score is null (no divide-by-zero)', () => {
     expect(deviationMax([lap(1, 'BASELINE', null)])).toBe(1);
+  });
+});
+
+describe('gaugeMax', () => {
+  it('anchors to τ with headroom when deviations stay under it', () => {
+    const calm = [lap(1, 'NOMINAL', 0.2, { threshold: 0.7 })];
+    expect(gaugeMax(calm)).toBeCloseTo(0.7 * THRESHOLD_HEADROOM);
+  });
+
+  it('lets the observed stint range win when deviations overshoot τ', () => {
+    expect(gaugeMax(TRACE)).toBeCloseTo(0.95); // 0.95 > 0.7 × 1.25 = 0.875
+  });
+
+  it('falls back to the observed range when τ is unavailable', () => {
+    expect(gaugeMax([lap(1, 'NOMINAL', 0.4)])).toBeCloseTo(0.4);
+  });
+});
+
+describe('driftTrail', () => {
+  const withCoords = (n: number, coords: unknown): ReplayLap =>
+    lap(n, 'NOMINAL', 0.1, { fingerprint_snapshot: { coords_2d: coords } } as Partial<ReplayLap>);
+
+  it('collects the reached laps’ 2D coords in order, tagged with their index', () => {
+    const laps = [withCoords(1, [0, 0]), withCoords(2, [1, 2]), withCoords(3, [2, 4])];
+    expect(driftTrail(laps, 1)).toEqual([
+      { x: 0, y: 0, index: 0 },
+      { x: 1, y: 2, index: 1 },
+    ]);
+  });
+
+  it('skips laps without a snapshot or with non-finite coords — never fabricates a point', () => {
+    const laps = [
+      withCoords(1, [0, 1]),
+      lap(2, 'NOMINAL', 0.2),
+      withCoords(3, [NaN, 2]),
+      withCoords(4, ['a', 'b']),
+      withCoords(5, [3, 4]),
+    ];
+    expect(driftTrail(laps, 4)).toEqual([
+      { x: 0, y: 1, index: 0 },
+      { x: 3, y: 4, index: 4 },
+    ]);
+  });
+
+  it('is empty for an out-of-range or negative frontier', () => {
+    expect(driftTrail([withCoords(1, [1, 1])], -1)).toEqual([]);
   });
 });
 

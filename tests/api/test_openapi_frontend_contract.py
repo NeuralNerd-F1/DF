@@ -161,18 +161,41 @@ def test_style_space_response_fields() -> None:
 
 # --- F19 (Screen 6 Historical Race Replay Monitor) ------------------------------------------------
 # Screen 6 reads ReplayLap/ReplayResponse (aliased in lib/api/types.ts, guarded by zReplay). The
-# route drops τ + the DegradationAlert (div #72–#75); these assert the 5 fields that ship.
+# replay redesign widened the DTO with τ + the DegradationAlert (closing div #72–#74) and added
+# the /sessions catalog (closing div #77).
 
 
 def test_replay_lap_fields() -> None:
     props = _schemas()["ReplayLap"]["properties"]
     for field in (
         "lap_number", "feature_vector", "deviation_score", "alert_state",
-        "fingerprint_snapshot",
+        "fingerprint_snapshot", "threshold", "alert",
     ):
         assert field in props, f"ReplayLap lost {field!r} — breaks the Replay Monitor"
+
+
+def test_replay_alert_fields() -> None:
+    props = _schemas()["ReplayAlert"]["properties"]
+    for field in (
+        "alert_lap", "first_crossing_lap", "laps_since_threshold_crossed", "deviation_score",
+        "threshold", "alert_confidence", "feature_attribution", "top_features",
+        "optimal_window_remaining_laps",
+    ):
+        assert field in props, f"ReplayAlert lost {field!r} — breaks the alert banner"
 
 
 def test_replay_response_fields() -> None:
     props = _schemas()["ReplayResponse"]["properties"]
     assert "laps" in props, "ReplayResponse lost 'laps' — breaks Screen 6"
+
+
+def test_session_summary_fields() -> None:
+    schemas = _schemas()
+    for field in ("id", "circuit", "circuit_type", "season", "round", "session_type", "drivers"):
+        assert field in schemas["SessionSummary"]["properties"], (
+            f"SessionSummary lost {field!r} — breaks the session picker"
+        )
+    for field in ("code", "n_laps"):
+        assert field in schemas["SessionDriverSchema"]["properties"], (
+            f"SessionDriverSchema lost {field!r} — breaks the driver picker"
+        )

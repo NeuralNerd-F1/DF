@@ -66,6 +66,20 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **SCREEN 4 REDESIGN — 2026-08-08 (feat/comparison-redesign):** the Comparison screen rebuilt in the
+  Screens-1-4 design language, **frontend-only** (no backend/config/error-code change). Fixes a real
+  display bug: `/compare` serves each radar as raw mean-|SHAP| magnitudes (unbounded — throttle ≈ 3.3)
+  but `FingerprintRadar`/`DeltaRadar` clamp to a 0–1 radial, so the old screen rim-clamped most axes
+  into near-identical hexagons. New pure lib `lib/compare/compare.ts` (`pairAxisMaxima`,
+  `scaleByMaxima`, `featureShapDelta`, unit-tested): both radars AND the delta share ONE per-axis
+  scale (each axis ÷ the pair's max), stated in an on-screen caption. **Most-distinctive upgraded from
+  per-DOMAIN (old div #61) to per-FEATURE**: top 5 by |Δ| of the two drivers' served
+  `shap_signed` vectors (`/drivers/{code}/fingerprint`) with `FEATURE_LABELS` + plain-English hover;
+  a fingerprint failure degrades the panel to the served per-domain delta with an explicit note —
+  never an invented ranking. Selection is chip-based (driver 1 / swap / driver 2 / circuit); radar
+  cards are team-coloured; `/compare` 404 now renders `EmptyState` (honest absence) instead of an
+  ErrorCard. Compatibility stays the labelled div #62 setup-reliability proxy; setup delta table
+  restyled, mechanism unchanged. 24 comparison vitest (+ full 260 green), tsc/eslint clean.
 - **F19 REDESIGN — 2026-08-08 (feat/replay-redesign):** Screen 6 rebuilt in the Screens-1-4 design
   language, and the F19 seams **closed with real data** — the spec's own recommended follow-up (F19 §10
   risk 2). **Backend (additive, no error-code change):** `app/replay/engine.py` now forwards per-lap

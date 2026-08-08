@@ -272,6 +272,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sessions
+         * @description List persisted sessions with their replayable drivers (newest season/round first).
+         */
+        get: operations["sessions_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stylespace": {
         parameters: {
             query?: never;
@@ -570,8 +590,37 @@ export interface components {
             /** Top 3 */
             top_3?: components["schemas"]["TopK"][];
         };
+        /**
+         * ReplayAlert
+         * @description The F10 ``DegradationAlert`` as of one replayed lap (§5.3 / §10.7 banner payload). Mirrors
+         *     ``app.monitoring.detector.DegradationAlert`` field-for-field; closes the F19 alert seam
+         *     (div #74) — the route used to drop it.
+         */
+        ReplayAlert: {
+            /** Alert Confidence */
+            alert_confidence: string;
+            /** Alert Lap */
+            alert_lap: number;
+            /** Deviation Score */
+            deviation_score: number;
+            /** Feature Attribution */
+            feature_attribution?: {
+                [key: string]: number;
+            };
+            /** First Crossing Lap */
+            first_crossing_lap: number;
+            /** Laps Since Threshold Crossed */
+            laps_since_threshold_crossed: number;
+            /** Optimal Window Remaining Laps */
+            optimal_window_remaining_laps?: number | null;
+            /** Threshold */
+            threshold: number;
+            /** Top Features */
+            top_features?: string[];
+        };
         /** ReplayLap */
         ReplayLap: {
+            alert?: components["schemas"]["ReplayAlert"] | null;
             /** Alert State */
             alert_state: string;
             /** Deviation Score */
@@ -586,6 +635,8 @@ export interface components {
             } | null;
             /** Lap Number */
             lap_number: number;
+            /** Threshold */
+            threshold?: number | null;
         };
         /** ReplayResponse */
         ReplayResponse: {
@@ -624,6 +675,37 @@ export interface components {
             session: string;
             /** True Driver */
             true_driver: string;
+        };
+        /**
+         * SessionDriverSchema
+         * @description One driver's presence in a persisted session (code + how many laps are replayable).
+         */
+        SessionDriverSchema: {
+            /** Code */
+            code: string;
+            /** N Laps */
+            n_laps: number;
+        };
+        /**
+         * SessionSummary
+         * @description One catalog row for ``GET /sessions`` — the Screen 6 session picker (closes F19 div #77:
+         *     sessions were listed nowhere, forcing a raw UUID input).
+         */
+        SessionSummary: {
+            /** Circuit */
+            circuit: string;
+            /** Circuit Type */
+            circuit_type: string;
+            /** Drivers */
+            drivers?: components["schemas"]["SessionDriverSchema"][];
+            /** Id */
+            id: string;
+            /** Round */
+            round: number;
+            /** Season */
+            season: number;
+            /** Session Type */
+            session_type: string;
         };
         /** SetupParameterSchema */
         SetupParameterSchema: {
@@ -1260,6 +1342,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SampleSegmentSchema"][];
+                };
+            };
+        };
+    };
+    sessions_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSummary"][];
                 };
             };
         };

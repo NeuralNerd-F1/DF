@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Response
 
 from app.api.deps import AppState, get_apex_state, get_db_session, get_monitor_handle
 from app.api.errors import not_found
-from app.api.schemas import ReplayLap, ReplayResponse
+from app.api.schemas import ReplayAlert, ReplayLap, ReplayResponse
 from app.replay.engine import replay_stint
 
 if TYPE_CHECKING:
@@ -58,6 +58,8 @@ async def replay(
                 deviation_score=lap.deviation_score,
                 alert_state=lap.alert_state,
                 fingerprint_snapshot=lap.fingerprint_snapshot,
+                threshold=lap.threshold,
+                alert=ReplayAlert(**lap.alert) if lap.alert is not None else None,
             )
             for lap in result.laps
         ]

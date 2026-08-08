@@ -2,11 +2,18 @@
 
 import { ALERT_FILL_CLASS, ALERT_STROKE_CLASS, ALERT_TEXT_CLASS, alertTone } from '@/lib/replay/replay';
 
-// The deviation-score gauge (master §10.7, div #72). Value = the current lap's deviation_score; the
-// COLOUR comes from alert_state (NOMINAL→green / WATCH→amber / ALERT→red / else grey), NOT a numeric
-// τ compare — τ (threshold) is dropped by the route. Gauge max = the client stint deviation range,
-// labelled as such. deviation_score == null → "—" (honest, never 0). Named seam: ReplayLap.threshold.
-type Props = { score: number | null; state: string; max: number; className?: string };
+// The deviation-score gauge (master §10.7). Value = the current lap's deviation_score; the COLOUR
+// comes from alert_state (NOMINAL→green / WATCH→amber / ALERT→red / else grey). τ ships per lap now
+// (div #72 closed): the arc carries a real threshold tick and the scale max anchors to τ with
+// headroom (gaugeMax), so the needle crossing the tick IS the alert crossing.
+// deviation_score == null → "—" (honest, never 0).
+type Props = {
+  score: number | null;
+  state: string;
+  max: number;
+  threshold?: number | null;
+  className?: string;
+};
 
 const CX = 50;
 const CY = 50;
@@ -19,9 +26,9 @@ function angleDeg(v: number, max: number): number {
   const f = max > 0 ? clampTo(v, 0, max) / max : 0;
   return 180 - f * 180; // 0 → 180° (left), max → 0° (right)
 }
-function pointAt(deg: number): [number, number] {
+function pointAt(deg: number, r: number = R): [number, number] {
   const rad = (deg * Math.PI) / 180;
-  return [CX + R * Math.cos(rad), CY - R * Math.sin(rad)];
+  return [CX + r * Math.cos(rad), CY - r * Math.sin(rad)];
 }
 function arcPath(a0: number, a1: number): string {
   const [x0, y0] = pointAt(a0);
@@ -30,18 +37,22 @@ function arcPath(a0: number, a1: number): string {
   return `M ${x0} ${y0} A ${R} ${R} 0 ${large} 0 ${x1} ${y1}`; // sweep 0 → the upper semicircle
 }
 
-export function DeviationGauge({ score, state, max, className = '' }: Props) {
+export function DeviationGauge({ score, state, max, threshold = null, className = '' }: Props) {
   const tone = alertTone(state);
   const hasScore = typeof score === 'number' && Number.isFinite(score);
   const header = hasScore ? (score as number).toFixed(2) : '—';
   const needleDeg = hasScore ? angleDeg(score as number, max) : null;
+  const hasTau = typeof threshold === 'number' && Number.isFinite(threshold);
+  const tauDeg = hasTau ? angleDeg(threshold as number, max) : null;
 
   return (
     <div className={className} data-testid="deviation-gauge" data-tone={tone} data-state={state}>
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[10px] uppercase text-text-secondary">deviation</span>
+        <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-text-secondary">
+          Deviation score
+        </span>
         <span
-          className={`font-mono text-sm ${ALERT_TEXT_CLASS[tone]}`}
+          className={`font-mono text-[17px] tabular-nums ${ALERT_TEXT_CLASS[tone]}`}
           data-testid="deviation-gauge-value"
         >
           {header}
@@ -49,6 +60,26 @@ export function DeviationGauge({ score, state, max, className = '' }: Props) {
       </div>
       <svg viewBox="0 0 100 56" className="w-full" aria-label={`deviation ${header}, ${state}`}>
         <path d={arcPath(180, 0)} fill="none" className="stroke-border" strokeWidth={3} />
+        {tauDeg != null ? (
+          // The REAL alert threshold τ, marked on the arc (div #72 closed — no longer a deferred seam).
+          <g data-testid="gauge-threshold-tick">
+            {(() => {
+              const [ix, iy] = pointAt(tauDeg, R - 5);
+              const [ox, oy] = pointAt(tauDeg, R + 5);
+              return (
+                <line
+                  x1={ix}
+                  y1={iy}
+                  x2={ox}
+                  y2={oy}
+                  className="stroke-accent"
+                  strokeWidth={1.5}
+                  strokeDasharray="2 1.5"
+                />
+              );
+            })()}
+          </g>
+        ) : null}
         {hasScore && needleDeg != null ? (
           <>
             {/* value arc from 0 → score, coloured by alert_state */}
@@ -72,7 +103,9 @@ export function DeviationGauge({ score, state, max, className = '' }: Props) {
         ) : null}
       </svg>
       <p className="mt-1 font-mono text-[9px] text-text-secondary" data-testid="gauge-threshold-note">
-        max = stint range (τ threshold not exposed)
+        {hasTau
+          ? `τ = ${(threshold as number).toFixed(2)} — alert threshold calibrated for this stint`
+          : 'τ unavailable — monitor not activated for this stint'}
       </p>
     </div>
   );

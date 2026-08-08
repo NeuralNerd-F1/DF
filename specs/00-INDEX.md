@@ -66,6 +66,28 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **F19 REDESIGN — 2026-08-08 (feat/replay-redesign):** Screen 6 rebuilt in the Screens-1-4 design
+  language, and the F19 seams **closed with real data** — the spec's own recommended follow-up (F19 §10
+  risk 2). **Backend (additive, no error-code change):** `app/replay/engine.py` now forwards per-lap
+  `threshold` (τ, `LapDeviation.threshold`) and the serialised `DegradationAlert` **as of each lap's
+  prefix** (`ReplayLapData.alert`); `ReplayLap` gains `threshold` + `alert: ReplayAlert` (new schema
+  mirroring the F10 payload field-for-field). New **`GET /sessions`** catalog route
+  (`app/api/routes/sessions.py` → `SessionSummary`/`SessionDriverSchema`): every persisted session with
+  its replayable driver codes + lap counts; empty DB → honest `200 []`, DB faults → the same coded 503s
+  as `/replay`. **Divergences #72/#73/#74 (τ + alert-detail seams) and #77 (no session catalog) are
+  CLOSED**; #75 (per-lap 6-domain radar) remains open — the system still computes none — but the panel
+  now renders the REAL per-lap F08 2D snapshot as a drift trail (`FingerprintDriftPanel`, replacing the
+  deferred `PerLapRadarPanel`), never a fabricated radar. **Frontend:** `ReplayMonitorScreen` rebuilt —
+  session/driver chip pickers off the catalog (raw-UUID input survives only as the catalog-error
+  fallback), gauge with a real τ tick (`gaugeMax` anchors the scale to τ×1.25 headroom), timeline with
+  the master's real dashed τ line, banner showing served confidence / feature drivers (FEATURE_LABELS +
+  attribution weights) / laps-since-crossed / pit window, `MonitorStatus` card, grid cells restyled with
+  team rules + served alert chips and `compact` timelines; `DriverReplayGrid` fans out over the
+  session's driver **codes**. OpenAPI snapshot + `schema.d.ts` + zod validators regenerated (additive
+  only); drift guard extended (`ReplayAlert`, `SessionSummary`). Engine/route/sessions pytest + 72
+  replay vitest green; verified live against the seeded Bahrain demo (per-driver τ 1.16–1.71, alerts at
+  laps 15/18/20/22/25). Known flake (pre-existing, unrelated): `tests/eval/test_offline_report_shape`
+  is order-dependent in the full suite — passed on immediate full-suite rerun.
 - **F18 POLISH — 2026-07-29 (style/style-space-explainability):** frontend-only explainability pass on
   Screen 5 — the scatter rendered as unlabelled coloured dots with nothing on screen saying what a dot
   *is*. Adds `StyleSpaceLegend` (every plotted driver + team colour, doubling as a hover/select picker,

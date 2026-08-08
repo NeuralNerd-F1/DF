@@ -309,13 +309,53 @@ class UploadResponse(ApiModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ReplayAlert(ApiModel):
+    """The F10 ``DegradationAlert`` as of one replayed lap (§5.3 / §10.7 banner payload). Mirrors
+    ``app.monitoring.detector.DegradationAlert`` field-for-field; closes the F19 alert seam
+    (div #74) — the route used to drop it."""
+
+    alert_lap: int
+    first_crossing_lap: int
+    laps_since_threshold_crossed: int
+    deviation_score: float
+    threshold: float
+    alert_confidence: str
+    feature_attribution: dict[str, float] = Field(default_factory=dict)
+    top_features: list[str] = Field(default_factory=list)
+    optimal_window_remaining_laps: int | None = None
+
+
 class ReplayLap(ApiModel):
     lap_number: int
     feature_vector: dict[str, float | None]
     deviation_score: float | None = None
     alert_state: str
     fingerprint_snapshot: dict[str, Any] | None = None
+    # τ for this stint (constant per stint; null on BASELINE/SKIPPED laps) — closes div #72/#73.
+    threshold: float | None = None
+    # The DegradationAlert as of this lap's prefix; null until the alert fires — closes div #74.
+    alert: ReplayAlert | None = None
 
 
 class ReplayResponse(ApiModel):
     laps: list[ReplayLap] = Field(default_factory=list)
+
+
+class SessionDriverSchema(ApiModel):
+    """One driver's presence in a persisted session (code + how many laps are replayable)."""
+
+    code: str
+    n_laps: int
+
+
+class SessionSummary(ApiModel):
+    """One catalog row for ``GET /sessions`` — the Screen 6 session picker (closes F19 div #77:
+    sessions were listed nowhere, forcing a raw UUID input)."""
+
+    id: str
+    circuit: str
+    circuit_type: str
+    season: int
+    round: int
+    session_type: str
+    drivers: list[SessionDriverSchema] = Field(default_factory=list)

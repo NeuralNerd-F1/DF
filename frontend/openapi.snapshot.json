@@ -701,9 +701,84 @@
         "title": "PredictResponse",
         "type": "object"
       },
+      "ReplayAlert": {
+        "additionalProperties": false,
+        "description": "The F10 ``DegradationAlert`` as of one replayed lap (\u00a75.3 / \u00a710.7 banner payload). Mirrors\n``app.monitoring.detector.DegradationAlert`` field-for-field; closes the F19 alert seam\n(div #74) \u2014 the route used to drop it.",
+        "properties": {
+          "alert_confidence": {
+            "title": "Alert Confidence",
+            "type": "string"
+          },
+          "alert_lap": {
+            "title": "Alert Lap",
+            "type": "integer"
+          },
+          "deviation_score": {
+            "title": "Deviation Score",
+            "type": "number"
+          },
+          "feature_attribution": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Feature Attribution",
+            "type": "object"
+          },
+          "first_crossing_lap": {
+            "title": "First Crossing Lap",
+            "type": "integer"
+          },
+          "laps_since_threshold_crossed": {
+            "title": "Laps Since Threshold Crossed",
+            "type": "integer"
+          },
+          "optimal_window_remaining_laps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Optimal Window Remaining Laps"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          },
+          "top_features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Features",
+            "type": "array"
+          }
+        },
+        "required": [
+          "alert_lap",
+          "first_crossing_lap",
+          "laps_since_threshold_crossed",
+          "deviation_score",
+          "threshold",
+          "alert_confidence"
+        ],
+        "title": "ReplayAlert",
+        "type": "object"
+      },
       "ReplayLap": {
         "additionalProperties": false,
         "properties": {
+          "alert": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReplayAlert"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "alert_state": {
             "title": "Alert State",
             "type": "string"
@@ -748,6 +823,17 @@
           "lap_number": {
             "title": "Lap Number",
             "type": "integer"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
           }
         },
         "required": [
@@ -829,6 +915,73 @@
           "true_driver"
         ],
         "title": "SampleSegmentSchema",
+        "type": "object"
+      },
+      "SessionDriverSchema": {
+        "additionalProperties": false,
+        "description": "One driver's presence in a persisted session (code + how many laps are replayable).",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "n_laps": {
+            "title": "N Laps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "n_laps"
+        ],
+        "title": "SessionDriverSchema",
+        "type": "object"
+      },
+      "SessionSummary": {
+        "additionalProperties": false,
+        "description": "One catalog row for ``GET /sessions`` \u2014 the Screen 6 session picker (closes F19 div #77:\nsessions were listed nowhere, forcing a raw UUID input).",
+        "properties": {
+          "circuit": {
+            "title": "Circuit",
+            "type": "string"
+          },
+          "circuit_type": {
+            "title": "Circuit Type",
+            "type": "string"
+          },
+          "drivers": {
+            "items": {
+              "$ref": "#/components/schemas/SessionDriverSchema"
+            },
+            "title": "Drivers",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "round": {
+            "title": "Round",
+            "type": "integer"
+          },
+          "season": {
+            "title": "Season",
+            "type": "integer"
+          },
+          "session_type": {
+            "title": "Session Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "circuit",
+          "circuit_type",
+          "season",
+          "round",
+          "session_type"
+        ],
+        "title": "SessionSummary",
         "type": "object"
       },
       "SetupParameterSchema": {
@@ -2010,6 +2163,32 @@
         "summary": "List Segments",
         "tags": [
           "predict"
+        ]
+      }
+    },
+    "/sessions": {
+      "get": {
+        "description": "List persisted sessions with their replayable drivers (newest season/round first).",
+        "operationId": "sessions_sessions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionSummary"
+                  },
+                  "title": "Response Sessions Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sessions",
+        "tags": [
+          "replay"
         ]
       }
     },

@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 import { DeviationGauge } from './DeviationGauge';
 
-describe('DeviationGauge (div #72)', () => {
+describe('DeviationGauge (div #72 closed — real τ)', () => {
   it('shows the deviation score and draws a needle', () => {
-    render(<DeviationGauge score={0.5} state="ALERT" max={1} />);
+    render(<DeviationGauge score={0.5} state="ALERT" max={1} threshold={0.7} />);
     expect(screen.getByTestId('deviation-gauge-value')).toHaveTextContent('0.50');
     expect(screen.getByTestId('deviation-gauge-needle')).toBeInTheDocument();
     expect(screen.getByTestId('deviation-gauge-arc')).toBeInTheDocument();
@@ -21,14 +21,21 @@ describe('DeviationGauge (div #72)', () => {
   });
 
   it('renders "—" and NO needle when the score is null (honest, never 0)', () => {
-    render(<DeviationGauge score={null} state="BASELINE" max={1} />);
+    render(<DeviationGauge score={null} state="BASELINE" max={1} threshold={0.7} />);
     expect(screen.getByTestId('deviation-gauge-value')).toHaveTextContent('—');
     expect(screen.queryByTestId('deviation-gauge-needle')).toBeNull();
     expect(screen.getByTestId('deviation-gauge')).toHaveAttribute('data-tone', 'idle');
   });
 
-  it('labels the max as the client stint range with τ deferred (named seam)', () => {
-    render(<DeviationGauge score={0.5} state="NOMINAL" max={1} />);
-    expect(screen.getByTestId('gauge-threshold-note')).toHaveTextContent(/threshold not exposed/i);
+  it('marks the REAL τ on the arc and states its value', () => {
+    render(<DeviationGauge score={0.5} state="NOMINAL" max={1} threshold={0.7} />);
+    expect(screen.getByTestId('gauge-threshold-tick')).toBeInTheDocument();
+    expect(screen.getByTestId('gauge-threshold-note')).toHaveTextContent('τ = 0.70');
+  });
+
+  it('omits the tick and says so when τ is unavailable (monitor never activated)', () => {
+    render(<DeviationGauge score={null} state="INACTIVE" max={1} threshold={null} />);
+    expect(screen.queryByTestId('gauge-threshold-tick')).toBeNull();
+    expect(screen.getByTestId('gauge-threshold-note')).toHaveTextContent(/τ unavailable/i);
   });
 });

@@ -34,9 +34,13 @@ export type IngestStatusResponse = components['schemas']['IngestStatusResponse']
 export type UploadResponse = components['schemas']['UploadResponse'];
 
 // F19 — Screen 6 (Historical Race Replay Monitor). Aliased from the SAME generated components
-// (div #70); the snapshot already carries these (F13/F14 defined them) → no regen.
+// (div #70). The replay redesign widened ReplayLap (threshold + alert — div #72–#74 closed) and
+// added the /sessions catalog (div #77 closed).
 export type ReplayResponse = components['schemas']['ReplayResponse'];
 export type ReplayLap = components['schemas']['ReplayLap'];
+export type ReplayAlert = components['schemas']['ReplayAlert'];
+export type SessionSummary = components['schemas']['SessionSummary'];
+export type SessionDriver = components['schemas']['SessionDriverSchema'];
 
 // alert_state is a bare `str` on the wire (StintMonitorState.value, app/monitoring/detector.py).
 // Narrow it to the 8 states the monitor emits so the gauge/timeline/banner switch exhaustively.

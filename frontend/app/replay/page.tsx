@@ -8,13 +8,19 @@ export const metadata: Metadata = {
   description: 'Historical race replay — lap-by-lap degradation monitor (Screen 6).',
 };
 
-// Screen 6 (master §10.7). SSR only the driver picker; the replay itself is fetched client-side once
-// the user enters a session id (no session-catalog endpoint — div #77).
+// Screen 6 (master §10.7). SSR only the driver identities (team colours + the catalog-unavailable
+// fallback picker); the session catalog and the replay itself are fetched client-side off
+// /sessions + /replay (div #77 closed — sessions are picked, not typed).
 export const dynamic = 'force-dynamic';
 
 export default async function ReplayPage() {
   const drivers = await getDrivers();
-  // A /drivers failure is non-fatal here: the driver picker degrades to a UUID input (div #77).
+  // A /drivers failure is non-fatal here: team colours degrade to neutral and the fallback picker
+  // degrades to a UUID input; the session catalog carries the selection either way.
   const driverList = drivers.ok ? drivers.data : [];
-  return <ReplayMonitorScreen initialDrivers={driverList} />;
+  return (
+    <main className="mx-auto max-w-7xl p-6">
+      <ReplayMonitorScreen initialDrivers={driverList} />
+    </main>
+  );
 }

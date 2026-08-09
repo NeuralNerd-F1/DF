@@ -110,6 +110,68 @@ def _state(make_handle: Callable[..., Any], row: list[float], tmp_path: Path) ->
     )
 
 
+def test_confidence_breakdown_composes_served_signals(
+    make_handle: Callable[..., Any], tmp_path: Path
+) -> None:
+    """System input #6: the breakdown is a product of the three served signals, with denominators
+    taken from the EXISTING config boundaries — computed after the gate, never read by it."""
+    cfg = _cfg(tmp_path)
+    th = cfg.thresholds
+    r = _state(make_handle, [0.9, 0.1], tmp_path)
+    bd = r.confidence_breakdown
+    assert bd is not None
+    assert bd.feature_quality == pytest.approx(1.0)  # no NULLs → far from the ceiling
+    h = float(-(0.9 * np.log2(0.9) + 0.1 * np.log2(0.1)))
+    assert bd.distribution == pytest.approx(1.0 - h / th.entropy_ambiguous_bits)
+    assert bd.model_confidence == pytest.approx(0.9)
+    assert bd.overall == pytest.approx(bd.feature_quality * bd.distribution * bd.model_confidence)
+
+
+def test_confidence_breakdown_scales_with_nulls(
+    make_handle: Callable[..., Any],
+    clean_vector: Callable[[], dict[str, float]],
+    tmp_path: Path,
+) -> None:
+    cfg = _cfg(tmp_path)
+    th = cfg.thresholds
+    handle = make_handle([0.9, 0.1])
+    fv: dict[str, float | None] = dict(clean_vector())
+    for fid in list(fv)[:3]:
+        fv[fid] = None  # 3 of the 6-NULL tolerance
+    r = predict(fv, circuit="Bahrain", handle=handle, config=cfg)
+    bd = r.confidence_breakdown
+    assert bd is not None
+    assert bd.feature_quality == pytest.approx(1.0 - 3 / th.null_ceiling)
+    assert bd.overall < bd.model_confidence  # a weak factor drags the product down
+
+
+def test_confidence_breakdown_present_on_gated_results_but_never_gates(
+    make_handle: Callable[..., Any], tmp_path: Path
+) -> None:
+    # A LOW_CONFIDENCE result still carries the breakdown (it EXPLAINS the uncertainty) — and the
+    # gate outcome is exactly what it was before the breakdown existed (state stays authoritative).
+    low = _state(make_handle, [0.5, 0.5], tmp_path)
+    assert low.confidence_state is ConfidenceState.LOW_CONFIDENCE
+    assert low.top_prediction is None
+    assert low.confidence_breakdown is not None
+    assert low.confidence_breakdown.model_confidence == pytest.approx(0.5)
+
+
+def test_confidence_breakdown_none_on_failed(
+    make_handle: Callable[..., Any],
+    clean_vector: Callable[[], dict[str, float]],
+    tmp_path: Path,
+) -> None:
+    cfg = _cfg(tmp_path)
+    handle = make_handle([0.9, 0.1])
+    fv: dict[str, float | None] = dict(clean_vector())
+    for fid in list(fv)[:7]:  # over the 6-NULL ceiling → FAILED, model never called
+        fv[fid] = None
+    r = predict(fv, circuit="Bahrain", handle=handle, config=cfg)
+    assert r.status is Status.FAILED
+    assert r.confidence_breakdown is None  # no distribution to score — mirrors confidence_state
+
+
 def test_confidence_gate_boundary(make_handle: Callable[..., Any], tmp_path: Path) -> None:
     below = _state(make_handle, [0.649, 0.351], tmp_path)
     assert below.confidence_state is ConfidenceState.LOW_CONFIDENCE

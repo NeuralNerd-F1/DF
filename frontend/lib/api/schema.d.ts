@@ -370,6 +370,23 @@ export interface components {
             most_distinctive_features: string[];
         };
         /**
+         * ConfidenceBreakdownSchema
+         * @description The propagated-confidence composition (system input #6). Mirrors
+         *     ``app.ml.inference.ConfidenceBreakdown`` field-for-field: three served signals (distance from
+         *     the NULL ceiling, distance from the AMBIGUOUS entropy boundary, calibrated max-probability) and
+         *     their product. Presentational — the gate's ``confidence_state`` stays authoritative.
+         */
+        ConfidenceBreakdownSchema: {
+            /** Distribution */
+            distribution: number;
+            /** Feature Quality */
+            feature_quality: number;
+            /** Model Confidence */
+            model_confidence: number;
+            /** Overall */
+            overall: number;
+        };
+        /**
          * ConfidenceState
          * @description Explicit confidence / uncertainty state for a classifier prediction.
          *
@@ -573,6 +590,7 @@ export interface components {
             };
             /** Confidence */
             confidence: number;
+            confidence_breakdown?: components["schemas"]["ConfidenceBreakdownSchema"] | null;
             confidence_state: components["schemas"]["ConfidenceState"] | null;
             /** Model Version */
             model_version: string;
@@ -709,6 +727,8 @@ export interface components {
         };
         /** SetupParameterSchema */
         SetupParameterSchema: {
+            /** Basis Features */
+            basis_features?: string[];
             /** Category */
             category?: string | null;
             /** Confidence */
@@ -719,6 +739,8 @@ export interface components {
             fia_max?: number | null;
             /** Fia Min */
             fia_min?: number | null;
+            /** Grid Mean */
+            grid_mean?: number | null;
             /** Kind */
             kind: string;
             /** Name */

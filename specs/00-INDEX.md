@@ -66,6 +66,35 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **SYSTEM INPUTS — 2026-08-09 (feat/system-inputs):** three of the supervisor-review
+  system-architecture inputs implemented (the remainder are research-scale and are addressed as
+  trade-offs/future work in the design document):
+  **(1) Propagated confidence on `/predict`** (input #6): new `ConfidenceBreakdown` on
+  `PredictionResult`/`PredictResponse` — `feature_quality` (1 − n_nulls/`thresholds.null_ceiling`),
+  `distribution` (1 − entropy/`thresholds.entropy_ambiguous_bits`, floored at 0 — the SAME entropy
+  the AMBIGUOUS gate compared), `model_confidence` (calibrated max-prob), `overall` = their
+  **product** (multiplicative — no arbitrary weights to justify; denominators are existing config
+  boundaries, so ZERO new constants). Computed AFTER the gate; nothing reads it back —
+  `confidence_state` stays authoritative (constitution #4); `None` on FAILED and on cached
+  pre-upgrade payloads. Surfaced as a numbers-only row in `PredictedDriverCard` (tone still from
+  the gate's state).
+  **(2) Setup tendencies** (input #2 / doc point P7): `SetupParameter.grid_mean` — the serve-time
+  grid reference = the fitted regressors' mean recommendation across every known driver in the
+  same circuit context (predict-only, Monaco override + FIA clip mirrored; CATEGORY excluded — a
+  mean over category ordinals has no honest reading; a fault degrades to absent + an
+  `INFERENCE_ERROR` DQ row, never blocks). Frontend `lib/design/setup.ts` renders the sanctioned
+  "starting direction" register: "less front downforce — calmer front end (vs grid average 4.8)";
+  direction decided on FORMATTED values so sub-precision deltas never manufacture a direction;
+  no grid_mean → no tendency line, ever.
+  **(3) Setup explanations** (input #8): `SetupParameter.basis_features` — the design-time §7.3
+  basis of each target heuristic (a documented constant, phrased as such), surfaced via
+  `FEATURE_LABELS` in the row tooltip. The per-driver SHAP over opaque UMAP dims is deliberately
+  NOT translated into driving-trait prose (F11 honesty constraint). Detector-alert explanations
+  were already closed by the F19 redesign (served feature attribution in the banner).
+  Contract artefacts regenerated additive-only; drift guard += `ConfidenceBreakdownSchema`,
+  `grid_mean`, `basis_features`. Engine/API/inference pytest + 271 vitest green; known
+  order-dependent flake `tests/eval/test_offline_report_shape` again seen in one full-suite run,
+  green standalone and on rerun (pre-existing, tracked).
 - **SCREEN 4 REDESIGN — 2026-08-08 (feat/comparison-redesign):** the Comparison screen rebuilt in the
   Screens-1-4 design language, **frontend-only** (no backend/config/error-code change). Fixes a real
   display bug: `/compare` serves each radar as raw mean-|SHAP| magnitudes (unbounded — throttle ≈ 3.3)

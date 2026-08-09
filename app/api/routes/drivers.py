@@ -237,6 +237,8 @@ async def driver_setup(
             constraint_flags=list(p.constraint_flags),
             shap_top_features=list(p.shap_top_features),
             shap_available=p.shap_available,
+            grid_mean=p.grid_mean,
+            basis_features=list(p.basis_features),
         )
         for p in rec.parameters
     ]

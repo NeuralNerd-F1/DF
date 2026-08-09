@@ -25,6 +25,7 @@ from app.api.deps import (
 )
 from app.api.errors import ApiError, invalid_input
 from app.api.schemas import (
+    ConfidenceBreakdownSchema,
     PredictRequest,
     PredictResponse,
     SampleSegmentSchema,
@@ -85,6 +86,7 @@ async def post_predict(
             expl = explainer_fn(req.feature_vector, req.circuit, result.top_prediction)
             shap_values = expl.shap_values
             shap_available = expl.shap_available
+        bd = result.confidence_breakdown
         return PredictResponse(
             predicted_driver=result.top_prediction,
             confidence=result.confidence,
@@ -94,6 +96,16 @@ async def post_predict(
             shap_values=shap_values,
             shap_available=shap_available,
             model_version=result.model_version,
+            confidence_breakdown=(
+                ConfidenceBreakdownSchema(
+                    feature_quality=bd.feature_quality,
+                    distribution=bd.distribution,
+                    model_confidence=bd.model_confidence,
+                    overall=bd.overall,
+                )
+                if bd is not None
+                else None
+            ),
         ).model_dump(mode="json")
 
     # Model-output cache (§8.2). Keyed by a hash of the feature vector + circuit (deterministic →

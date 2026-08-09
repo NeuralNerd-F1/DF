@@ -141,7 +141,8 @@ async def test_replay_monitor_not_loaded_is_503(
 async def test_replay_db_not_configured_is_503_health_fail(
     api: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # DB never configured at startup (no engine built) → HEALTH_FAIL, distinct from a runtime outage.
+    # DB never configured at startup (no engine built) → HEALTH_FAIL — distinct from a runtime
+    # outage.
     _fake_monitor(monkeypatch)
     sid, did = await _seed(api, [1, 2, 3])
     api.state.session_factory = None

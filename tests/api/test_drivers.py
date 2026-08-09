@@ -76,6 +76,9 @@ async def test_driver_setup_ok(api: SimpleNamespace) -> None:
     assert body["parameters"][0]["name"] == "front_wing_angle"
     assert body["parameters"][0]["rating"] == "HIGH"
     assert "approximated" in body["approximation_disclaimer"]
+    # System input #2: the grid reference + heuristic basis ride the wire for the tendency line.
+    assert body["parameters"][0]["grid_mean"] == 4.2
+    assert body["parameters"][0]["basis_features"] == ["F19", "F14"]
 
 
 async def test_driver_setup_unknown_driver_is_404(api: SimpleNamespace) -> None:

@@ -88,6 +88,36 @@
         "title": "CompareResponse",
         "type": "object"
       },
+      "ConfidenceBreakdownSchema": {
+        "additionalProperties": false,
+        "description": "The propagated-confidence composition (system input #6). Mirrors\n``app.ml.inference.ConfidenceBreakdown`` field-for-field: three served signals (distance from\nthe NULL ceiling, distance from the AMBIGUOUS entropy boundary, calibrated max-probability) and\ntheir product. Presentational \u2014 the gate's ``confidence_state`` stays authoritative.",
+        "properties": {
+          "distribution": {
+            "title": "Distribution",
+            "type": "number"
+          },
+          "feature_quality": {
+            "title": "Feature Quality",
+            "type": "number"
+          },
+          "model_confidence": {
+            "title": "Model Confidence",
+            "type": "number"
+          },
+          "overall": {
+            "title": "Overall",
+            "type": "number"
+          }
+        },
+        "required": [
+          "feature_quality",
+          "distribution",
+          "model_confidence",
+          "overall"
+        ],
+        "title": "ConfidenceBreakdownSchema",
+        "type": "object"
+      },
       "ConfidenceState": {
         "description": "Explicit confidence / uncertainty state for a classifier prediction.\n\nMirrors the ``predictions.confidence_state`` column (master spec \u00a78.4) and adds\n``OUT_OF_DISTRIBUTION`` \u2014 the style-space state (\u00a75.2) that the project\nconstitution lists as a mandatory uncertainty state (non-negotiable #4). The\nclassifier never returns a forced label below the confidence gate; it returns\none of these states instead.",
         "enum": [
@@ -640,6 +670,16 @@
             "title": "Confidence",
             "type": "number"
           },
+          "confidence_breakdown": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfidenceBreakdownSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "confidence_state": {
             "anyOf": [
               {
@@ -987,6 +1027,13 @@
       "SetupParameterSchema": {
         "additionalProperties": false,
         "properties": {
+          "basis_features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Basis Features",
+            "type": "array"
+          },
           "category": {
             "anyOf": [
               {
@@ -1030,6 +1077,17 @@
               }
             ],
             "title": "Fia Min"
+          },
+          "grid_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grid Mean"
           },
           "kind": {
             "title": "Kind",

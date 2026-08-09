@@ -107,6 +107,7 @@ REASON_MLFLOW = "MLFLOW_LOGGING_DEGRADED"
 REASON_NO_CELLS = "NO_USABLE_TRAINING_CELLS"
 REASON_EXPLAINER = "EXPLAINER_BUILD_FAILED"
 REASON_INVALID = "SERVE_INPUT_MALFORMED"
+REASON_GRID_REFERENCE = "GRID_REFERENCE_UNAVAILABLE"
 _FALLBACK_LOG = "logs/data_quality_log.jsonl"  # last-resort DQ sink when config.paths is unreadable
 
 _ENTITY_CELL = "cell"
@@ -217,6 +218,16 @@ class SetupParameter(BaseModel):
     constraint_flags: list[ErrorCode] = Field(default_factory=list)
     shap_top_features: list[str] = Field(default_factory=list)
     shap_available: bool = False
+    # The grid reference (system input #2 — "setup tendencies"): the mean of the fitted model's own
+    # recommendations across every known driver in the SAME circuit context. Lets the UI state a
+    # direction ("above the grid average") as a fact about the model's outputs — never a claim
+    # about a real team's setup. None for CATEGORY kinds (a mean over category ordinals has no
+    # honest reading) and when the reference could not be computed (degraded, logged).
+    grid_mean: float | None = None
+    # The §7.3 fingerprint features the TARGET HEURISTIC was built from — a design-time constant
+    # (identical for every driver), served so the UI can say what this parameter is derived from
+    # without pretending the per-driver SHAP (over opaque UMAP dims) says it.
+    basis_features: list[str] = Field(default_factory=list)
 
 
 class SetupRecommendation(BaseResult):
@@ -898,10 +909,15 @@ def recommend_setup(
             base.logged = ledger.rows > 0
             return base
         coord5 = np.asarray(style_handle.known_coords_5d[driver], dtype=float)
+        grid_means = _grid_reference(
+            style_handle.known_coords_5d, circuit=circuit, circuit_type=circuit_type,
+            handle=handle, config=config.personalisation, ledger=ledger,
+            entity_id=f"{driver}/{circuit}",
+        )
         rec = _recommend_from_coord(
             coord5, circuit=circuit, circuit_type=circuit_type, handle=handle,
             config=config.personalisation, ledger=ledger, ood_max_pc_sd=0.0,
-            entity_id=f"{driver}/{circuit}",
+            entity_id=f"{driver}/{circuit}", grid_means=grid_means,
         )
         rec.driver, rec.circuit, rec.circuit_type = driver, circuit, circuit_type
         rec.model_version = handle.model_version
@@ -953,10 +969,15 @@ def onboard_unknown(
             )
         else:
             coord5 = np.asarray(snapshot.coords_5d, dtype=float)
+            grid_means = _grid_reference(
+                style_handle.known_coords_5d, circuit=circuit, circuit_type=circuit_type,
+                handle=handle, config=config.personalisation, ledger=ledger,
+                entity_id=f"unknown/{circuit}",
+            )
             pkg.setup = _recommend_from_coord(
                 coord5, circuit=circuit, circuit_type=circuit_type, handle=handle,
                 config=config.personalisation, ledger=ledger, ood_max_pc_sd=snapshot.ood_max_pc_sd,
-                entity_id=f"unknown/{circuit}",
+                entity_id=f"unknown/{circuit}", grid_means=grid_means,
             )
             pkg.setup.circuit, pkg.setup.circuit_type = circuit, circuit_type
             pkg.setup.model_version = handle.model_version
@@ -986,9 +1007,48 @@ def onboard_unknown(
 # ----------------------------------------------------------------------------------
 
 
+def _grid_reference(
+    known_coords_5d: dict[str, Any], *, circuit: str, circuit_type: str | None,
+    handle: PersonalisationHandle, config: PersonalisationConfig, ledger: _DQLedger,
+    entity_id: str,
+) -> dict[str, float]:
+    """The serve-time grid reference (system input #2): per numeric parameter, the mean of the
+    fitted regressor's predictions over EVERY known driver in the same circuit context, put through
+    the same Monaco override + FIA clip as a served value (rounding skipped — a mean is not a
+    setting). Predict-only — never a fit. A fault degrades to ``{}`` (tendencies simply absent)
+    with a logged row; it never blocks the recommendation itself."""
+    try:
+        if not known_coords_5d:
+            return {}
+        rows = [
+            _build_input(np.asarray(c, dtype=float), circuit_type, handle.circuit_types)
+            for c in known_coords_5d.values()
+        ]
+        grid_x = np.stack(rows)
+        is_monaco = circuit == config.monaco_circuit
+        out: dict[str, float] = {}
+        for spec in _SETUP_PARAMETERS:
+            if spec.kind is SetupOutputKind.CATEGORY:
+                continue  # a mean over category ordinals has no honest reading
+            lo, hi = handle.fia_bounds[spec.name]
+            if is_monaco and spec.name in (_FRONT_WING, _REAR_WING):
+                out[spec.name] = float(hi)  # the override applies to every driver equally
+                continue
+            preds = np.asarray(handle.regressors[spec.name].predict(grid_x), dtype=float)
+            out[spec.name] = float(np.clip(preds, lo, hi).mean())
+        return out
+    except Exception as exc:  # noqa: BLE001 — a reference stat never blocks the recommendation
+        ledger.record(code=ErrorCode.INFERENCE_ERROR, entity_type=_ENTITY_SETUP,
+                      entity_id=entity_id,
+                      detail=f"{REASON_GRID_REFERENCE}: {type(exc).__name__}: {exc}",
+                      fallback_used=True)
+        return {}
+
+
 def _recommend_from_coord(
     coord5: np.ndarray, *, circuit: str, circuit_type: str | None, handle: PersonalisationHandle,
     config: PersonalisationConfig, ledger: _DQLedger, ood_max_pc_sd: float, entity_id: str,
+    grid_means: dict[str, float] | None = None,
 ) -> SetupRecommendation:
     """Run Layers 1–3 + SHAP over one 5D coordinate → the 10 `SetupParameter`s (always 10, never a
     silent partial). Shared by `recommend_setup` (attenuation 1.0) and `onboard_unknown`."""
@@ -1032,6 +1092,8 @@ def _recommend_from_coord(
         rating = SetupConfidence.HIGH if monaco_here else _rating_of(confidence, config)
         param = _assemble_parameter(spec, clipped, lo, hi, confidence, rating, config, monaco_here,
                                     param_flags, ledger, entity_id)
+        param.grid_mean = (grid_means or {}).get(spec.name)
+        param.basis_features = list(spec.basis)
         params.append(param)
 
     # §4.2-4d physical consistency (checked AFTER clipping; flag only, never a value change).

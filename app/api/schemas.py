@@ -67,6 +67,11 @@ class SetupParameterSchema(ApiModel):
     constraint_flags: list[ErrorCode] = Field(default_factory=list)
     shap_top_features: list[str] = Field(default_factory=list)
     shap_available: bool = False
+    # System input #2 (setup tendencies): the model's mean recommendation across the known grid in
+    # the same circuit context (None for CATEGORY kinds / when unavailable), and the design-time
+    # §7.3 basis features of the target heuristic. Defaults keep older payloads valid.
+    grid_mean: float | None = None
+    basis_features: list[str] = Field(default_factory=list)
 
 
 # --- GET /health --------------------------------------------------------------------------------
@@ -84,6 +89,18 @@ class PredictRequest(ApiModel):
     circuit: str
 
 
+class ConfidenceBreakdownSchema(ApiModel):
+    """The propagated-confidence composition (system input #6). Mirrors
+    ``app.ml.inference.ConfidenceBreakdown`` field-for-field: three served signals (distance from
+    the NULL ceiling, distance from the AMBIGUOUS entropy boundary, calibrated max-probability) and
+    their product. Presentational — the gate's ``confidence_state`` stays authoritative."""
+
+    feature_quality: float
+    distribution: float
+    model_confidence: float
+    overall: float
+
+
 class PredictResponse(ApiModel):
     predicted_driver: str | None
     confidence: float
@@ -95,6 +112,8 @@ class PredictResponse(ApiModel):
     shap_values: dict[str, float] | None = None
     shap_available: bool = False
     model_version: str
+    # None on FAILED results and on cached pre-upgrade payloads (default keeps old caches valid).
+    confidence_breakdown: ConfidenceBreakdownSchema | None = None
 
 
 class TyreCurvePointSchema(ApiModel):

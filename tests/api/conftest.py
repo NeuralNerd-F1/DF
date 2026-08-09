@@ -96,6 +96,7 @@ def fake_prediction(
     state: ConfidenceState | None = ConfidenceState.HIGH,
     status: Status = Status.OK,
     error_code: object = None,
+    breakdown: object = None,
 ) -> PredictionResult:
     return PredictionResult(
         status=status,
@@ -106,6 +107,7 @@ def fake_prediction(
         confidence_state=state,
         top_3=[("VER", confidence), ("HAM", 1 - confidence)],
         model_version="test-v1",
+        confidence_breakdown=breakdown,  # type: ignore[arg-type]
     )
 
 
@@ -156,6 +158,8 @@ def fake_setup(driver: str = "VER", circuit: str = "Monaco") -> SetupRecommendat
         unit="deg",
         fia_min=0.0,
         fia_max=12.0,
+        grid_mean=4.2,
+        basis_features=["F19", "F14"],
     )
     return SetupRecommendation(
         driver=driver,

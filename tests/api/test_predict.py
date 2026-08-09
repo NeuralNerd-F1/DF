@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from app.api.deps import get_explainer_fn, get_predictor
 from app.contracts.enums import ConfidenceState, Status
 from app.contracts.errors import ErrorCode
@@ -25,6 +26,25 @@ async def test_predict_ok(api: SimpleNamespace) -> None:
     assert body["predicted_driver"] == "VER"
     assert body["confidence_state"] == "HIGH"
     assert len(body["top_3"]) == 2
+    # No breakdown on the fake → served as an explicit null, never absent (cache-compatible field).
+    assert body["confidence_breakdown"] is None
+
+
+async def test_predict_serves_the_confidence_breakdown(api: SimpleNamespace) -> None:
+    """System input #6: the propagated-confidence composition rides the response verbatim."""
+    from app.ml.inference import ConfidenceBreakdown
+
+    bd = ConfidenceBreakdown(
+        feature_quality=0.5, distribution=0.83, model_confidence=0.91, overall=0.5 * 0.83 * 0.91
+    )
+    _predictor(api, fake_prediction(state=ConfidenceState.HIGH, breakdown=bd))
+    r = await api.client.post("/predict", json=_BODY)
+    assert r.status_code == 200
+    served = r.json()["confidence_breakdown"]
+    assert served["feature_quality"] == pytest.approx(0.5)
+    assert served["distribution"] == pytest.approx(0.83)
+    assert served["model_confidence"] == pytest.approx(0.91)
+    assert served["overall"] == pytest.approx(0.5 * 0.83 * 0.91)
 
 
 async def test_predict_low_confidence_is_200(api: SimpleNamespace) -> None:

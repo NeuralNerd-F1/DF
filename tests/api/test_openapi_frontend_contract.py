@@ -50,7 +50,10 @@ def test_fingerprint_response_fields() -> None:
 
 def test_setup_parameter_fields() -> None:
     props = _schemas()["SetupParameterSchema"]["properties"]
-    for field in ("name", "value", "value_range", "rating", "confidence", "shap_available"):
+    for field in (
+        "name", "value", "value_range", "rating", "confidence", "shap_available",
+        "grid_mean", "basis_features",
+    ):
         assert field in props, f"SetupParameterSchema lost {field!r} — breaks the setup panel"
 
 
@@ -101,8 +104,15 @@ def test_predict_response_fields() -> None:
         "shap_values",
         "shap_available",
         "model_version",
+        "confidence_breakdown",
     ):
         assert field in props, f"PredictResponse lost {field!r} — breaks Screen 3 prediction"
+
+
+def test_confidence_breakdown_fields() -> None:
+    props = _schemas()["ConfidenceBreakdownSchema"]["properties"]
+    for field in ("feature_quality", "distribution", "model_confidence", "overall"):
+        assert field in props, f"ConfidenceBreakdownSchema lost {field!r} — breaks the breakdown"
 
 
 def test_unknown_fingerprint_response_fields() -> None:

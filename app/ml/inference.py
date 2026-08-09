@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from joblib import load as joblib_load
-from pydantic import ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.contracts.config import AppConfig
 from app.contracts.enums import ConfidenceState, Status
@@ -104,6 +104,28 @@ class HealthResult(BaseResult):
     reason: ErrorCode | None = None
 
 
+class ConfidenceBreakdown(BaseModel):
+    """The propagated-confidence composition (system-architecture input #6): a **presentational
+    composition of already-served signals** — it never participates in the §5.1 gate ordering and
+    never overrides ``confidence_state``. Each factor is a distance from a boundary the system
+    already enforces (no new thresholds are introduced):
+
+    - ``feature_quality`` = 1 − n_nulls / ``thresholds.null_ceiling`` — distance from the NULL
+      rejection boundary (0 nulls → 1.0; at the ceiling → 0.0).
+    - ``distribution`` = 1 − entropy_bits / ``thresholds.entropy_ambiguous_bits``, floored at 0 —
+      distance from the AMBIGUOUS boundary, using the *same* entropy the gate compared.
+    - ``model_confidence`` = the calibrated max-probability, verbatim.
+    - ``overall`` = the product of the three — any weak link drags the composite down; all strong
+      → high. A multiplicative composition, so no arbitrary weights exist to justify."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    feature_quality: float
+    distribution: float
+    model_confidence: float
+    overall: float
+
+
 class PredictionResult(BaseResult):
     """One gated prediction (master §5.1 / §8.5). ``confidence`` is never NULL; ``confidence_state``
     is ``None`` only on a ``FAILED`` result (model not run / failed), which is never persisted."""
@@ -120,6 +142,8 @@ class PredictionResult(BaseResult):
     latency_ms: float = 0.0
     model_version: str = ""
     null_features: list[str] = Field(default_factory=list)
+    # None on FAILED results (no distribution to score) — mirrors confidence_state=None there.
+    confidence_breakdown: ConfidenceBreakdown | None = None
 
 
 @dataclass
@@ -432,6 +456,23 @@ def predict(
             # a used_global normalisation fallback overlays DEGRADED on an otherwise-OK path
             status = Status.DEGRADED if degraded else Status.OK
 
+        # 6b. Propagated-confidence composition (system input #6). Presentational only — computed
+        # AFTER the gate from the gate's own inputs; nothing reads it back. Denominators are the
+        # boundaries steps 1 and 4 already enforced (config values, referenced never re-declared),
+        # so the composition introduces no new threshold.
+        feature_quality = 1.0 - (len(nulls) / th.null_ceiling) if th.null_ceiling > 0 else 1.0
+        distribution = (
+            max(0.0, 1.0 - (h_bits / th.entropy_ambiguous_bits))
+            if th.entropy_ambiguous_bits > 0
+            else 1.0
+        )
+        breakdown = ConfidenceBreakdown(
+            feature_quality=feature_quality,
+            distribution=distribution,
+            model_confidence=confidence,
+            overall=feature_quality * distribution * confidence,
+        )
+
         # 7. Latency flag (does not by itself degrade status).
         latency_ms = _ms()
         if latency_ms > cfg.latency_warn_ms:
@@ -458,6 +499,7 @@ def predict(
             latency_ms=latency_ms,
             model_version=handle.model_version,
             null_features=nulls,  # provenance: which features were missing/imputed on a served lap
+            confidence_breakdown=breakdown,
         )
     except Exception as exc:  # noqa: BLE001 - the never-raises backstop (master §8.5)
         try:

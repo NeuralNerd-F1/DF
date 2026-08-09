@@ -38,6 +38,12 @@ const PREDICTION = {
   shap_values: { F04: 2.65, F28: -0.38 },
   shap_available: true,
   model_version: 'v1',
+  confidence_breakdown: {
+    feature_quality: 0.83,
+    distribution: 0.86,
+    model_confidence: 0.904,
+    overall: 0.83 * 0.86 * 0.904,
+  },
 };
 
 const SETUP = {
@@ -75,6 +81,25 @@ describe('PredictionScreen', () => {
     expect(screen.getByTestId('predicted-driver-card')).toHaveTextContent('Lando Norris');
     expect(screen.getByTestId('truth-line')).toHaveAttribute('data-correct', 'true');
     expect(screen.getByTestId('truth-line')).toHaveTextContent('correct ✓');
+  });
+
+  it('renders the propagated-confidence breakdown with the served numbers', async () => {
+    await pickTheSegment();
+    expect(screen.getByTestId('confidence-breakdown')).toBeInTheDocument();
+    expect(screen.getByTestId('breakdown-data')).toHaveTextContent('0.83');
+    expect(screen.getByTestId('breakdown-distribution')).toHaveTextContent('0.86');
+    expect(screen.getByTestId('breakdown-model')).toHaveTextContent('0.90');
+    expect(screen.getByTestId('breakdown-overall')).toHaveTextContent('0.65');
+  });
+
+  it('omits the breakdown when the payload lacks it (older cache) — no fabricated numbers', async () => {
+    api.postPredict.mockResolvedValue({
+      ok: true,
+      data: { ...PREDICTION, confidence_breakdown: null },
+      flags: [],
+    });
+    await pickTheSegment();
+    expect(screen.queryByTestId('confidence-breakdown')).toBeNull();
   });
 
   it('renders the per-lap signed SHAP with both directions', async () => {

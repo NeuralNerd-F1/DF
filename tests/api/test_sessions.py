@@ -73,7 +73,8 @@ async def test_sessions_db_down_is_503(api: SimpleNamespace) -> None:
 
 
 async def test_sessions_db_not_configured_is_503_health_fail(api: SimpleNamespace) -> None:
-    # DB never configured at startup (no engine built) → HEALTH_FAIL, distinct from a runtime outage.
+    # DB never configured at startup (no engine built) → HEALTH_FAIL — distinct from a runtime
+    # outage.
     api.state.session_factory = None
     api.state.db_breaker = None
     r = await api.client.get("/sessions")

@@ -24,6 +24,8 @@ function makeSetup(overrides: Partial<SetupResponse> = {}): SetupResponse {
         constraint_flags: [],
         shap_top_features: [],
         shap_available: false,
+        grid_mean: 5.9,
+        basis_features: ['F19', 'F14'],
       },
       {
         name: 'suspension_stiffness_front',
@@ -96,5 +98,27 @@ describe('SetupList — the SetupPanel honesty rules, in compact rows', () => {
   it('always shows the approximation disclaimer', () => {
     render(<SetupList setup={makeSetup()} />);
     expect(screen.getByText(/approximated from telemetry signatures/)).toBeInTheDocument();
+  });
+
+  it('states the tendency vs the served grid average (system input #2)', () => {
+    render(<SetupList setup={makeSetup()} />);
+    // value 4.401 < grid_mean 5.9 → the "less" phrase, with the reference named.
+    expect(screen.getByTestId('setup-tendency-front_wing_angle')).toHaveTextContent(
+      'less front downforce — calmer front end (vs grid average 5.9)',
+    );
+  });
+
+  it('omits the tendency when no grid reference is served — never a manufactured direction', () => {
+    render(<SetupList setup={makeSetup()} />);
+    // CATEGORY (grid_mean null by design) and WIDE (no point value) both stay tendency-free.
+    expect(screen.queryByTestId('setup-tendency-suspension_stiffness_front')).toBeNull();
+    expect(screen.queryByTestId('setup-tendency-brake_bias')).toBeNull();
+  });
+
+  it('the row tooltip explains the design-time heuristic basis (system input #8)', () => {
+    render(<SetupList setup={makeSetup()} />);
+    const row = screen.getByTestId('setup-param-front_wing_angle');
+    expect(row).toHaveAttribute('title', expect.stringContaining('lateral load'));
+    expect(row).toHaveAttribute('title', expect.stringContaining('top-end speed'));
   });
 });

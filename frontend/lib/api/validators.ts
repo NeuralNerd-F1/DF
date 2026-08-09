@@ -79,6 +79,9 @@ export const zSetupParam = z
     constraint_flags: z.array(z.string()).optional(),
     shap_top_features: z.array(z.string()).optional(),
     shap_available: z.boolean().optional(),
+    // System input #2 — nullish/optional so older payloads stay valid.
+    grid_mean: z.number().nullish(),
+    basis_features: z.array(z.string()).optional(),
   })
   .passthrough();
 export const zSetup = z
@@ -146,6 +149,16 @@ export const zPredict = z
     shap_values: z.record(z.number()).nullish(),
     shap_available: z.boolean().optional(),
     model_version: z.string(),
+    // Propagated-confidence composition (system input #6) — nullish so older caches stay valid.
+    confidence_breakdown: z
+      .object({
+        feature_quality: z.number(),
+        distribution: z.number(),
+        model_confidence: z.number(),
+        overall: z.number(),
+      })
+      .passthrough()
+      .nullish(),
   })
   .passthrough();
 

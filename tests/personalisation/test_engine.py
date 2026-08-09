@@ -22,6 +22,7 @@ from app.personalisation.engine import (
     PersonalisationLoadError,
     PersonalisationTrainingError,
     SetupConfidence,
+    SetupOutputKind,
     health,
     load_personalisation,
     onboard_unknown,
@@ -203,6 +204,76 @@ def test_ten_parameters_canonical_order(trained: dict[str, Any]) -> None:
     for p in res.parameters:
         assert isinstance(p.confidence, float)  # never NULL (§8.4)
         assert p.rating in set(SetupConfidence)
+
+
+def test_grid_reference_and_basis_on_happy_path(trained: dict[str, Any]) -> None:
+    """System input #2: numeric parameters carry the serve-time grid mean (the model's own mean
+    recommendation across every known driver, same circuit context) and every parameter carries
+    its design-time basis features — both served facts, never invented."""
+    handle, sh, cfg = trained["handle"], trained["style_handle"], trained["config"]
+    res = recommend_setup(driver=DRIVERS[0], circuit="Bahrain", circuit_type="high_speed",
+                          handle=handle, style_handle=sh, config=cfg)
+    for p in res.parameters:
+        if p.kind is SetupOutputKind.CATEGORY:
+            assert p.grid_mean is None  # a mean over category ordinals has no honest reading
+        else:
+            assert p.grid_mean is not None
+            assert p.fia_min is not None and p.fia_max is not None
+            assert p.fia_min <= p.grid_mean <= p.fia_max  # clipped like a served value
+        assert p.basis_features  # the §7.3 heuristic basis rides along
+        assert all(b.startswith("F") for b in p.basis_features)
+
+
+def test_grid_reference_mean_is_the_clipped_grid_prediction_mean(trained: dict[str, Any]) -> None:
+    import numpy as np
+
+    handle, sh, cfg = trained["handle"], trained["style_handle"], trained["config"]
+    res = recommend_setup(driver=DRIVERS[0], circuit="Bahrain", circuit_type="high_speed",
+                          handle=handle, style_handle=sh, config=cfg)
+    fw = _param(res, "front_wing_angle")
+    rows = [
+        eng._build_input(np.asarray(c, float), "high_speed", handle.circuit_types)
+        for c in sh.known_coords_5d.values()
+    ]
+    lo, hi = handle.fia_bounds["front_wing_angle"]
+    preds = np.clip(handle.regressors["front_wing_angle"].predict(np.stack(rows)), lo, hi)
+    assert fw.grid_mean == pytest.approx(float(preds.mean()))
+
+
+def test_grid_reference_monaco_override_applies_to_the_reference_too(
+    trained: dict[str, Any],
+) -> None:
+    # At Monaco every driver's wings are forced to max — the reference must say so (value ==
+    # grid_mean == fia_max), so the UI reads "in line with the grid", never a fake tendency.
+    handle, sh, cfg = trained["handle"], trained["style_handle"], trained["config"]
+    res = recommend_setup(driver=DRIVERS[0], circuit=cfg.personalisation.monaco_circuit,
+                          circuit_type="street", handle=handle, style_handle=sh, config=cfg)
+    fw = _param(res, "front_wing_angle")
+    assert fw.grid_mean == pytest.approx(fw.fia_max)
+    assert fw.value == pytest.approx(fw.fia_max)
+
+
+def test_grid_reference_fault_degrades_to_absent_never_blocks(trained: dict[str, Any]) -> None:
+    # A raising regressor inside the REFERENCE computation must not kill the recommendation:
+    # tendencies are simply absent (grid_mean None) and the fault is logged.
+    handle, sh, cfg = trained["handle"], trained["style_handle"], trained["config"]
+
+    class _Raises:
+        def predict(self, x: Any) -> Any:  # noqa: ANN401
+            raise RuntimeError("boom")
+
+    ledger = eng._DQLedger(log_path=Path(cfg.paths.data_quality_log))
+    broken = dict(handle.regressors)
+    broken["front_wing_angle"] = _Raises()
+    import dataclasses
+
+    bad_handle = dataclasses.replace(handle, regressors=broken)
+    means = eng._grid_reference(
+        sh.known_coords_5d, circuit="Bahrain", circuit_type="high_speed", handle=bad_handle,
+        config=cfg.personalisation, ledger=ledger, entity_id="t/grid",
+    )
+    assert means == {}  # degraded to absent — the recommendation itself still serves
+    assert ledger.rows > 0  # and the fault is logged, never swallowed
 
 
 def test_shap_present_on_happy_path(trained: dict[str, Any]) -> None:
@@ -570,7 +641,7 @@ _SERVING = (
     eng.recommend_setup, eng.onboard_unknown, eng.load_personalisation, eng.health,
     eng._recommend_from_coord, eng._attach_shap, eng._assemble_parameter,
     eng._wide_only_recommendation, eng._backstop_recommendation, eng._wide_sheet_from_bounds,
-    eng._full_bounds_wide_params, eng._resolve_fia_bounds,
+    eng._full_bounds_wide_params, eng._resolve_fia_bounds, eng._grid_reference,
 )
 
 

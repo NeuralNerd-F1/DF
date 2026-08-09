@@ -1,4 +1,6 @@
 import type { SetupParameterSchema, SetupResponse } from '@/lib/api/types';
+import { FEATURE_LABELS } from '@/lib/design/features';
+import { tendencyText } from '@/lib/design/setup';
 
 // Rating → tone. HIGH/MEDIUM ride the confidence tokens; LOW and WIDE both mean "treat with
 // caution" and share the low tone. The chip shows the rating WORD — never a re-thresholded number.
@@ -46,30 +48,48 @@ export function SetupList({ setup }: { setup: SetupResponse }) {
         {setup.circuit}
       </p>
       <ul className="mt-2 divide-y divide-border">
-        {setup.parameters.map((p) => (
-          <li
-            key={p.name}
-            className="flex items-center justify-between gap-2 py-1.5"
-            data-testid={`setup-param-${p.name}`}
-            title={`confidence ${p.confidence.toFixed(2)}`}
-          >
-            <span className="min-w-0 truncate font-mono text-[10px] text-text-secondary">
-              {prettyName(p.name)}
-            </span>
-            <span className="flex shrink-0 items-center gap-2">
-              <span className="font-mono text-[11px] tabular-nums text-text-primary">
-                {displayValue(p)}
+        {setup.parameters.map((p) => {
+          const tendency = tendencyText(p);
+          // System input #8: the honest per-parameter explanation — the design-time basis of the
+          // target heuristic (a documented constant), never a per-driver causal claim.
+          const basis = (p.basis_features ?? []).map((f) => FEATURE_LABELS[f] ?? f).join(', ');
+          return (
+            <li
+              key={p.name}
+              className="py-1.5"
+              data-testid={`setup-param-${p.name}`}
+              title={`confidence ${p.confidence.toFixed(2)}${
+                basis ? ` · target heuristic reads: ${basis}` : ''
+              }`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-mono text-[10px] text-text-secondary">
+                  {prettyName(p.name)}
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="font-mono text-[11px] tabular-nums text-text-primary">
+                    {displayValue(p)}
+                  </span>
+                  <span
+                    className={`rounded border px-1 py-px font-mono text-[8px] uppercase tracking-[0.1em] ${
+                      RATING_CLASS[String(p.rating)] ?? 'border-border text-text-secondary'
+                    }`}
+                  >
+                    {String(p.rating)}
+                  </span>
+                </span>
               </span>
-              <span
-                className={`rounded border px-1 py-px font-mono text-[8px] uppercase tracking-[0.1em] ${
-                  RATING_CLASS[String(p.rating)] ?? 'border-border text-text-secondary'
-                }`}
-              >
-                {String(p.rating)}
-              </span>
-            </span>
-          </li>
-        ))}
+              {tendency ? (
+                <span
+                  className="mt-0.5 block font-mono text-[9px] leading-snug text-text-secondary"
+                  data-testid={`setup-tendency-${p.name}`}
+                >
+                  {tendency}
+                </span>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
       {allFlags.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1" data-testid="setup-flags">

@@ -1,0 +1,1276 @@
+<title>APEX — Design &amp; Implementation</title>
+
+<style>
+  /* ============================================================
+     Tokens. Neutrals carry a faint warm/red bias so they read as
+     chosen against the APEX accent rather than inherited grey.
+     Accent + surface values are the project's own §10.1 design
+     system (frontend/tailwind.config.js), not invented here.
+     ============================================================ */
+  :root {
+    --accent:        #D50026;
+    --accent-soft:   #D5002614;
+    --bg:            #FBFAF9;
+    --surface:       #FFFFFF;
+    --surface-2:     #F5F3F1;
+    --border:        #E3DFDC;
+    --border-strong: #CFC9C5;
+    --text:          #1A1719;
+    --text-2:        #555054;
+    --text-3:        #837C82;
+    --ok:            #1F7A4D;
+    --warn:          #9A6510;
+    --gap:           #A3341C;
+    --cache:         #1D5FA8;
+    --rule:          #E3DFDC;
+
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "JetBrains Mono", "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent:        #FF2E4D;
+      --accent-soft:   #FF2E4D1A;
+      --bg:            #0C0B0D;
+      --surface:       #141316;
+      --surface-2:     #1B191E;
+      --border:        #2A272E;
+      --border-strong: #3A363F;
+      --text:          #EDEAEE;
+      --text-2:        #A9A3AC;
+      --text-3:        #7C757F;
+      --ok:            #4ADE80;
+      --warn:          #E8B24A;
+      --gap:           #FF8A6B;
+      --cache:         #6CA8E8;
+      --rule:          #26232A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --accent:        #FF2E4D;
+    --accent-soft:   #FF2E4D1A;
+    --bg:            #0C0B0D;
+    --surface:       #141316;
+    --surface-2:     #1B191E;
+    --border:        #2A272E;
+    --border-strong: #3A363F;
+    --text:          #EDEAEE;
+    --text-2:        #A9A3AC;
+    --text-3:        #7C757F;
+    --ok:            #4ADE80;
+    --warn:          #E8B24A;
+    --gap:           #FF8A6B;
+    --cache:         #6CA8E8;
+    --rule:          #26232A;
+  }
+
+  :root[data-theme="light"] {
+    --accent:        #D50026;
+    --accent-soft:   #D5002614;
+    --bg:            #FBFAF9;
+    --surface:       #FFFFFF;
+    --surface-2:     #F5F3F1;
+    --border:        #E3DFDC;
+    --border-strong: #CFC9C5;
+    --text:          #1A1719;
+    --text-2:        #555054;
+    --text-3:        #837C82;
+    --ok:            #1F7A4D;
+    --warn:          #9A6510;
+    --gap:           #A3341C;
+    --cache:         #1D5FA8;
+    --rule:          #E3DFDC;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- Shell ---------- */
+  .shell { max-width: 1240px; margin: 0 auto; padding: 0 24px 120px; }
+
+  .layout { display: block; }
+  @media (min-width: 1080px) {
+    .layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 56px; align-items: start; }
+    .toc { position: sticky; top: 32px; max-height: calc(100vh - 64px); overflow-y: auto; }
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead { padding: 64px 0 36px; border-bottom: 2px solid var(--text); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 18px;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 600; font-size: clamp(2.4rem, 6vw, 3.9rem);
+    line-height: 1.04; letter-spacing: -0.02em; margin: 0 0 18px; text-wrap: balance;
+  }
+  .standfirst {
+    font-family: var(--serif); font-size: clamp(1.05rem, 2.1vw, 1.3rem); line-height: 1.55;
+    color: var(--text-2); max-width: 60ch; margin: 0;
+  }
+
+  /* ---------- Stat strip ---------- */
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    gap: 1px; background: var(--border); border: 1px solid var(--border);
+    margin: 36px 0 0;
+  }
+  .stat { background: var(--bg); padding: 14px 16px; }
+  .stat b {
+    display: block; font-family: var(--mono); font-size: 1.32rem; font-weight: 600;
+    letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.2;
+  }
+  .stat span {
+    display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--text-3); margin-top: 5px;
+  }
+
+  /* ---------- TOC ---------- */
+  .toc { padding: 40px 0; }
+  .toc h2 {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-3); margin: 0 0 12px; font-weight: 600;
+  }
+  .toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .toc a {
+    display: block; padding: 3px 0; color: var(--text-2); text-decoration: none;
+    font-size: 13px; line-height: 1.4; border-left: 2px solid transparent; padding-left: 10px;
+  }
+  .toc a:hover, .toc a:focus-visible { color: var(--accent); border-left-color: var(--accent); }
+  .toc .num { font-family: var(--mono); font-size: 10px; color: var(--text-3); margin-right: 7px; }
+
+  /* ---------- Sections ---------- */
+  main { padding-top: 40px; }
+  section { padding: 44px 0; border-top: 1px solid var(--rule); }
+  section:first-child { border-top: none; padding-top: 8px; }
+
+  .sec-num {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--accent);
+    display: block; margin-bottom: 10px;
+  }
+  h2 {
+    font-family: var(--serif); font-size: clamp(1.6rem, 3.4vw, 2.15rem); font-weight: 600;
+    line-height: 1.15; letter-spacing: -0.015em; margin: 0 0 20px; text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--sans); font-size: 1.02rem; font-weight: 650; letter-spacing: -0.005em;
+    margin: 34px 0 10px; text-wrap: balance;
+  }
+  h4 {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-3); margin: 26px 0 8px; font-weight: 600;
+  }
+  p { max-width: var(--measure); margin: 0 0 15px; }
+  li { max-width: var(--measure); }
+  ul, ol { padding-left: 20px; margin: 0 0 15px; }
+  li { margin-bottom: 6px; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  strong { font-weight: 650; }
+  code {
+    font-family: var(--mono); font-size: 0.86em; background: var(--surface-2);
+    padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border);
+    word-break: break-word;
+  }
+
+  /* ---------- Tables ---------- */
+  .scroll { overflow-x: auto; margin: 18px 0 22px; border: 1px solid var(--border); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-3); font-weight: 600; white-space: nowrap; background: var(--surface-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.id { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+  td.c { text-align: center; }
+
+  /* ---------- Chips ---------- */
+  .chip {
+    display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.07em;
+    text-transform: uppercase; padding: 2px 7px; border: 1px solid currentColor;
+    border-radius: 2px; white-space: nowrap; font-weight: 600;
+  }
+  .chip-ok { color: var(--ok); }
+  .chip-warn { color: var(--warn); }
+  .chip-gap { color: var(--gap); }
+  .chip-todo { color: var(--text-3); }
+  .chip-cache { color: var(--cache); }
+
+  /* ---------- Callouts ---------- */
+  .note {
+    border-left: 3px solid var(--border-strong); background: var(--surface);
+    padding: 16px 20px; margin: 22px 0;
+  }
+  .note.accent { border-left-color: var(--accent); background: var(--accent-soft); }
+  .note.gap { border-left-color: var(--gap); }
+  .note h4 { margin-top: 0; color: var(--text-2); }
+  .note p:last-child, .note ul:last-child { margin-bottom: 0; }
+  .note p, .note li { max-width: 62ch; }
+
+  /* "Why this" decision box — the P1/P2 device: every load-bearing choice gets one. */
+  .why {
+    border: 1px solid var(--border); border-left: 3px solid var(--ok);
+    background: var(--surface); padding: 12px 18px; margin: 16px 0;
+  }
+  .why b {
+    display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--ok); margin-bottom: 5px;
+  }
+  .why p { font-size: 13.5px; color: var(--text-2); margin: 0 0 8px; max-width: 66ch; }
+  .why p:last-child { margin-bottom: 0; }
+
+  /* ---------- Principles ---------- */
+  .principles { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); margin: 22px 0; }
+  @media (min-width: 720px) { .principles { grid-template-columns: 1fr 1fr; } }
+  .principle { background: var(--bg); padding: 18px 20px; }
+  .principle b { display: block; font-size: 0.95rem; margin-bottom: 5px; }
+  .principle p { font-size: 13.5px; color: var(--text-2); margin: 0; max-width: none; }
+  .principle .enf {
+    display: block; margin-top: 9px; font-family: var(--mono); font-size: 11px;
+    color: var(--text-3); line-height: 1.5;
+  }
+
+  /* ---------- Conceptual flow (plain diagrams, per review) ---------- */
+  .flow {
+    font-family: var(--mono); font-size: 13px; line-height: 1.55;
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 18px 22px; margin: 20px 0; overflow-x: auto; color: var(--text);
+  }
+  .flow em { font-style: normal; color: var(--text-3); }
+
+  /* ---------- Diagram ---------- */
+  .mermaid {
+    background: var(--surface); border: 1px solid var(--border); padding: 20px;
+    margin: 22px 0; overflow-x: auto;
+  }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 18px; margin: -10px 0 20px;
+    font-family: var(--mono); font-size: 11px; color: var(--text-2);
+  }
+  .legend i { display: inline-block; width: 22px; height: 3px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+
+  /* ---------- Contribution columns ---------- */
+  .duo { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); margin: 20px 0; }
+  @media (min-width: 720px) { .duo { grid-template-columns: 1fr 1fr; } }
+  .duo > div { background: var(--bg); padding: 18px 20px; }
+  .duo h4 { margin-top: 0; }
+  .duo ul { margin-bottom: 0; }
+  .duo li { font-size: 13.5px; color: var(--text-2); }
+
+  /* ---------- Result headline ---------- */
+  .headline {
+    display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); margin: 24px 0;
+  }
+  @media (min-width: 640px) { .headline { grid-template-columns: repeat(4, 1fr); } }
+  .hcell { background: var(--bg); padding: 16px 18px; }
+  .hcell b {
+    display: block; font-family: var(--mono); font-size: 1.5rem; font-weight: 600;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+  }
+  .hcell span {
+    display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--text-3); margin-top: 5px;
+  }
+  .hcell.miss b { color: var(--gap); }
+  .hcell.beat b { color: var(--ok); }
+
+  /* ---------- Bar ---------- */
+  .bars { margin: 18px 0 24px; }
+  .bar-row {
+    display: grid; grid-template-columns: 46px 1fr 52px; gap: 10px; align-items: center;
+    padding: 3px 0; font-family: var(--mono); font-size: 12px;
+  }
+  .bar-track { background: var(--surface-2); height: 15px; border: 1px solid var(--border); }
+  .bar-fill { height: 100%; background: var(--accent); opacity: 0.75; }
+  .bar-row .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+  .bar-row .k { font-weight: 600; }
+
+  footer {
+    border-top: 2px solid var(--text); margin-top: 60px; padding-top: 20px;
+    font-family: var(--mono); font-size: 11px; color: var(--text-3);
+    display: flex; flex-wrap: wrap; gap: 8px 24px;
+  }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">COMP702 · Design &amp; Implementation Record</p>
+    <h1>APEX</h1>
+    <p class="standfirst">
+      A driver behavioural profiling platform for Formula&nbsp;1 telemetry. Raw car data becomes
+      behavioural lap vectors, a driver fingerprint, and four models — identification, style space,
+      degradation detection and setup-tendency estimation — built around one architectural
+      commitment: <em>no component fails silently.</em>
+    </p>
+
+    <div class="stats">
+      <div class="stat"><b>53,928</b><span>real lap vectors</span></div>
+      <div class="stat"><b>13</b><span>drivers · 4 seasons</span></div>
+      <div class="stat"><b>25</b><span>circuits · 2 held out</span></div>
+      <div class="stat"><b>69</b><span>error codes</span></div>
+      <div class="stat"><b>1,349</b><span>tests</span></div>
+      <div class="stat"><b>6</b><span>screens, live</span></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="toc" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#thesis"><span class="num">1</span>Problem &amp; hypotheses</a></li>
+        <li><a href="#novelty"><span class="num">2</span>Novelty &amp; contributions</a></li>
+        <li><a href="#principles"><span class="num">3</span>Design principles</a></li>
+        <li><a href="#architecture"><span class="num">4</span>Architecture</a></li>
+        <li><a href="#pipeline"><span class="num">5</span>Data pipeline</a></li>
+        <li><a href="#models"><span class="num">6</span>The four models</a></li>
+        <li><a href="#platform"><span class="num">7</span>Platform &amp; interface</a></li>
+        <li><a href="#tradeoffs"><span class="num">8</span>Trade-offs</a></li>
+        <li><a href="#engineering"><span class="num">9</span>Engineering evidence</a></li>
+        <li><a href="#results"><span class="num">10</span>Real-data results</a></li>
+        <li><a href="#critique"><span class="num">11</span>Critique &amp; response</a></li>
+        <li><a href="#gaps"><span class="num">12</span>Gaps &amp; limitations</a></li>
+        <li><a href="#method"><span class="num">13</span>How it was built</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <!-- ============ 1 ============ -->
+      <section id="thesis">
+        <span class="sec-num">01</span>
+        <h2>Problem and hypotheses</h2>
+        <p>
+          Two drivers in mechanically identical cars produce measurably different telemetry. APEX
+          treats that difference as a <em>behavioural signature</em> and asks what it supports:
+          identification, placement in a continuous style space, live deviation detection, and
+          translation into car-setup direction. The system is deliberately not a single model — it
+          is a pipeline whose contracts are the engineering content, and the research questions are
+          answered as much by what the system <em>refuses</em> to do as by what it outputs.
+        </p>
+        <p>
+          Each research question is held to a measurable hypothesis. Where a target was fixed a
+          priori in the specification and the observation landed elsewhere, both numbers appear —
+          the reading is argued in §10, never silently rebased.
+        </p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>RQ</th><th>Hypothesis</th><th>Metric</th><th>Target</th><th>Observed</th><th>Reading</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="id">RQ1</td>
+                <td>Driver identity is encoded in behavioural features alone</td>
+                <td>Held-out macro F1 (Belgium + Italy, never trained on)</td>
+                <td class="n">0.78</td>
+                <td class="n">0.4068</td>
+                <td><span class="chip chip-warn">signal, target missed</span> 5.3× chance, 1.7× random forest — §10</td>
+              </tr>
+              <tr>
+                <td class="id">RQ2</td>
+                <td>A small set of behaviours carries most of the discrimination</td>
+                <td>SHAP concentration across 6 domains</td>
+                <td>ranked attribution</td>
+                <td>throttle-domain dominance; per-driver signatures served</td>
+                <td><span class="chip chip-warn">partial</span> global evidence in place; formal concentration test in F21</td>
+              </tr>
+              <tr>
+                <td class="id">RQ3</td>
+                <td>Drivers occupy a stable, meaningful continuous style space</td>
+                <td>Projection stability + teammate proximity</td>
+                <td>intra-team &lt; inter-team distance</td>
+                <td>13-driver UMAP built; proximity test not yet run on the real corpus</td>
+                <td><span class="chip chip-warn">partial</span></td>
+              </tr>
+              <tr>
+                <td class="id">RQ4</td>
+                <td>Deviation from a driver's own baseline is detectable mid-stint</td>
+                <td>Alert lead time vs τ crossings</td>
+                <td>alerts before failure with usable lead time</td>
+                <td>τ calibrated per driver × circuit type (52 cells); verified end-to-end on the replay demo; real-corpus lead time pending</td>
+                <td><span class="chip chip-warn">partial</span></td>
+              </tr>
+              <tr>
+                <td class="id">RQ5</td>
+                <td>The system fails safely under injected faults</td>
+                <td>7 fault-injection scenarios, executable harness</td>
+                <td class="n">7/7 coded, no silent path</td>
+                <td class="n">7/7</td>
+                <td><span class="chip chip-ok">supported</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ 2 ============ -->
+      <section id="novelty">
+        <span class="sec-num">02</span>
+        <h2>Novelty and contributions</h2>
+        <p>
+          The novelty is <strong>not</strong> XGBoost, SHAP, UMAP or FastAPI — those are commodity
+          components. The contribution is the <strong>fail-safe behavioural pipeline they sit
+          inside</strong>: a telemetry-to-recommendation system in which every failure path is
+          typed, every model output carries a gated confidence, every departure from specification
+          is a numbered, reviewable decision, and the interface renders uncertainty instead of
+          hiding it. Published driver-classification work rarely ships confidence gating, typed
+          uncertainty, or a production failure contract at all; APEX makes those the core of the
+          design (the comparison matrix is in §8).
+        </p>
+        <div class="duo">
+          <div>
+            <h4>Research contributions</h4>
+            <ul>
+              <li>A 28-feature behavioural fingerprint from public telemetry, with a measured account of what the public feed can and cannot support</li>
+              <li>Confidence-aware driver identification: gated predictions with typed uncertainty states and a propagated confidence composition</li>
+              <li>A continuous driver style space with an honest small-sample treatment and a deterministic fallback</li>
+              <li>Statistical (deliberately non-learned) degradation detection with per-driver calibrated thresholds and exact attribution</li>
+              <li>Style-conditioned setup <em>tendencies</em> under explicit approximation disclaimers</li>
+              <li>The held-out-circuit evaluation design and its structural findings (§10)</li>
+            </ul>
+          </div>
+          <div>
+            <h4>Engineering achievements</h4>
+            <ul>
+              <li>The failure contract: 69 typed error codes, an append-only data-quality log, and an executable fault-injection harness</li>
+              <li>Leakage-proof normalisation with tripwires at every fit site</li>
+              <li>Byte-reproducible training runs (fixed seeds, content-hashed artefacts, MLflow)</li>
+              <li>A typed API surface with a generated client, runtime validation, and drift guards</li>
+              <li>Six live screens on real data, every unavailable element rendered honestly</li>
+              <li>Circuit breakers, cache-optional serving, offline-capable persistence tests</li>
+            </ul>
+          </div>
+        </div>
+        <p>
+          These two columns are kept distinct on purpose: implementation effort is not claimed as
+          academic novelty, and the research claims do not borrow weight from the tooling.
+        </p>
+      </section>
+
+      <!-- ============ 3 ============ -->
+      <section id="principles">
+        <span class="sec-num">03</span>
+        <h2>Design principles</h2>
+        <p>
+          Five constraints were fixed before any code and are enforced mechanically rather than by
+          convention. They are defined <strong>once, here</strong>; the rest of the document refers
+          to them by number rather than re-explaining them.
+        </p>
+
+        <div class="principles">
+          <div class="principle">
+            <b>1 · No silent failure</b>
+            <p>Every failure path returns a typed result carrying an explicit error code. No bare
+              <code>except</code>, no dropped lap, no swallowed fault.</p>
+            <span class="enf">Enforced by: 69-member <code>ErrorCode</code> enum · append-only
+              <code>data_quality_log</code> · a read-only <code>failsafe-auditor</code> run per module</span>
+          </div>
+          <div class="principle">
+            <b>2 · No normalisation leakage</b>
+            <p>Scalers are fitted on the training split only, persisted, and loaded for everything
+              downstream. Belgium and Italy never touch a <code>.fit()</code> call.</p>
+            <span class="enf">Enforced by: single-writer/two-reader normalisation ·
+              <code>_assert_no_leakage</code> tripwires at four fit sites · <code>ml-auditor</code></span>
+          </div>
+          <div class="principle">
+            <b>3 · Reproducibility</b>
+            <p>All seeds fixed in <code>config.yaml</code>. Artefacts are content-hashed and
+              timestamp-free so a re-run is byte-identical.</p>
+            <span class="enf">Enforced by: seeds 42 · <code>n_jobs=1</code> pinned in XGBoost ·
+              MLflow run per training · deterministic artefact hashing</span>
+          </div>
+          <div class="principle">
+            <b>4 · Mandatory confidence gates</b>
+            <p>Model output below threshold returns an uncertainty state, never a forced answer.</p>
+            <span class="enf">Enforced by: <code>LOW_CONFIDENCE</code> / <code>AMBIGUOUS</code> /
+              <code>OUT_OF_DISTRIBUTION</code> · gate at max-prob &lt; 0.65 · UI colours read the
+              state, never re-derive it</span>
+          </div>
+          <div class="principle">
+            <b>5 · Failure paths are unit-tested</b>
+            <p>Every error code has a test that triggers it. A feature is not done because the happy
+              path works.</p>
+            <span class="enf">Enforced by: 50 test modules mirroring <code>app/</code> · synthetic
+              passing <em>and</em> failing fixtures · <code>/spec-check</code> before DONE</span>
+          </div>
+          <div class="principle">
+            <b>Corollary · Honest degradation</b>
+            <p>Where a component cannot deliver, it says so in the type system rather than
+              substituting a plausible value.</p>
+            <span class="enf">Consequence: <code>DEGRADED</code> is a first-class status, and the UI
+              renders explicit unavailable states rather than fabricating.</span>
+          </div>
+        </div>
+
+        <div class="note accent">
+          <h4>Why this dominates the design</h4>
+          <p>
+            Principle 2 makes normalisation a chokepoint every downstream model must pass through,
+            which is why the classifier, style space, detector and setup engine each re-derive and
+            re-assert the train/held-out boundary independently rather than trusting their caller.
+            That redundancy is deliberate: a single filter bug cannot silently poison an artefact.
+          </p>
+        </div>
+      </section>
+
+      <!-- ============ 4 ============ -->
+      <section id="architecture">
+        <span class="sec-num">04</span>
+        <h2>Architecture</h2>
+        <p>
+          The conceptual shape first — one shared behavioural pipeline feeding four models, each
+          serving through one typed API:
+        </p>
+
+        <pre class="flow">Raw telemetry
+      ↓
+Validation                 <em>9 filters, each rejection coded</em>
+      ↓
+Feature extraction         <em>28 behavioural features per lap</em>
+      ↓
+Normalisation              <em>train-only fit — the leakage chokepoint</em>
+      ↓
+Shared feature matrix
+      ├── Driver identification      <em>gated, calibrated, explained</em>
+      ├── Style space                <em>fingerprint + 5D/2D projection</em>
+      ├── Degradation detection      <em>per-driver τ, exact attribution</em>
+      └── Setup tendencies           <em>style → direction, disclaimed</em>
+              ↓
+      API  →  Interface  →  Evaluation</pre>
+
+        <p>
+          The same structure with its failure and cache paths made explicit — the three arrow
+          colours are the design philosophy in one picture:
+        </p>
+        <div class="legend">
+          <span><i style="background:#2f9e63"></i>success path</span>
+          <span><i style="background:#c9463d"></i>failure path — typed error, logged, surfaced</span>
+          <span><i style="background:#4d8fd1"></i>cached / degraded-but-serving path</span>
+        </div>
+        <pre class="mermaid">
+flowchart LR
+  IN["Ingestion"] --> VAL["Validation"]
+  VAL --> FEAT["Features"]
+  FEAT --> NORM["Normalisation"]
+  NORM --> MODELS["Four models"]
+  MODELS --> API["API"]
+  API --> UI["Interface"]
+  CACHE[("Parquet cache")] -.-> IN
+  REDIS[("Redis")] -.-> API
+  IN --> ERR["Typed error + data_quality_log"]
+  VAL --> ERR
+  FEAT --> ERR
+  MODELS --> GATE["Uncertainty state"]
+  ERR --> UI2["UI: the user sees the reason"]
+  GATE --> UI
+  linkStyle 0,1,2,3,4,5,11,13 stroke:#2f9e63,stroke-width:2px
+  linkStyle 6,7 stroke:#4d8fd1,stroke-width:2px,stroke-dasharray:5
+  linkStyle 8,9,10,12 stroke:#c9463d,stroke-width:2px
+        </pre>
+        <p>
+          The two red destinations are different on purpose. A <em>data</em> fault (source down,
+          malformed lap, out-of-range feature) becomes a typed error with a logged reason that the
+          interface shows verbatim. A <em>model</em> fault is not an error at all — it is a served
+          uncertainty state (principle 4): the answer "I don't know" travels the success path.
+        </p>
+
+        <h3>Both success and failure, end to end</h3>
+        <p>
+          The same lap traced down each side — this is the single figure the failure-handling
+          argument rests on:
+        </p>
+        <pre class="flow">Raw telemetry            Raw telemetry
+      ↓                        ↓
+Validation  PASS         Validation  <em>FAIL — lap 14 not green-flag</em>
+      ↓                        ↓
+Features    PASS         LAP_001 · typed error
+      ↓                        ↓
+Classifier               data_quality_log row
+      ↓                        ↓
+Confidence gate          API serves the tally
+      ↓                        ↓
+Prediction  0.94 HIGH    UI: "6,809 laps rejected: not green-flag"</pre>
+
+        <h3>Repository shape</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Path</th><th>Responsibility</th><th class="n">LOC</th></tr></thead>
+            <tbody>
+              <tr><td class="id">app/contracts/</td><td>Error enum, result objects, typed config, the DQ logger. Depends on nothing.</td><td class="n">1,749</td></tr>
+              <tr><td class="id">app/pipeline/</td><td>Ingest → validate → features → normalise → upload.</td><td class="n">3,718</td></tr>
+              <tr><td class="id">app/ml/</td><td>Classifier training + inference, SHAP, style space, corner decomposition.</td><td class="n">4,742</td></tr>
+              <tr><td class="id">app/monitoring/ + app/replay/</td><td>The degradation detector and the growing-prefix replay engine.</td><td class="n">2,323</td></tr>
+              <tr><td class="id">app/personalisation/</td><td>The three-layer setup-tendency engine.</td><td class="n">1,276</td></tr>
+              <tr><td class="id">app/db/ · app/cache/ · app/tasks/</td><td>Async persistence, Redis cache, Celery ingestion.</td><td class="n">1,960</td></tr>
+              <tr><td class="id">app/api/</td><td>FastAPI factory, 16 routes, Pydantic DTOs, metrics.</td><td class="n">2,287</td></tr>
+              <tr><td class="id">app/eval/</td><td>Fault-injection harness + the evaluation orchestrator.</td><td class="n">1,747</td></tr>
+              <tr><td class="id">frontend/</td><td>Next.js 14, six screens, generated + zod-validated API client.</td><td class="n">7,007</td></tr>
+              <tr><td class="id">specs/ · config.yaml</td><td>One spec per feature; every threshold and seed in config, never in code.</td><td class="n">198 keys</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ 5 ============ -->
+      <section id="pipeline">
+        <span class="sec-num">05</span>
+        <h2>Data pipeline</h2>
+
+        <h3>Ingestion</h3>
+        <p>
+          FastF1 is the primary telemetry source, with OpenF1 and Ergast as fallbacks for tyre and
+          lap context. Each source sits behind a circuit breaker; an outage serves from the local
+          Parquet cache tagged <code>STALE_DATA</code> rather than failing, and telemetry is cached
+          at its raw sample rate so the resampling policy stays changeable without a re-download.
+        </p>
+        <div class="why">
+          <b>Why 5 s timeout · 3 retries · 1-2-4 s backoff · breaker at 3 faults/30 s</b>
+          <p>Fail fast within an operator's attention span rather than hang: 5 s bounds a single
+          attempt, three retries with doubling backoff (≈7 s spread) outlive a transient network
+          blip but not a real outage, and the breaker stops hammering a source that has failed three
+          times in half a minute — at which point the cache path takes over. The values were fixed
+          a priori in the specification as conventional operational settings; nothing downstream is
+          sensitive to them, which is why they were never tuned.</p>
+        </div>
+
+        <h3>Validation — nine filters, every loss counted</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Code</th><th>Rejects</th><th class="n">Real corpus</th></tr></thead>
+            <tbody>
+              <tr><td class="id">LAP_001</td><td>Not green-flag (SC / VSC / red)</td><td class="n">6,809</td></tr>
+              <tr><td class="id">LAP_002</td><td>Out-lap or in-lap</td><td class="n">3,032</td></tr>
+              <tr><td class="id">LAP_003</td><td>&gt;10% consecutive NaN in a channel</td><td class="n">—</td></tr>
+              <tr><td class="id">LAP_004</td><td>Effective sample rate below the floor</td><td class="n">52</td></tr>
+              <tr><td class="id">LAP_005</td><td>Speed anomaly (&gt;1% stationary samples)</td><td class="n">40</td></tr>
+              <tr><td class="id">LAP_006</td><td>Lap time outside 115% of driver session median</td><td class="n">459</td></tr>
+              <tr><td class="id">COMBO_001</td><td>&lt;30 clean laps for a driver-circuit pair</td><td class="n">107 pairs</td></tr>
+              <tr><td class="id">LAP_INTERP</td><td>1–5-sample NaN gap — accepted, interpolated, tagged</td><td class="n">tag</td></tr>
+              <tr><td class="id">LAP_PARTIAL</td><td>Tyre age unknown — accepted, drift features NULL</td><td class="n">tag</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Of 64,364 laps seen in 2022–2025, 53,972 survived — an 84% acceptance rate, dominated by
+          green-flag status and pit events, and reported rather than absorbed.
+        </p>
+        <div class="why">
+          <b>Why a 20 Hz floor</b>
+          <p>The behaviours that distinguish drivers — brake release shape, throttle ramp rate,
+          brake-throttle overlap — live in transitions of roughly 100–300 ms. Resolving a transition
+          needs several samples inside it; at 20 Hz a 150 ms ramp spans three samples, at 5 Hz it is
+          a single step. The public feed arrives at ≈7.5 Hz, so the corpus is linearly resampled to
+          50 Hz <em>before</em> validation: this clears the floor mechanically but adds no
+          information, and that honesty is recorded in the matrix metadata and §12 rather than
+          hidden by the resample.</p>
+        </div>
+        <div class="why">
+          <b>Why a 115% lap-time bound</b>
+          <p>Modelled on the sport's own 107% qualifying rule but set deliberately looser: a race
+          lap at 110% of the driver's session median is usually traffic or tyre management —
+          genuine behaviour worth keeping — while beyond 115% the lap is almost always damage,
+          a cool-down, or an unwound system state that would contaminate a behavioural baseline.</p>
+        </div>
+        <div class="why">
+          <b>Why 30 clean laps per driver-circuit pair</b>
+          <p>Per-cell statistics (medians, deviations, detector baselines) must be stable against
+          outliers; below roughly 30 samples a single unusual lap visibly moves them. The same floor
+          gates style-space projection for unknown drivers, so every per-cell number in the system
+          rests on the same minimum evidence.</p>
+        </div>
+
+        <h3>Feature extraction</h3>
+        <p>
+          Each accepted lap yields a fixed 28-feature behavioural vector across six domains —
+          throttle, braking, speed, gear, engine, cornering — plus consistency, corner-balance and
+          tyre-age drift terms that feed the models but no radar axis. A feature outside its
+          documented range is set NULL and logged, never clipped silently.
+        </p>
+        <div class="why">
+          <b>Why a 6-NULL ceiling</b>
+          <p>Vector assembly tolerates up to six NULLs (≈21% of the vector) via train-median
+          imputation, each tagged. Past that point the vector is more imputation than measurement:
+          every imputed value pulls toward the population median, which by construction erases
+          exactly the individuality the classifier needs. The seventh NULL therefore rejects the
+          lap with a code rather than serving a hollowed-out vector.</p>
+        </div>
+
+        <h3>Normalisation — the leakage chokepoint</h3>
+        <p>
+          Six circuit-sensitive features are z-scored per circuit; the rest pass through. The module
+          is one writer and two readers: <code>fit_normaliser</code> is the only function that
+          computes statistics, and the readers are provably free of any fit call. An unknown circuit
+          falls back to global parameters and logs the fallback — a fact that §10 shows matters
+          considerably.
+        </p>
+      </section>
+
+      <!-- ============ 6 ============ -->
+      <section id="models">
+        <span class="sec-num">06</span>
+        <h2>The four models</h2>
+
+        <h3>Driver identification</h3>
+        <p>
+          An XGBoost multi-class classifier over the 28 normalised features, isotonic-calibrated on
+          a disjoint 20% split, hyperparameters from a 201-trial resumable Optuna study.
+          Cross-validation is <code>StratifiedGroupKFold</code> grouped <em>by circuit</em>, so an
+          entire circuit sits in one fold — lap-level splitting would let the same circuit appear on
+          both sides, which is the leakage that flatters most published numbers.
+        </p>
+        <div class="why">
+          <b>Why XGBoost over the alternatives</b>
+          <p>The data is tabular — 28 engineered features, 54k rows — which is the regime where
+          gradient-boosted trees remain state of the art. Three properties clinched it over the
+          candidates: native NaN handling matches the tolerated-NULL contract with no imputation at
+          serve time; <code>TreeExplainer</code> gives <em>exact</em> SHAP values rather than
+          sampling approximations; and calibrated probabilities make the confidence gate meaningful.
+          Random forests lose the exact-explainability and calibrate worse (§8); deep models need
+          more data than four seasons provide and would surrender explainability — a trade
+          examined further in §11.</p>
+        </div>
+        <div class="why">
+          <b>Why isotonic calibration, and why the gate sits at 0.65</b>
+          <p>The gate is only meaningful if "0.65" means what it says: an uncalibrated max-prob of
+          0.65 can correspond to a 40% or a 90% empirical hit rate. Isotonic regression was chosen
+          over Platt scaling because it assumes no particular miscalibration shape, and it is fitted
+          on a split the booster never saw. The 0.65 value itself was fixed a priori: for 13 classes
+          it demands 8.5× the chance probability mass before the system will name a driver —
+          post-calibration, roughly "right two times in three" as the minimum standard for a named
+          answer. Below it the result is <code>LOW_CONFIDENCE</code>; high distribution entropy
+          takes precedence and returns <code>AMBIGUOUS</code>.</p>
+        </div>
+        <p>
+          Since the supervisor review, every prediction also carries a <strong>propagated
+          confidence</strong>: data completeness × distribution familiarity × calibrated model
+          confidence, each factor a distance from a boundary the system already enforces, multiplied
+          so one weak link drags the composite down. It introduces no new thresholds, and it
+          explains the gate's verdict without ever overriding it (principle 4).
+        </p>
+
+        <h3>Explainability</h3>
+        <p>
+          A TreeExplainer over the champion's base booster produces per-prediction attributions, a
+          global signed-SHAP artefact, and the six-domain signature that drives the interface.
+          Explainability never blocks a prediction: a SHAP fault degrades to
+          <code>SHAP_UNAVAILABLE</code> and the prediction returns without it. The same discipline
+          now extends to the other outputs: degradation alerts ship their exact per-feature
+          attribution, and setup tendencies ship the basis of the heuristic that produced them.
+        </p>
+
+        <h3>Style space</h3>
+        <p>
+          Each driver's clean training laps aggregate to a 56-dimensional distribution — mean and
+          spread of all 28 features — projected by UMAP to a 5D fingerprint and a 2D view. Unknown
+          drivers project by forward pass, never retraining, gated for sparsity and
+          out-of-distribution distance.
+        </p>
+        <div class="why">
+          <b>Why UMAP, why a PCA fallback, and why the aggregate scaler exists</b>
+          <p>Style neighbourhoods are what the space is for, and UMAP preserves local neighbourhood
+          structure through non-linear relationships PCA flattens. But UMAP on 13 points is fragile
+          and non-deterministic across library versions, so a PCA fallback is trained and persisted
+          alongside it: if UMAP cannot serve, the surface degrades to a deterministic projection
+          instead of dying (the honest-degradation corollary). A review also caught that the 56-dim
+          aggregate mixed unit-scale fractions with raw physical units spanning four orders of
+          magnitude — Euclidean UMAP would have measured unit scale, not style — so a train-only
+          aggregate scaler was added inside the leakage guard, recorded as numbered divergence #6.</p>
+        </div>
+
+        <h3>Degradation detection</h3>
+        <p>
+          Deliberately <em>not</em> a learned model. Per lap: the cosine distance between the
+          standardised behavioural vector and a baseline from the stint's first three clean laps, a
+          3-lap rolling mean, and a comparison against τ = μ + 2σ calibrated per driver per circuit
+          type from training data. Two consecutive crossings confirm an alert; one is a persisted
+          <code>WATCH</code>. The alert payload carries an exact cosine decomposition — per-feature
+          contributions that sum to the score — not an approximation.
+        </p>
+        <div class="why">
+          <b>Why cosine distance, and why τ = μ + 2σ</b>
+          <p>Three distance functions were considered. Euclidean conflates magnitude with shape —
+          fuel burn and track evolution move every feature's magnitude lap by lap, which would read
+          as constant "degradation". Mahalanobis whitens by a covariance the data cannot support: a
+          26×26 covariance estimated per 30-lap cell is singular or wildly unstable. Cosine on
+          standardised features isolates exactly the quantity of interest — has the <em>shape</em>
+          of the driver's behaviour rotated away from their own baseline — and is scale-free by
+          construction. The threshold sits two calibrated standard deviations above each cell's own
+          mean deviation: under approximate normality a ≈2% one-sided false-positive rate per lap,
+          squared by the two-consecutive-lap confirmation to well under one false alert per
+          thousand scored laps. σ comes from the same per-cell calibration as μ, so a naturally
+          erratic driver-circuit pairing earns a proportionally wider band instead of a stream of
+          false alerts.</p>
+        </div>
+
+        <h3>Setup tendencies</h3>
+        <p>
+          Reframed since the supervisor review from "setup prediction" to what the evidence
+          supports: <strong>tendency estimation</strong>. Three layers — a learned mapping from the
+          5D fingerprint to ten setup parameters, an FIA constraint engine, and per-parameter
+          confidence scoring that returns a <em>range</em> below the reliability floor. Every
+          recommendation now states its direction against a grid reference computed from the
+          model's own outputs ("less front downforce than the grid average"), names the basis
+          features of its target heuristic, and ships under a mandatory approximation disclaimer.
+          The specification's own finding — only about five of ten parameters are reliably
+          inferrable — is reported, not narrowed.
+        </p>
+        <div class="why">
+          <b>Why the targets are heuristic, and why that is stated everywhere</b>
+          <p>No public ground-truth setup data exists. The training targets are transparent,
+          monotonic maps of named fingerprint features — a documented heuristic, deliberately
+          without fitted constants, so the <em>learning</em> is confined to the fingerprint→setup
+          mapping. The consequence is a compounding uncertainty the system must not hide, which is
+          why the disclaimer is a required response field, the direction language replaces
+          engineering point-values, and the per-parameter SHAP over opaque projection axes is
+          never translated into driving-trait prose it cannot support.</p>
+        </div>
+
+        <h3>Corner decomposition</h3>
+        <p>
+          Corners segment into slow / medium / high-speed by apex radius, each with a five-feature
+          sub-vector. Its deliverable is an <em>ablation</em> — does corner-type information improve
+          identification? — where a neutral result is a legitimate finding.
+        </p>
+      </section>
+
+      <!-- ============ 7 ============ -->
+      <section id="platform">
+        <span class="sec-num">07</span>
+        <h2>Platform and interface</h2>
+        <p>
+          Persistence is ten async SQLAlchemy tables with portable column types, so the entire
+          database suite runs offline on SQLite while a marked test exercises the real Postgres
+          migration. The API is a FastAPI factory with a best-effort lifespan: model handles that
+          fail to load degrade to <code>None</code> with a logged reason, <code>/health</code>
+          reports exactly what is unready, and the cache is explicitly non-critical — Redis down
+          costs latency, never availability. Batch ingestion runs through Celery; the replay engine
+          re-runs the detector over a growing prefix of a persisted stint, read-only and
+          deterministic.
+        </p>
+        <p>
+          The interface is Next.js 14 with a generated, zod-validated API client returning a
+          four-state result union — loading, empty, error, success — which is principle 1 reaching
+          the browser. Confidence colour is driven by the served state; no component re-derives a
+          threshold. All six screens were rebuilt against the design reference during this review
+          cycle and run on the real 2022–2025 corpus:
+        </p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Screen</th><th>Content</th><th>Notable</th></tr></thead>
+            <tbody>
+              <tr><td class="id">Driver Overview</td><td>13 profile cards: signature radar, plain-English signals, measured stats</td><td>Radar axes scale to the grid maximum — no clamped shapes</td></tr>
+              <tr><td class="id">Driver Profile</td><td>Signed SHAP signals, style map, facts, setup tendencies</td><td>Direction phrasing comes only from measured percentile bands</td></tr>
+              <tr><td class="id">Prediction + Setup</td><td>Real held-out laps → gated prediction → truth grade</td><td>Every segment is a genuine generalisation test; gated null renders the uncertainty state</td></tr>
+              <tr><td class="id">Comparison</td><td>Shared-scale radars, signed delta, per-feature SHAP deltas</td><td>Both radars and the delta share one per-axis scale</td></tr>
+              <tr><td class="id">Tyre Wear</td><td>Fuel-corrected degradation curves per driver × compound</td><td>The fuel term is identified per race from pit-stop structure</td></tr>
+              <tr><td class="id">Replay Monitor</td><td>Lap-by-lap gauge, τ line, full alert payload, fingerprint drift</td><td>Causal: lap k uses only laps 1…k — what a live monitor would have known</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          <h4>The pattern worth naming</h4>
+          <p>
+            Earlier iterations deferred UI elements whose data the API did not yet serve, each behind
+            a named seam rather than a fabrication. This cycle closed the major seams — the replay τ
+            threshold, the full alert payload, the session catalog, per-feature comparison deltas —
+            by widening the DTOs with data the models had computed all along. The remaining
+            deferrals are listed in §12; none are silent.
+          </p>
+        </div>
+      </section>
+
+      <!-- ============ 8 ============ -->
+      <section id="tradeoffs">
+        <span class="sec-num">08</span>
+        <h2>Trade-offs — the roads not taken</h2>
+        <p>
+          Every load-bearing choice had a considered alternative. The ones that shaped the system:
+        </p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Alternative</th><th>Rejected because</th></tr></thead>
+            <tbody>
+              <tr><td class="id">Random forest classifier</td><td>Weaker probability calibration and no exact SHAP — both load-bearing for principles 4 and RQ2. Kept as a baseline, where APEX beats it 1.7×.</td></tr>
+              <tr><td class="id">Deep / sequence models</td><td>Four seasons of one series is small data; end-to-end representation learning would surrender exact explainability and reproducibility for uncertain gains. Revisited honestly in §11.</td></tr>
+              <tr><td class="id">Learned degradation model</td><td>No labelled degradation events exist to learn from. A calibrated statistical detector is defensible, explainable, and its false-positive rate is derivable.</td></tr>
+              <tr><td class="id">One monolithic pipeline</td><td>Failure isolation becomes impossible — one exception tears down unrelated capability. Five layers with typed boundaries let each fail alone.</td></tr>
+              <tr><td class="id">Hidden failure recovery</td><td>Silently retrying or substituting defaults violates principle 1: a masked fault reappears as an unexplainable result. Every recovery is coded and logged.</td></tr>
+              <tr><td class="id">Lap-level cross-validation</td><td>The same circuit on both sides of a fold leaks circuit identity into "driver" performance. Group-by-circuit CV costs headline score and buys validity.</td></tr>
+              <tr><td class="id">asyncpg · full MLflow · pandas 2</td><td>Wheel availability on the pinned Python forced psycopg v3, mlflow-skinny and the pandas 3 / numpy 2 line — each migration ratified and recorded, not absorbed.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Against the published landscape</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Capability</th><th>Typical published work</th><th>APEX</th></tr></thead>
+            <tbody>
+              <tr><td>Driver classification</td><td class="c">✓</td><td class="c">✓</td></tr>
+              <tr><td>Explainability</td><td class="c">partial</td><td class="c">✓ exact SHAP, every output</td></tr>
+              <tr><td>Confidence gating</td><td class="c">rare</td><td class="c">✓ typed states + propagated composition</td></tr>
+              <tr><td>Fail-safe contracts</td><td class="c">—</td><td class="c">✓ 69 codes, executable fault harness</td></tr>
+              <tr><td>Typed uncertainty</td><td class="c">—</td><td class="c">✓ first-class DEGRADED / gated states</td></tr>
+              <tr><td>Behaviour fingerprint</td><td class="c">partial</td><td class="c">✓ 56-dim, projected, stability-tracked</td></tr>
+              <tr><td>Production architecture</td><td class="c">—</td><td class="c">✓ API, persistence, cache, live UI</td></tr>
+              <tr><td>Held-out-circuit evaluation</td><td class="c">rare</td><td class="c">✓ two circuits quarantined from day one</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The formal citation of the comparison rows belongs to the dissertation's related-work
+          chapter; the table states the claim this document defends.
+        </p>
+      </section>
+
+      <!-- ============ 9 ============ -->
+      <section id="engineering">
+        <span class="sec-num">09</span>
+        <h2>Engineering evidence</h2>
+        <p>
+          The engineering discipline is measurable. All numbers below are computed from the
+          repository and the running system, not estimated.
+        </p>
+
+        <h3>Codebase</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Measure</th><th class="n">Value</th><th>Reading</th></tr></thead>
+            <tbody>
+              <tr><td>Application code</td><td class="n">19,803 LOC · 46 modules</td><td>11 packages, dependency-ordered</td></tr>
+              <tr><td>Backend tests</td><td class="n">17,197 LOC · 50 modules · 1,078 tests</td><td>0.87 test LOC per app LOC; suites mirror <code>app/</code></td></tr>
+              <tr><td>Frontend</td><td class="n">7,007 LOC + 3,588 test LOC · 271 tests</td><td>every screen behaviour and failure state exercised</td></tr>
+              <tr><td>Functions</td><td class="n">573 · mean complexity 4.3</td><td>AST branch count; p95 = 15, max = 38 (the detector core)</td></tr>
+              <tr><td>Error codes</td><td class="n">69, each with a triggering test</td><td>principle 5, mechanically checked per feature</td></tr>
+              <tr><td>Config surface</td><td class="n">198 keys, all typed + validated</td><td>no threshold lives in code; static scans enforce it</td></tr>
+              <tr><td>Divergence ledger</td><td class="n">78 numbered entries</td><td>every departure from the master spec, with its reason</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Runtime, measured</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Surface</th><th class="n">p50</th><th class="n">p95</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td class="id">GET /health</td><td class="n">5 ms</td><td class="n">7 ms</td><td>real handle + DB probes, not a static pong</td></tr>
+              <tr><td class="id">GET /drivers</td><td class="n">10 ms</td><td class="n">11 ms</td><td>13 enriched profiles from the artefact</td></tr>
+              <tr><td class="id">POST /predict</td><td class="n">43 ms</td><td class="n">46 ms</td><td>including inline exact SHAP, cache off; budget 200 ms → <code>PERF_WARN</code> flag beyond it</td></tr>
+              <tr><td class="id">GET /replay (26 laps)</td><td class="n">1.17 s</td><td class="n">1.21 s</td><td>26 causal detector re-runs per request, by design — read-only, cacheable</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Serving memory is ≈ 487 MB with all four model handles resident. Training cost: the
+          Optuna study ran 201 trials at ≈ 3.3 minutes per trial (≈ 11 h wall) with resumable
+          storage — a crash resumes, never restarts. The 53,928-vector matrix builds in a single
+          pass over the cached Parquet. Localhost measurements on the development machine, single
+          worker; they bound the architecture, not a production deployment.
+        </p>
+
+        <h3>Failure recovery, executed</h3>
+        <p>
+          The fault-injection harness assembles the real application and injects seven faults —
+          gate behaviour, source outage → stale-cache serving, the NULL-tolerance boundary, Redis
+          down across 100 consecutive predictions, database down with no partial write, an
+          out-of-distribution upload, and a raising SHAP explainer. All seven resolve to coded,
+          logged, served outcomes; none reach a bare exception. This is RQ5's evidence, and it is
+          executable rather than asserted.
+        </p>
+      </section>
+
+      <!-- ============ 10 ============ -->
+      <section id="results">
+        <span class="sec-num">10</span>
+        <h2>Real-data results · 2022–2025</h2>
+        <p>
+          Four seasons of race telemetry for the thirteen drivers present in every season, across 25
+          circuits. Belgium and Italy were quarantined from the first line of code and evaluated
+          only here.
+        </p>
+
+        <div class="headline">
+          <div class="hcell miss"><b>0.4068</b><span>held-out macro F1</span></div>
+          <div class="hcell"><b>0.78</b><span>a-priori target</span></div>
+          <div class="hcell beat"><b>1.7×</b><span>vs random forest</span></div>
+          <div class="hcell beat"><b>5.3×</b><span>vs 13-class chance</span></div>
+        </div>
+
+        <div class="bars">
+          <div class="bar-row"><span class="k">APEX</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="v">0.407</span></div>
+          <div class="bar-row"><span class="k">RF</span><span class="bar-track"><span class="bar-fill" style="width:92%"></span></span><span class="v">0.375</span></div>
+          <div class="bar-row"><span class="k">LogReg</span><span class="bar-track"><span class="bar-fill" style="width:60%"></span></span><span class="v">0.245</span></div>
+          <div class="bar-row"><span class="k">Majority</span><span class="bar-track"><span class="bar-fill" style="width:3%"></span></span><span class="v">0.012</span></div>
+        </div>
+
+        <h3>Per-driver identifiability is itself a finding</h3>
+        <div class="bars">
+          <div class="bar-row"><span class="k">LEC</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="v">0.68</span></div>
+          <div class="bar-row"><span class="k">ALB</span><span class="bar-track"><span class="bar-fill" style="width:92%"></span></span><span class="v">0.63</span></div>
+          <div class="bar-row"><span class="k">NOR</span><span class="bar-track"><span class="bar-fill" style="width:83%"></span></span><span class="v">0.56</span></div>
+          <div class="bar-row"><span class="k">VER</span><span class="bar-track"><span class="bar-fill" style="width:78%"></span></span><span class="v">0.53</span></div>
+          <div class="bar-row"><span class="k">GAS</span><span class="bar-track"><span class="bar-fill" style="width:75%"></span></span><span class="v">0.51</span></div>
+          <div class="bar-row"><span class="k">OCO</span><span class="bar-track"><span class="bar-fill" style="width:69%"></span></span><span class="v">0.47</span></div>
+          <div class="bar-row"><span class="k">SAI</span><span class="bar-track"><span class="bar-fill" style="width:59%"></span></span><span class="v">0.40</span></div>
+          <div class="bar-row"><span class="k">HAM</span><span class="bar-track"><span class="bar-fill" style="width:50%"></span></span><span class="v">0.34</span></div>
+          <div class="bar-row"><span class="k">TSU</span><span class="bar-track"><span class="bar-fill" style="width:44%"></span></span><span class="v">0.30</span></div>
+          <div class="bar-row"><span class="k">RUS</span><span class="bar-track"><span class="bar-fill" style="width:38%"></span></span><span class="v">0.26</span></div>
+          <div class="bar-row"><span class="k">HUL</span><span class="bar-track"><span class="bar-fill" style="width:37%"></span></span><span class="v">0.25</span></div>
+          <div class="bar-row"><span class="k">ALO</span><span class="bar-track"><span class="bar-fill" style="width:36%"></span></span><span class="v">0.25</span></div>
+          <div class="bar-row"><span class="k">STR</span><span class="bar-track"><span class="bar-fill" style="width:16%"></span></span><span class="v">0.11</span></div>
+        </div>
+        <p>
+          A six-fold spread from LEC (0.68) to STR (0.11): some drivers are far more identifiable
+          from behaviour alone. Whether that reflects genuine distinctiveness, unequal lap counts or
+          teammate confusion needs the confusion-matrix analysis in the evaluation chapter.
+        </p>
+
+        <div class="note gap">
+          <h4>A structural finding, not a bug</h4>
+          <p>
+            The training run's data-quality log contains <strong>3,946
+            <code>NORMALISATION_FALLBACK</code> rows — exactly the size of the test split</strong>.
+            Every held-out lap normalised through the global fallback, because genuinely unseen
+            circuits <em>have</em> no per-circuit statistics (principle 2 working as specified, and
+            logged). The headline is therefore measured under globally-normalised features while
+            cross-validation was not — a structural contributor to the 0.483 → 0.407 drop that
+            belongs in the evaluation chapter's method discussion, quantified, rather than patched.
+          </p>
+        </div>
+
+        <div class="note">
+          <h4>What DEGRADED means here</h4>
+          <p>
+            The classifier missed its target and <em>reported so</em> — the run records the miss and
+            writes the champion rather than forcing a pass. The 0.78 target was calibrated against a
+            synthetic fixture; 13-way identification on public telemetry — boolean brake channel,
+            7.5 Hz true rate — is a substantially harder problem. The honest reading: the signal is
+            real (5.3× chance, 1.7× the strongest baseline) and weaker than the target assumed, and
+            the constraint analysis belongs to the data, not the architecture.
+          </p>
+        </div>
+      </section>
+
+      <!-- ============ 11 ============ -->
+      <section id="critique">
+        <span class="sec-num">11</span>
+        <h2>Architectural critique &amp; response</h2>
+        <p>
+          The supervisor review raised twelve system-level critiques. Three were implemented in this
+          cycle; the rest are answered here — some defended, some accepted as the strongest future
+          directions. None are ignored.
+        </p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Critique</th><th>Response</th><th>Detail</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Setup prediction over-claims</td>
+                <td><span class="chip chip-ok">implemented</span></td>
+                <td>Reframed as tendencies: direction vs a grid reference from the model's own outputs, no reference → no direction, disclaimer mandatory.</td>
+              </tr>
+              <tr>
+                <td>No uncertainty propagation</td>
+                <td><span class="chip chip-ok">implemented</span></td>
+                <td>The propagated-confidence composition on every prediction — three served signals multiplied, zero new thresholds, gate untouched.</td>
+              </tr>
+              <tr>
+                <td>Only predictions are explained</td>
+                <td><span class="chip chip-ok">implemented</span></td>
+                <td>Degradation alerts ship exact per-feature attribution; setup tendencies ship their heuristic basis. Style-cluster explanation remains open.</td>
+              </tr>
+              <tr>
+                <td>Driver ID is the weakest primary objective</td>
+                <td><span class="chip chip-warn">reframed</span></td>
+                <td>Accepted in part: the fingerprint is the system's real intermediate representation — identification is its <em>validation</em> (if identity isn't recoverable, the fingerprint carries no signal), and comparison, deviation and setup are its applications. The dissertation frames it this way.</td>
+              </tr>
+              <tr>
+                <td>Everything rides one feature pipeline</td>
+                <td><span class="chip chip-warn">defended</span></td>
+                <td>A single audited pipeline with per-model feature subsets (the detector uses 26 of 28; corner decomposition adds its own) was chosen over per-model pipelines: one leakage boundary to defend beats four. The risk is real and is mitigated by the tripwires and per-feature range tests.</td>
+              </tr>
+              <tr>
+                <td>Models don't communicate</td>
+                <td><span class="chip chip-warn">partial</span></td>
+                <td>The detector consumes the style-space projection per lap (the replay's fingerprint drift); setup consumes the fingerprint. Deeper coupling — e.g. personalisation reading classifier uncertainty — is future work.</td>
+              </tr>
+              <tr>
+                <td>Style space loses temporal information</td>
+                <td><span class="chip chip-todo">future work</span></td>
+                <td>True by construction: mean/spread aggregation discards sequence. Sequence embeddings or a temporal encoder are the natural successor — with the honest cost of losing exact explainability and small-data reliability.</td>
+              </tr>
+              <tr>
+                <td>Features are static / no learned representation</td>
+                <td><span class="chip chip-todo">future work</span></td>
+                <td>A hybrid (28 engineered + learned latent features) is the credible next architecture; four seasons of one series is at the edge of what representation learning rewards.</td>
+              </tr>
+              <tr>
+                <td>No what-if simulation</td>
+                <td><span class="chip chip-todo">future work</span></td>
+                <td>The strongest proposed application: perturb a behavioural feature, project the fingerprint shift, re-gate the prediction. The serving surfaces exist; the missing piece is a validated perturbation model rather than plumbing.</td>
+              </tr>
+              <tr>
+                <td>No graph representation</td>
+                <td><span class="chip chip-todo">future work</span></td>
+                <td>Corners, sectors, laps and drivers do form a graph. A GNN treatment is a research programme in its own right, out of scope for this build.</td>
+              </tr>
+              <tr>
+                <td>No ensemble disagreement signal</td>
+                <td><span class="chip chip-todo">future work</span></td>
+                <td>Model disagreement as an uncertainty input is compatible with the propagated-confidence design — a fourth factor — and is the cheapest of the future items.</td>
+              </tr>
+              <tr>
+                <td>"Replace the architecture with a temporal encoder → embedding hub"</td>
+                <td><span class="chip chip-warn">defended</span></td>
+                <td>The proposed shape — one latent representation feeding every head — is <em>already</em> APEX's shape, with an engineered fingerprint as the embedding. Swapping it for a learned temporal one is the future-work column above, not a rebuild: the contracts, gates, and serving layer survive unchanged.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ 12 ============ -->
+      <section id="gaps">
+        <span class="sec-num">12</span>
+        <h2>Gaps and limitations</h2>
+        <p>
+          Stated plainly, because several bear directly on how the results should be read. Items
+          closed during the review cycle are struck through to keep the record honest.
+        </p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Limitation</th><th>Impact</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Brake channel is boolean, not pressure</td>
+                <td>Brake-shape features are derived from a 1-bit proxy and must not be read as pressure.</td>
+                <td><span class="chip chip-gap">inherent</span></td>
+              </tr>
+              <tr>
+                <td>7.5 Hz true rate, resampled to 50 Hz</td>
+                <td>Clears the validation floor but adds no information; high-frequency features are interpolation-smoothed.</td>
+                <td><span class="chip chip-gap">inherent</span></td>
+              </tr>
+              <tr>
+                <td>Held-out laps normalise globally</td>
+                <td>Structural to the leakage contract; contributes to the CV → held-out drop (§10).</td>
+                <td><span class="chip chip-warn">methodological</span></td>
+              </tr>
+              <tr>
+                <td>Classifier below target</td>
+                <td>0.4068 vs 0.78, reported as DEGRADED with baselines for context.</td>
+                <td><span class="chip chip-warn">finding</span></td>
+              </tr>
+              <tr>
+                <td>Setup targets are heuristic</td>
+                <td>No ground-truth setups exist; ~5 of 10 parameters reliably inferrable; tendencies + disclaimer are the honest surface.</td>
+                <td><span class="chip chip-warn">documented</span></td>
+              </tr>
+              <tr>
+                <td>UMAP fitted on 13 points</td>
+                <td>One point per driver; small-sample by construction. PCA fallback persisted; stability measured.</td>
+                <td><span class="chip chip-warn">documented</span></td>
+              </tr>
+              <tr>
+                <td><s>Radar scale mismatch (rim clamping)</s></td>
+                <td>Closed by the redesign: profile radars scale per axis to the grid maximum; comparison radars share one per-axis pair scale.</td>
+                <td><span class="chip chip-ok">closed</span></td>
+              </tr>
+              <tr>
+                <td><s>Replay τ / alert payload deferred</s></td>
+                <td>Closed: the DTO now serves the per-lap threshold and the full alert payload the detector always computed, plus a session catalog.</td>
+                <td><span class="chip chip-ok">closed</span></td>
+              </tr>
+              <tr>
+                <td>F20 real-corpus assertions partially wired</td>
+                <td>The remaining evaluation pillar reports honestly rather than passing silently; completing it is F21's first task.</td>
+                <td><span class="chip chip-gap">open</span></td>
+              </tr>
+              <tr>
+                <td>Playwright e2e green-field</td>
+                <td>Screen behaviour is covered by 271 component tests; browser-level e2e remains deferred.</td>
+                <td><span class="chip chip-todo">deferred</span></td>
+              </tr>
+              <tr>
+                <td>Dissertation chapters</td>
+                <td>F21/F22 remain; F20 was the last executable feature.</td>
+                <td><span class="chip chip-todo">todo</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ 13 ============ -->
+      <section id="method">
+        <span class="sec-num">13</span>
+        <h2>How it was built</h2>
+        <p>
+          One feature, one specification, one focused session. Each specification is written and
+          adversarially reviewed before implementation; each build ends with a conformance check
+          against its own acceptance criteria and failure-mode table, and merges only with the full
+          suite green.
+        </p>
+
+        <h3>The divergence ledger</h3>
+        <p>
+          Seventy-eight numbered divergences record every place the implementation departs from the
+          master specification, with the reason. They are not errata — several are the most
+          defensible decisions in the project (the aggregate scaler, the 28-feature champion, the
+          stateless <code>/predict</code>). Recording them is what makes the departures reviewable
+          rather than invisible, and this review cycle <em>closed</em> several by widening the API
+          rather than amending the ledger.
+        </p>
+
+        <h3>Automated review</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Gate</th><th>Looks for</th></tr></thead>
+            <tbody>
+              <tr><td class="id">ml-auditor</td><td>Scaler leakage, unseeded randomness, held-out contamination, missing gates, uncalibrated probabilities</td></tr>
+              <tr><td class="id">failsafe-auditor</td><td>Every documented failure mode actually handled, coded, logged and surfaced</td></tr>
+              <tr><td class="id">/apex-review</td><td>The five principles against the working diff</td></tr>
+              <tr><td class="id">/spec-check</td><td>Each acceptance criterion implemented <em>and</em> exercised by a test</td></tr>
+              <tr><td class="id">ruff · mypy · pytest · vitest · tsc</td><td>Lint, strict typing, both full suites green before any merge</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Ratified stack migrations</h3>
+        <p>
+          Four dependency decisions changed the stack mid-build and were documented rather than
+          absorbed: pandas 3 / numpy 2 on modern Python (forced by wheel availability),
+          <code>mlflow-skinny</code> because full MLflow caps pandas below 3, SHAP pulling numpy
+          back a minor version, and psycopg v3 where asyncpg ships no compatible wheel. Each is
+          recorded in the project constitution so downstream behaviour has a traceable cause.
+        </p>
+      </section>
+
+      <footer>
+        <span>APEX · COMP702</span>
+        <span>F00–F20 complete · F21–F22 outstanding</span>
+        <span>2022–2025 FastF1 corpus · 53,928 vectors</span>
+        <span>Held out: Belgium, Italy</span>
+        <span>Revised against the full supervisor review</span>
+      </footer>
+
+    </main>
+  </div>
+</div>

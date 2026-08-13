@@ -66,6 +66,20 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **RAW-REPRESENTATION CHAMPION — 2026-08-13 (feat/raw-representation):** the normalisation
+  inversion operationalised with the user's explicit approval ("do it with re-tune").
+  `classifier.use_circuit_normalisation: false` (train-time only; `bundle_meta.json` records the
+  representation and SERVING OBEYS THE BUNDLE — legacy sidecar-less bundles serve normalised, a
+  corrupt sidecar refuses to serve). Fresh 200-trial Optuna study on the raw space (automatic —
+  the study key hashes the fit data; crash-resumed once from trial 31, RDB design working as
+  specified). **Champion v2: held-out macro-F1 0.6225** (was 0.4068 normalised; counterfactual
+  normalised ablation inside the run: 0.449). Per-driver: LEC 0.85 · VER 0.72 · ALB 0.72 · NOR
+  0.69 · OCO 0.65 … HUL 0.47 (worst; STR rose 0.11→0.55). Status remains DEGRADED (0.78 target
+  unmet, reported honestly). Promoted to serving artefacts + smoke-verified through /predict
+  (raw bundle, breakdown intact); `train_real_summary.json` updated with the previous champion
+  preserved for comparison; `driver_profiles.json` regenerated (UI ID rates now reflect v2).
+  Style space / detector / personalisation untouched on the F04 pipeline. In-training ablation
+  now always reports the counterfactual representation.
 - **REAL-CORPUS EVALUATION CYCLE — 2026-08-13 (feat/real-evaluation):** the six supervisor
   evaluation directives executed as read-only studies over the frozen served bundles — scripts
   `eval_rq3 / eval_rq4 / eval_normshift / eval_ablation / eval_setup_validation` (each with

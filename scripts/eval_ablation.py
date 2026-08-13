@@ -110,7 +110,9 @@ def _content_hash(payload: dict[str, Any]) -> str:
     return sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def run(config_path: str, matrix_path: str, artefact_dir: str | None, out_path: str) -> dict[str, Any]:
+def run(
+    config_path: str, matrix_path: str, artefact_dir: str | None, out_path: str,
+) -> dict[str, Any]:
     from app.contracts.config import load_config
     from app.ml.inference import load_model
     from app.pipeline.features import FEATURE_IDS

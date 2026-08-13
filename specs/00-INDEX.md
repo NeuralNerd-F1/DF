@@ -66,6 +66,32 @@ then implement, gate it with `/spec-check <id>` and `/apex-review <id>`.
   only place they are evaluated.
 
 ## Amendments
+- **REAL-CORPUS EVALUATION CYCLE — 2026-08-13 (feat/real-evaluation):** the six supervisor
+  evaluation directives executed as read-only studies over the frozen served bundles — scripts
+  `eval_rq3 / eval_rq4 / eval_normshift / eval_ablation / eval_setup_validation` (each with
+  mechanism tests) → content-hashed artefacts under `artefacts/real/eval/`. Findings:
+  **(1) RQ3 SUPPORTED** — teammate intra 1.951 vs inter 2.338, permutation p=0.024;
+  nearest-neighbour-is-teammate 2.4× chance; season drift ratio 0.819 (VER-TSU 2025 pair excluded,
+  reason recorded). **(2) RQ4 MEASURED** — 2,138 stints: alert rate 4–6%, 1-lap confirmation,
+  ~9–10-lap proxy lead, **91% of alerts self-resolve** → transient behavioural excursions dominate
+  under the pit-stop proxy (no ground-truth labels; distributions + recovery proxy reported, no
+  single "FP rate" claimed). **(3) Domain shift** — Evaluation A reproduces 0.4068 exactly;
+  Evaluation B (first-N chronological clean calibration laps, classifier frozen, paired scoring,
+  `normalisation.json` hash-asserted untouched) recovers +3.1 F1 at N=30, +3.5 at N=200 → ~40% of
+  the CV→held-out drop is stats availability, the rest genuine shift. **(4) Ablation matrix**
+  (champion hyperparameters fixed, one protocol; "+fingerprint" row refused as label leakage,
+  corner row absent pending Stage-B re-extraction — both with reasons in the artefact): throttle
+  0.206 strongest single domain (agrees with SHAP → **RQ2 SUPPORTED** by removal+attribution);
+  **NORMALISATION INVERSION: all-28 raw = 0.614 vs normalised 0.413** on never-seen circuits —
+  per-circuit z-scoring erases driver signal; serving pipeline unchanged (DON'T list), finding +
+  re-scoping recommendation recorded for the dissertation. **(5) Setup validation** — scoped claim
+  ("internally consistent tendencies", never "optimal setup"): season/context direction agreement
+  0.68/0.77, smooth sensitivity (probe scale from the bundle's own pc_std), reliability↔held-out
+  error **r = −0.80** over 26 held-out cells; LOW/WIDE band empty-by-construction for
+  in-distribution drivers (stated — the continuous correlation carries the stratification claim).
+  **(6) CVAE reconciliation** — removed at SPEC stage (§13 replanning note); no implementation
+  divergence; recorded in the design doc's trade-offs. Design-doc RQ table updated: RQ2/RQ3 green,
+  RQ4 measured/proxy-bounded, RQ1 three-number reading. Next: F21 (dissertation).
 - **SYSTEM INPUTS — 2026-08-09 (feat/system-inputs):** three of the supervisor-review
   system-architecture inputs implemented (the remainder are research-scale and are addressed as
   trade-offs/future work in the design document):

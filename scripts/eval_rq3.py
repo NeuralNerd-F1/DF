@@ -95,7 +95,10 @@ def pooled_permutation_pvalue(
         perm: list[float] = []
         for season, coords in per_season.items():
             drivers = sorted(coords)
-            shuffled = dict(zip(rng.permutation(drivers).tolist(), [coords[d] for d in drivers]))
+            shuffled = dict(
+                zip(rng.permutation(drivers).tolist(),
+                    [coords[d] for d in drivers], strict=True)
+            )
             intra, _ = season_pair_distances(shuffled, pairs_by_season.get(season, ()))
             perm.extend(intra)
         if perm and float(np.mean(perm)) <= obs_mean:
@@ -128,7 +131,7 @@ def season_drift_ratios(
     different drivers — the stability claim, made relative rather than absolute."""
     seasons = sorted(per_season)
     out: dict[str, dict[str, float]] = {}
-    for prev, curr in zip(seasons, seasons[1:]):
+    for prev, curr in zip(seasons, seasons[1:], strict=False):
         a, b = per_season[prev], per_season[curr]
         inter = [
             _dist(b[x], b[y]) for x, y in combinations(sorted(b), 2)
@@ -276,7 +279,8 @@ def main() -> None:
     print(f"engine={r['engine']}  seasons={sorted(r['per_season'])}")
     print(
         f"pooled intra {p['mean_intra']:.3f} vs inter {p['mean_inter']:.3f}"
-        f"  ratio {p['intra_over_inter']:.3f}  permutation p={p['permutation_p_intra_lt_inter']:.4f}"
+        f"  ratio {p['intra_over_inter']:.3f}"
+        f"  permutation p={p['permutation_p_intra_lt_inter']:.4f}"
     )
     print(
         f"nearest-neighbour-is-teammate {nn['hits']}/{nn['eligible']}"

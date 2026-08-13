@@ -154,7 +154,7 @@ def run(
     groups = df.groupby(["season", "circuit", "circuit_type", "driver", "stint"], dropna=True)
     rows: list[dict[str, Any]] = []
     skipped_short = 0
-    for (season, circuit, ctype, driver, stint), g in groups:
+    for (season, circuit, ctype, driver, _stint), g in groups:
         g = g.sort_values("lap_number")
         if len(g) < min_stint_laps:
             skipped_short += 1
@@ -221,7 +221,10 @@ def main() -> None:
     args = ap.parse_args()
     r = run(args.config, args.matrix, args.artefact_dir, args.out, args.min_stint_laps)
 
-    print(f"stints evaluated {r['n_stints_evaluated']}  (skipped short: {r['n_stints_skipped_short']})")
+    print(
+        f"stints evaluated {r['n_stints_evaluated']}"
+        f"  (skipped short: {r['n_stints_skipped_short']})"
+    )
     for split, m in r["by_split"].items():
         lead = m["laps_remaining_after_alert"]
         lag = m["confirmation_lag_laps"]

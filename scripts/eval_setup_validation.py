@@ -81,12 +81,13 @@ def _content_hash(payload: dict[str, Any]) -> str:
     return sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def run(config_path: str, matrix_path: str, artefact_dir: str | None, out_path: str) -> dict[str, Any]:
+def run(
+    config_path: str, matrix_path: str, artefact_dir: str | None, out_path: str,
+) -> dict[str, Any]:
     import app.personalisation.engine as eng
     from app.contracts.config import load_config
     from app.ml.stylespace import load_style_space
     from app.personalisation.engine import load_personalisation
-    from app.pipeline.features import FEATURE_IDS
     from app.pipeline.normalise import load_normalisation_params
 
     config = load_config(config_path)
@@ -120,7 +121,7 @@ def run(config_path: str, matrix_path: str, artefact_dir: str | None, out_path: 
             per_season.setdefault(driver, {})[str(season)] = np.asarray(c, float)
 
     season_consistency: dict[str, list[float]] = defaultdict(list)
-    for driver, seasons in per_season.items():
+    for _driver, seasons in per_season.items():
         dirs_by_param: dict[str, list[str | None]] = defaultdict(list)
         for season in sorted(seasons):
             params = recommend(seasons[season], "EvalCircuit", _CONTEXT)
@@ -140,7 +141,7 @@ def run(config_path: str, matrix_path: str, artefact_dir: str | None, out_path: 
     # ---- Axis 2 · circuit-context stability ------------------------------------------------
     ctx_consistency: dict[str, list[float]] = defaultdict(list)
     contexts = list(handle.circuit_types)
-    for driver, coord in style.known_coords_5d.items():
+    for _driver, coord in style.known_coords_5d.items():
         dirs_by_param = defaultdict(list)
         for ctype in contexts:
             params = recommend(np.asarray(coord, float), "EvalCircuit", ctype)
@@ -183,7 +184,7 @@ def run(config_path: str, matrix_path: str, artefact_dir: str | None, out_path: 
     for name in numeric_params:  # smoothness: response must not shrink as ε grows
         s = sens[name]
         keys = [f"mean_abs_delta_frac_at_{f}sd" for f in _EPS_FRACTIONS]
-        for a, b in zip(keys, keys[1:]):
+        for a, b in zip(keys, keys[1:], strict=False):
             smooth_checks += 1
             if s[a] > s[b] + 1e-9:
                 smooth_violations += 1
@@ -221,7 +222,9 @@ def run(config_path: str, matrix_path: str, artefact_dir: str | None, out_path: 
         for spec in eng._SETUP_PARAMETERS:
             if spec.kind is eng.SetupOutputKind.CATEGORY:
                 continue
-            target = eng._target_for(cell.aggregate, spec, fmin, fmax, fia, config.normalise.min_std)
+            target = eng._target_for(
+                cell.aggregate, spec, fmin, fmax, fia, config.normalise.min_std
+            )
             p = params[spec.name]
             value = p.value if isinstance(p.value, (int, float)) else (
                 float(np.mean(p.value_range)) if p.value_range else None

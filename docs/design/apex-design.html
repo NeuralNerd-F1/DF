@@ -380,32 +380,32 @@
                 <td>Driver identity is encoded in behavioural features alone</td>
                 <td>Held-out macro F1 (Belgium + Italy, never trained on)</td>
                 <td class="n">0.78</td>
-                <td class="n">0.4068</td>
-                <td><span class="chip chip-warn">signal, target missed</span> 5.3× chance, 1.7× random forest — §10</td>
+                <td class="n">0.4068 zero-shot · 0.445 calibrated · 0.614 un-normalised</td>
+                <td><span class="chip chip-warn">signal, target missed</span> 5.3× chance, 1.7× random forest; the three numbers separate deployment assumptions — §10</td>
               </tr>
               <tr>
                 <td class="id">RQ2</td>
                 <td>A small set of behaviours carries most of the discrimination</td>
-                <td>SHAP concentration across 6 domains</td>
+                <td>SHAP concentration + ablation-by-removal</td>
                 <td>ranked attribution</td>
-                <td>throttle-domain dominance; per-driver signatures served</td>
-                <td><span class="chip chip-warn">partial</span> global evidence in place; formal concentration test in F21</td>
+                <td>throttle strongest single domain (0.206 of 0.413); every domain alone far below the full 28; removal evidence agrees with SHAP</td>
+                <td><span class="chip chip-ok">supported</span> attribution and removal now agree</td>
               </tr>
               <tr>
                 <td class="id">RQ3</td>
                 <td>Drivers occupy a stable, meaningful continuous style space</td>
-                <td>Projection stability + teammate proximity</td>
+                <td>Teammate proximity + season stability, real corpus</td>
                 <td>intra-team &lt; inter-team distance</td>
-                <td>13-driver UMAP built; proximity test not yet run on the real corpus</td>
-                <td><span class="chip chip-warn">partial</span></td>
+                <td>intra 1.951 vs inter 2.338 (ratio 0.834, permutation p = 0.024); nearest-neighbour-is-teammate 2.4× chance; season drift ratio 0.819</td>
+                <td><span class="chip chip-ok">supported</span></td>
               </tr>
               <tr>
                 <td class="id">RQ4</td>
                 <td>Deviation from a driver's own baseline is detectable mid-stint</td>
-                <td>Alert lead time vs τ crossings</td>
+                <td>Lead time, alert rates, recovery — 2,138 real stints</td>
                 <td>alerts before failure with usable lead time</td>
-                <td>τ calibrated per driver × circuit type (52 cells); verified end-to-end on the replay demo; real-corpus lead time pending</td>
-                <td><span class="chip chip-warn">partial</span></td>
+                <td>alert rate 4–6%, 1-lap confirmation, ~9–10-lap proxy lead; 91% of alerts self-resolve — transient excursions dominate under the pit-stop proxy</td>
+                <td><span class="chip chip-warn">measured, proxy-bounded</span> deviation detection works; degradation attribution limited by proxy labels</td>
               </tr>
               <tr>
                 <td class="id">RQ5</td>
@@ -1067,6 +1067,65 @@ Prediction  0.94 HIGH    UI: "6,809 laps rejected: not green-flag"</pre>
             the constraint analysis belongs to the data, not the architecture.
           </p>
         </div>
+
+        <h3>The evaluation cycle — five studies, all on the real corpus</h3>
+        <p>
+          Run after the supervisor review, each as a content-hashed, seeded artefact under
+          <code>artefacts/real/eval/</code>, each read-only over the frozen served bundles.
+        </p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Study</th><th>Headline</th><th>Reading</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="id">Domain shift (A vs B)</td>
+                <td>Zero-shot 0.4068 reproduced exactly; +3.1 F1 with 30 calibration laps, +3.5 with 200 (paired protocol, classifier frozen)</td>
+                <td>~40% of the CV→held-out drop is normalisation-statistics availability, recoverable with half a race of running; the curve is flat beyond N=30 — the rest is genuine shift</td>
+              </tr>
+              <tr>
+                <td class="id">Ablation matrix</td>
+                <td>Throttle 0.206 &gt; interactions 0.166 &gt; braking 0.158 ≫ speed 0.045; full 28 = 0.413; <strong>without circuit normalisation = 0.614</strong></td>
+                <td>RQ2 by removal — and the normalisation inversion below</td>
+              </tr>
+              <tr>
+                <td class="id">Style space (RQ3)</td>
+                <td>Teammates closer (p = 0.024); nearest-neighbour-is-teammate 2.4× chance; season drift ratio 0.819, 87% of transitions &lt; 1</td>
+                <td>The space encodes car-plus-driver structure and is season-stable</td>
+              </tr>
+              <tr>
+                <td class="id">Detector (RQ4)</td>
+                <td>2,138 stints: 4–6% alert rate, 1-lap confirmation, ~9–10-lap proxy lead, 91% of alerts self-resolve</td>
+                <td>Behavioural-deviation detection works as specified; most excursions are transient — degradation attribution is proxy-bounded</td>
+              </tr>
+              <tr>
+                <td class="id">Setup validation</td>
+                <td>Direction agreement 0.68 (seasons) / 0.77 (contexts); smooth responses; reliability↔held-out-error r = −0.80</td>
+                <td>The scoped claim holds: internally consistent tendencies whose served confidence genuinely tracks error</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note gap">
+          <h4>The normalisation inversion — this cycle's strongest finding</h4>
+          <p>
+            Training the identical model on <em>raw</em> features lifts held-out macro-F1 from
+            0.413 to <strong>0.614</strong>. Belgium and Italy were never trained on, so this
+            cannot be circuit-identity leakage: the raw levels of the six circuit-sensitive
+            features carry substantial driver-discriminative signal that per-circuit z-scoring
+            erases — and the zero-shot fallback mismatch (worth only ~3 points, per Evaluation B)
+            is the smaller part of the cost. The hyperparameters were tuned on normalised
+            features, so 0.614 is a lower bound on the raw representation's ceiling.
+          </p>
+          <p>
+            The serving pipeline is deliberately unchanged — principle 2's machinery guards
+            leakage, not this design choice — and the finding goes to the evaluation chapter with
+            a recorded recommendation: re-scope which features are normalised (or normalise at
+            circuit-type rather than circuit level) as the highest-value follow-up the ablation
+            surfaced. The specification's assumption that circuit normalisation removes only
+            nuisance variance is, on this corpus, inverted.
+          </p>
+        </div>
       </section>
 
       <!-- ============ 11 ============ -->
@@ -1200,9 +1259,9 @@ Prediction  0.94 HIGH    UI: "6,809 laps rejected: not green-flag"</pre>
                 <td><span class="chip chip-ok">closed</span></td>
               </tr>
               <tr>
-                <td>F20 real-corpus assertions partially wired</td>
-                <td>The remaining evaluation pillar reports honestly rather than passing silently; completing it is F21's first task.</td>
-                <td><span class="chip chip-gap">open</span></td>
+                <td>F20 pillar wiring vs the eval artefacts</td>
+                <td>Real-corpus RQ evidence now exists as five content-hashed artefacts (§10); folding them into F20's formal pillar surface is a small wiring task for F21, and the orchestrator keeps reporting honestly until then.</td>
+                <td><span class="chip chip-warn">narrowed</span></td>
               </tr>
               <tr>
                 <td>Playwright e2e green-field</td>

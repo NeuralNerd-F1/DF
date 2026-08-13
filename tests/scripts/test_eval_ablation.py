@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
-
 from app.pipeline.features import FEATURE_IDS
 
 from scripts import eval_ablation as ab

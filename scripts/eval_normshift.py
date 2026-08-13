@@ -212,7 +212,8 @@ def main() -> None:
     args = ap.parse_args()
     r = run(args.config, args.matrix, args.artefact_dir, args.out, args.sweep)
 
-    print(f"Evaluation A (full test split, zero-shot): macro-F1 {r['evaluation_A_full_test_macro_f1']:.4f}")
+    a_full = r["evaluation_A_full_test_macro_f1"]
+    print(f"Evaluation A (full test split, zero-shot): macro-F1 {a_full:.4f}")
     print(f"{'N/circ':>7} {'A (paired)':>11} {'B (calib)':>10} {'Δ':>8}")
     for row in r["curve"]:
         print(

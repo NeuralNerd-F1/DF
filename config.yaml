@@ -156,6 +156,12 @@ classifier:
   labels_filename: labels.json       # F06b seam — sorted driver-name list (index->name for classes_)
   confidence_high: 0.85              # F06b — max-prob >= this -> HIGH else MEDIUM (must be > confidence_gate)
   latency_warn_ms: 200               # F06b — prediction latency over this -> PERF_WARN flag (§5.1)
+  use_circuit_normalisation: false   # 2026-08-13 re-scoping: the ablation measured raw 28 = 0.614 vs
+                                     # normalised 0.413 on never-seen circuits — per-circuit z-scoring
+                                     # erases driver signal for the CLASSIFIER. Train-time only; the
+                                     # bundle records the choice and serving obeys the bundle. All other
+                                     # models (style/detector/personalisation) keep the F04 pipeline.
+  bundle_meta_filename: bundle_meta.json  # sidecar recording the representation choice (F06b reads)
 
 # --- F07 SHAP explainability (§6) ----------------------------------------------------------------
 # TreeExplainer (exact) over the F06 champion's base XGBoost. Local force per prediction, global

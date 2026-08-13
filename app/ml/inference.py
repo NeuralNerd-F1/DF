@@ -92,6 +92,9 @@ class ModelHandle:
     normalisation_params: NormalisationParams
     drivers: list[str]  # index i -> driver name for the champion's integer class i
     model_version: str
+    # The bundle's recorded representation (bundle_meta.json; absent = legacy = True). Serving
+    # obeys THIS, never the live config — train/serve consistency is structural.
+    uses_circuit_normalisation: bool = True
     ready: bool = True
 
 
@@ -269,9 +272,27 @@ def load_model(
             f"champion n_features_in_={n_features} != expected {len(FEATURE_IDS)}",
         )
 
+    # The representation record. Absent file = legacy bundle = normalised (the historic default);
+    # a PRESENT-but-unreadable file refuses to serve — a bundle whose representation cannot be
+    # established must not guess (mirrors the labels-sidecar discipline).
+    uses_norm = True
+    meta_path = art_dir / config.classifier.bundle_meta_filename
+    if meta_path.is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            uses_norm = bool(meta["uses_circuit_normalisation"])
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise _fail(
+                REASON_MODEL_CORRUPT, f"bundle_meta sidecar unreadable: {exc}"
+            ) from exc
+
     version = _resolve_model_version(model_bytes)
     return ModelHandle(
-        model=model, normalisation_params=params, drivers=list(drivers), model_version=version
+        model=model,
+        normalisation_params=params,
+        drivers=list(drivers),
+        model_version=version,
+        uses_circuit_normalisation=uses_norm,
     )
 
 
@@ -384,19 +405,26 @@ def predict(
                 flags=_unwritable_flags(ledger),
             )
 
-        # 2. Normalise (read-only F04 reader; never raises). Carry F04's own flags (e.g. a lost
-        # audit row) forward. Only an UNKNOWN/skipped circuit (used_global) is a genuine
-        # NORMALISATION_FALLBACK degradation; a NULL among the six on a KNOWN circuit is just the
-        # tolerated-NULL passthrough, surfaced via null_features rather than mislabelled as a
-        # circuit fallback.
-        nres = apply_normalisation(
-            fv, circuit=circuit, params=handle.normalisation_params, config=config, log_path=log
-        )
-        flags: list[ErrorCode] = list(nres.flags)
-        degraded = bool(nres.used_global)
-        if nres.used_global:
-            flags.append(ErrorCode.NORMALISATION_FALLBACK)
-        vec = nres.normalised_vector
+        # 2. Representation transform, per the BUNDLE's record (never the live config). Normalised
+        # bundles run the read-only F04 reader; a raw bundle (2026-08-13 re-scoping) serves the
+        # vector verbatim — no circuit transform exists to fall back from, so no
+        # NORMALISATION_FALLBACK state is reachable on that path.
+        if handle.uses_circuit_normalisation:
+            nres = apply_normalisation(
+                fv, circuit=circuit, params=handle.normalisation_params, config=config,
+                log_path=log,
+            )
+            flags: list[ErrorCode] = list(nres.flags)
+            degraded = bool(nres.used_global)
+            if nres.used_global:
+                flags.append(ErrorCode.NORMALISATION_FALLBACK)
+            vec = nres.normalised_vector
+            norm_logged = nres.logged
+        else:
+            flags = []
+            degraded = False
+            vec = fv
+            norm_logged = False
         x = np.array(
             [[(vec.get(fid) if vec.get(fid) is not None else np.nan) for fid in FEATURE_IDS]],
             dtype=float,
@@ -490,7 +518,7 @@ def predict(
             status=status,
             error_code=error_code,
             flags=_dedup(flags),
-            logged=(ledger.rows > 0) or nres.logged,
+            logged=(ledger.rows > 0) or norm_logged,
             probabilities=probabilities,
             top_prediction=top_prediction,
             confidence=confidence,

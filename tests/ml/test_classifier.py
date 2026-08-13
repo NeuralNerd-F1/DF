@@ -642,3 +642,46 @@ def test_classifier_config_rejects_bad(field: str, bad: Any) -> None:
     kwargs[field] = bad
     with pytest.raises(ValueError):
         ClassifierConfig(**kwargs)
+
+
+# --------------------------------------------------------------------------------------------
+# Raw representation (use_circuit_normalisation: false — the 2026-08-13 ablation re-scoping)
+# --------------------------------------------------------------------------------------------
+
+
+def test_raw_representation_trains_records_and_round_trips(
+    tmp_path: Path,
+    make_config: Any,
+    training_matrix: Any,
+) -> None:
+    """Flag off → the champion trains on RAW features, bundle_meta.json records it, the result
+    carries it, the ablation reports the COUNTERFACTUAL (normalised) number, and F06b's
+    load_model serves the bundle raw."""
+    import json as _json
+
+    from app.ml.inference import load_model, predict
+    from app.pipeline.features import FEATURE_IDS
+
+    cfg = make_config(tmp_path)
+    cfg.classifier.use_circuit_normalisation = False
+    result = train_classifier(training_matrix(), config=cfg)
+
+    assert result.uses_circuit_normalisation is False
+    meta_path = Path(cfg.paths.artefacts_dir) / cfg.classifier.bundle_meta_filename
+    assert meta_path.is_file()
+    assert _json.loads(meta_path.read_text(encoding="utf-8")) == {
+        "uses_circuit_normalisation": False
+    }
+    # The counterfactual ablation still reports a number (the normalised road).
+    assert np.isfinite(result.normalisation_ablation_macro_f1)
+
+    handle = load_model(config=cfg, artefact_dir=cfg.paths.artefacts_dir)
+    assert handle.uses_circuit_normalisation is False
+    r = predict(
+        {fid: 1.0 for fid in FEATURE_IDS}, circuit="TotallyUnknownCircuit",
+        handle=handle, config=cfg,
+    )
+    # Raw path: no circuit transform exists, so even an unknown circuit is NOT a
+    # NORMALISATION_FALLBACK degradation — and the prediction still serves.
+    assert r.status is not Status.FAILED
+    assert ErrorCode.NORMALISATION_FALLBACK not in r.flags

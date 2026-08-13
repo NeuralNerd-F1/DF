@@ -46,6 +46,9 @@ def _make_config(tmp_dir: Path) -> AppConfig:
     cfg.classifier.cv_folds = SMALL_FOLDS
     cfg.classifier.optuna_storage = f"sqlite:///{(tmp_dir / 'optuna.db').as_posix()}"
     cfg.classifier.mlflow_tracking_uri = f"sqlite:///{(tmp_dir / 'mlflow.db').as_posix()}"
+    # Pin the fixture to the ORIGINAL normalised representation regardless of the repo default —
+    # the existing suite's expectations were established on it; the raw path has its own test.
+    cfg.classifier.use_circuit_normalisation = True
     return cfg
 
 

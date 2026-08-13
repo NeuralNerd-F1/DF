@@ -380,8 +380,8 @@
                 <td>Driver identity is encoded in behavioural features alone</td>
                 <td>Held-out macro F1 (Belgium + Italy, never trained on)</td>
                 <td class="n">0.78</td>
-                <td class="n">0.4068 zero-shot · 0.445 calibrated · 0.614 un-normalised</td>
-                <td><span class="chip chip-warn">signal, target missed</span> 5.3× chance, 1.7× random forest; the three numbers separate deployment assumptions — §10</td>
+                <td class="n">0.6225 served (raw representation, re-tuned) · 0.4068 original normalised champion</td>
+                <td><span class="chip chip-warn">strong signal, target unmet</span> 8.1× chance; the ablation finding operationalised — §10</td>
               </tr>
               <tr>
                 <td class="id">RQ2</td>
@@ -1008,10 +1008,10 @@ Prediction  0.94 HIGH    UI: "6,809 laps rejected: not green-flag"</pre>
         </p>
 
         <div class="headline">
-          <div class="hcell miss"><b>0.4068</b><span>held-out macro F1</span></div>
-          <div class="hcell"><b>0.78</b><span>a-priori target</span></div>
-          <div class="hcell beat"><b>1.7×</b><span>vs random forest</span></div>
-          <div class="hcell beat"><b>5.3×</b><span>vs 13-class chance</span></div>
+          <div class="hcell beat"><b>0.6225</b><span>held-out macro F1 · served (raw, v2)</span></div>
+          <div class="hcell miss"><b>0.78</b><span>a-priori target — still unmet</span></div>
+          <div class="hcell"><b>0.4068</b><span>original normalised champion</span></div>
+          <div class="hcell beat"><b>8.1×</b><span>vs 13-class chance</span></div>
         </div>
 
         <div class="bars">
@@ -1118,12 +1118,18 @@ Prediction  0.94 HIGH    UI: "6,809 laps rejected: not green-flag"</pre>
             features, so 0.614 is a lower bound on the raw representation's ceiling.
           </p>
           <p>
-            The serving pipeline is deliberately unchanged — principle 2's machinery guards
-            leakage, not this design choice — and the finding goes to the evaluation chapter with
-            a recorded recommendation: re-scope which features are normalised (or normalise at
-            circuit-type rather than circuit level) as the highest-value follow-up the ablation
-            surfaced. The specification's assumption that circuit normalisation removes only
-            nuisance variance is, on this corpus, inverted.
+            The specification's assumption that circuit normalisation removes only nuisance
+            variance is, on this corpus, inverted — and the finding was <strong>operationalised
+            the same day</strong>: the classifier (alone) was re-scoped to the raw representation
+            via a config-recorded decision, its Optuna study re-run from scratch on the raw
+            feature space (a fresh study by construction — the study key hashes the fit data),
+            and the champion re-registered as model v2. Served held-out macro-F1:
+            <strong>0.6225</strong> (counterfactual normalised road: 0.449, confirming the
+            inversion from inside training). Per-driver: LEC 0.85, VER 0.72, ALB 0.72 … worst now
+            HUL 0.47 — STR rose from 0.11 to 0.55. The bundle records its representation and
+            serving obeys the bundle; every other model keeps the leakage-guarded normalised
+            pipeline unchanged. The 0.78 target remains unmet and the run reports DEGRADED,
+            exactly as designed.
           </p>
         </div>
       </section>

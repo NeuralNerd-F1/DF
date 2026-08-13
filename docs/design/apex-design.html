@@ -914,6 +914,7 @@ Prediction  0.94 HIGH    UI: "6,809 laps rejected: not green-flag"</pre>
               <tr><td class="id">Hidden failure recovery</td><td>Silently retrying or substituting defaults violates principle 1: a masked fault reappears as an unexplainable result. Every recovery is coded and logged.</td></tr>
               <tr><td class="id">Lap-level cross-validation</td><td>The same circuit on both sides of a fold leaks circuit identity into "driver" performance. Group-by-circuit CV costs headline score and buys validity.</td></tr>
               <tr><td class="id">asyncpg · full MLflow · pandas 2</td><td>Wheel availability on the pinned Python forced psycopg v3, mlflow-skinny and the pandas 3 / numpy 2 line — each migration ratified and recorded, not absorbed.</td></tr>
+              <tr><td class="id">CVAE performance predictor (original plan)</td><td>Removed at <em>specification</em> stage, before any code: the Failsafe Edition's §13 replanning note records "CVAE removed (saves 3 weeks)", with the freed weeks redistributed to hardening, failsafe testing and evaluation — the work that became RQ5's strength. The implementation therefore matches the ratified specification exactly; the bibliography's Kingma &amp; Welling reference is the residue of that road, cited from here. Performance prediction survives only in its measured, non-generative form: the fuel-corrected tyre-wear curves.</td></tr>
             </tbody>
           </table>
         </div>

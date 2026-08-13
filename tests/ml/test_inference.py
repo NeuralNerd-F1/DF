@@ -562,3 +562,59 @@ def test_duplicate_labels_refuse_to_serve(bundle_dir: Path, tmp_path: Path) -> N
             config=load_config(REPO_CONFIG), artefact_dir=bundle_dir, log_path=tmp_path / "d"
         )
     assert exc.value.error_code is ErrorCode.MODEL_NOT_FOUND
+
+
+# --------------------------------------------------------------------------------------------
+# Bundle representation record (bundle_meta.json)
+# --------------------------------------------------------------------------------------------
+
+
+def test_bundle_meta_absent_means_legacy_normalised(trained: tuple[Any, AppConfig]) -> None:
+    _result, cfg = trained
+    art = Path(cfg.paths.artefacts_dir)
+    meta = art / cfg.classifier.bundle_meta_filename
+    backup = meta.read_bytes() if meta.is_file() else None
+    try:
+        meta.unlink(missing_ok=True)  # a pre-re-scoping bundle has no sidecar
+        handle = load_model(config=cfg, artefact_dir=art)
+        assert handle.uses_circuit_normalisation is True  # legacy default, never a guess of raw
+    finally:
+        if backup is not None:
+            meta.write_bytes(backup)
+
+
+def test_bundle_meta_corrupt_refuses_to_serve(trained: tuple[Any, AppConfig]) -> None:
+    _result, cfg = trained
+    art = Path(cfg.paths.artefacts_dir)
+    meta = art / cfg.classifier.bundle_meta_filename
+    backup = meta.read_bytes() if meta.is_file() else None
+    try:
+        meta.write_text("{not json", encoding="utf-8")
+        with pytest.raises(ModelLoadError):
+            load_model(config=cfg, artefact_dir=art)  # unknown representation -> refuse, not guess
+    finally:
+        if backup is not None:
+            meta.write_bytes(backup)
+        else:
+            meta.unlink(missing_ok=True)
+
+
+def test_raw_handle_serves_the_vector_verbatim(
+    make_handle: Callable[..., Any], tmp_path: Path
+) -> None:
+    """With a raw bundle the model must receive the UNTRANSFORMED values — asserted by capture."""
+    import dataclasses
+
+    captured: list[np.ndarray] = []
+
+    class _Capture:
+        def predict_proba(self, x: np.ndarray) -> np.ndarray:
+            captured.append(np.array(x, copy=True))
+            return np.tile([0.9, 0.1], (len(x), 1))
+
+    base = make_handle([0.9, 0.1])
+    handle = dataclasses.replace(base, model=_Capture(), uses_circuit_normalisation=False)
+    fv = {fid: float(i + 1) for i, fid in enumerate(inf.FEATURE_IDS)}
+    r = predict(fv, circuit="Bahrain", handle=handle, config=_cfg(tmp_path))
+    assert r.status is not Status.FAILED
+    assert captured and np.allclose(captured[0][0], np.arange(1, 29, dtype=float))

@@ -359,6 +359,12 @@ class ClassifierConfig(BaseModel):
     labels_filename: str  # F06b seam — sorted driver-name list (index->name map for classes_)
     confidence_high: float  # F06b — max-prob >= this -> HIGH else MEDIUM (cross-checked vs gate)
     latency_warn_ms: float  # F06b — prediction latency over this -> PERF_WARN flag (§5.1)
+    # Representation re-scoping (2026-08-13 ablation finding: raw 28 = 0.614 vs normalised 0.413
+    # on never-seen circuits). TRAIN-time only: the bundle records the choice in bundle_meta.json
+    # and SERVING obeys the bundle, never this flag — train/serve consistency is structural.
+    # Default True = the original per-circuit z-scored representation (legacy bundles ditto).
+    use_circuit_normalisation: bool = True
+    bundle_meta_filename: str = "bundle_meta.json"  # sidecar recording the representation choice
 
     @model_validator(mode="after")
     def _cv_keys_pinned(self) -> ClassifierConfig:

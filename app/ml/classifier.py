@@ -172,6 +172,10 @@ class ClassifierTrainingResult(BaseResult):
     calibration_curve_path: str = ""
     baseline_macro_f1: dict[str, float] = Field(default_factory=dict)
     beats_all_baselines: bool = False
+    # The champion's representation (bundle_meta.json mirror): True = per-circuit z-scored,
+    # False = raw (the 2026-08-13 ablation re-scoping). The ablation metric below always reports
+    # the COUNTERFACTUAL representation, whichever this is.
+    uses_circuit_normalisation: bool = True
     normalisation_ablation_macro_f1: float = 0.0
     target_macro_f1: float = 0.0
     target_met: bool = False
@@ -619,11 +623,19 @@ def train_classifier(
     labels = sorted(set(splits.fit[driver_col]) | set(splits.calibration[driver_col]))
     _assert_known_drivers(splits.held_out, labels, driver_col=driver_col)
 
-    # 2. Produce the F04 artefact (the one scaler fit) and apply it read-only to every split.
+    # 2. Produce the F04 artefact (the one scaler fit — still written for provenance and for the
+    #    downstream consumers that keep the normalised pipeline), then choose the CLASSIFIER's
+    #    representation: per-circuit z-scored (legacy) or raw (the 2026-08-13 ablation re-scoping —
+    #    raw 0.614 vs normalised 0.413 on never-seen circuits). The choice is recorded in
+    #    bundle_meta.json so serving follows the bundle, never the live config.
     params, norm_hash = _fit_load_params(laps, config=config, artefact_dir=art_dir, log_path=log)
-    fit_n = _apply_to_frame(splits.fit, params=params, config=config, log_path=log)
-    cal_n = _apply_to_frame(splits.calibration, params=params, config=config, log_path=log)
-    test_n = _apply_to_frame(splits.held_out, params=params, config=config, log_path=log)
+    use_norm = cfg.use_circuit_normalisation
+    if use_norm:
+        fit_n = _apply_to_frame(splits.fit, params=params, config=config, log_path=log)
+        cal_n = _apply_to_frame(splits.calibration, params=params, config=config, log_path=log)
+        test_n = _apply_to_frame(splits.held_out, params=params, config=config, log_path=log)
+    else:
+        fit_n, cal_n, test_n = splits.fit, splits.calibration, splits.held_out
 
     xy_cols = {"driver_col": driver_col, "group_col": group_col}
     x_fit, y_fit, g_fit = _xy(fit_n, labels=labels, **xy_cols)
@@ -712,10 +724,15 @@ def train_classifier(
         if len(x_test)
         else []
     )
-    # Ablation uses the SAME raw fit rows as the champion's CV (un-normalised) — equal data budget,
-    # so the comparison isolates the effect of normalisation, not of extra data.
+    # Ablation trains the COUNTERFACTUAL representation on the same fit rows — equal data budget,
+    # so the comparison isolates the effect of normalisation, not of extra data. With the champion
+    # normalised the counterfactual is raw (§11.1); with the champion raw it is normalised.
+    ablation_frame = (
+        splits.fit if use_norm
+        else _apply_to_frame(splits.fit, params=params, config=config, log_path=log)
+    )
     ablation = _normalisation_ablation(
-        splits.fit, config=config, labels=labels, driver_col=driver_col,
+        ablation_frame, config=config, labels=labels, driver_col=driver_col,
         group_col=group_col, average=average,
     )
 
@@ -724,6 +741,7 @@ def train_classifier(
     # never a raw uncoded MLflow exception (spec §6 FM4 "or registration fails").
     model_artefact_path = art_dir / cfg.model_artefact_filename
     labels_artefact_path = art_dir / cfg.labels_filename
+    meta_artefact_path = art_dir / cfg.bundle_meta_filename
     try:
         with mlflow.start_run(run_name="champion") as run:
             mlflow.log_params({k: v for k, v in best_params.items() if k != "num_class"})
@@ -749,6 +767,13 @@ def train_classifier(
             # classifier.pkl so F06b can map predict_proba columns to driver names offline.
             labels_artefact_path.write_text(json.dumps(labels), encoding="utf-8")
             mlflow.log_artifact(str(labels_artefact_path))
+            # The representation record (F06b seam): serving reads THIS, never the live config —
+            # a bundle trained raw is served raw even if config later flips (and vice versa).
+            meta_artefact_path.write_text(
+                json.dumps({"uses_circuit_normalisation": use_norm}, sort_keys=True),
+                encoding="utf-8",
+            )
+            mlflow.log_artifact(str(meta_artefact_path))
             # serialization_format="cloudpickle": mlflow 3.x defaults the sklearn flavor to skops,
             # which is not bundled with mlflow-skinny; cloudpickle ships with skinny and round-trips
             # the CalibratedClassifierCV(FrozenEstimator(XGBClassifier)) champion.
@@ -767,6 +792,7 @@ def train_classifier(
         # run we report as failed (mirrors the leakage / no-champion paths — no model on disk).
         model_artefact_path.unlink(missing_ok=True)
         labels_artefact_path.unlink(missing_ok=True)
+        meta_artefact_path.unlink(missing_ok=True)
         ledger.record(
             code=ErrorCode.MODEL_TRAINING_FAILED,
             entity_type="training_run",
@@ -822,6 +848,7 @@ def train_classifier(
         calibration_curve_path=cal_path,
         baseline_macro_f1=baseline_macro_f1,
         beats_all_baselines=outcome.beats_all,
+        uses_circuit_normalisation=use_norm,
         normalisation_ablation_macro_f1=ablation,
         target_macro_f1=cfg.target_macro_f1,
         target_met=outcome.target_met,

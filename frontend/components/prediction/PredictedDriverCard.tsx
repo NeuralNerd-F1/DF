@@ -104,7 +104,7 @@ export function PredictedDriverCard({
 
       <p
         className={`mt-3 border-t border-border pt-2 font-mono text-[11px] ${
-          correct ? 'text-confidence-high' : 'text-confidence-low'
+          correct ? 'text-accent' : 'text-alert-ink'
         }`}
         data-testid="truth-line"
         data-correct={correct}
@@ -115,7 +115,7 @@ export function PredictedDriverCard({
       {code !== null ? (
         <Link
           href={`/drivers/${code}`}
-          className="mt-3 block rounded border border-accent px-3 py-1.5 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-accent transition-colors hover:bg-accent/10"
+          className="mt-3 block rounded border border-accent px-3 py-1.5 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-accent transition-colors hover:bg-accent-fill"
         >
           View full profile →
         </Link>

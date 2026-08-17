@@ -115,7 +115,7 @@ export function TyreWearScreen() {
                       data-selected={selected || undefined}
                       className={`rounded border px-2.5 py-1 font-mono text-[11px] transition-colors focus:outline-none focus:ring-1 focus:ring-accent ${
                         selected
-                          ? 'border-accent bg-accent/10 text-text-primary'
+                          ? 'border-accent-deep bg-accent-fill text-text-primary'
                           : 'border-border text-text-secondary hover:border-text-secondary hover:text-text-primary'
                       }`}
                     >
@@ -141,7 +141,7 @@ export function TyreWearScreen() {
                       data-selected={selected || undefined}
                       className={`rounded border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors focus:outline-none focus:ring-1 focus:ring-accent ${
                         selected
-                          ? 'border-confidence-medium bg-confidence-medium/10 text-text-primary'
+                          ? 'border-accent-deep bg-accent-fill text-text-primary'
                           : 'border-border text-text-secondary hover:border-text-secondary hover:text-text-primary'
                       }`}
                     >

@@ -25,13 +25,13 @@ export function AlertBanner({ lap }: { lap: ReplayLap | null }) {
       data-testid="alert-banner"
       data-active={active || undefined}
       className={`animate-slide-down rounded-md border border-l-4 border-border bg-card p-4 ${
-        active ? 'border-l-accent' : 'border-l-text-secondary'
+        active ? 'border-l-alert-ink' : 'border-l-text-secondary'
       }`}
     >
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <span
           className={`font-mono text-[13px] uppercase tracking-[0.14em] ${
-            active ? 'text-accent' : 'text-text-secondary'
+            active ? 'text-alert-ink' : 'text-text-secondary'
           }`}
         >
           Behavioural deviation alert

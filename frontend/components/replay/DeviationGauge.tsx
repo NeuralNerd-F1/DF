@@ -72,7 +72,7 @@ export function DeviationGauge({ score, state, max, threshold = null, className 
                   y1={iy}
                   x2={ox}
                   y2={oy}
-                  className="stroke-accent"
+                  className="stroke-threshold"
                   strokeWidth={1.5}
                   strokeDasharray="2 1.5"
                 />

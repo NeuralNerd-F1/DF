@@ -5,25 +5,24 @@ import { useState } from 'react';
 import { Card } from '@/components/ds/Card';
 import { Tabs } from '@/components/ds/Tabs';
 
-import { FastF1Tab } from './FastF1Tab';
 import { ManualUploadTab } from './ManualUploadTab';
 import { PredictionPanel } from './PredictionPanel';
 import { UnknownDriverTab } from './UnknownDriverTab';
 
-// The ingestion workbench, hosted below the Prediction hero on /ingest. Four tabs: the async
-// FastF1 job, the CSV upload, the unknown-driver projection, and the raw-vector prediction panel
-// (kept for arbitrary input — the hero above covers the curated-segment flow).
-type TabKey = 'fastf1' | 'upload' | 'unknown' | 'vector';
-const TAB_KEYS: readonly TabKey[] = ['fastf1', 'upload', 'unknown', 'vector'];
+// The ingestion workbench, hosted below the Prediction hero on /ingest. Three tabs: the CSV
+// upload, the unknown-driver projection, and the raw-vector prediction panel (kept for arbitrary
+// input — the hero above covers the curated-segment flow). The async FastF1 queue tab lives on
+// master only — the queue is outside this branch's presented surface.
+type TabKey = 'upload' | 'unknown' | 'vector';
+const TAB_KEYS: readonly TabKey[] = ['upload', 'unknown', 'vector'];
 const TAB_LABEL: Record<TabKey, string> = {
-  fastf1: 'FastF1 Session',
   upload: 'Manual Upload',
   unknown: 'Unknown Driver',
   vector: 'Manual Vector',
 };
 
 export function IngestionScreen() {
-  const [tab, setTab] = useState<TabKey>('fastf1');
+  const [tab, setTab] = useState<TabKey>('upload');
 
   return (
     <div data-testid="ingestion-screen">
@@ -39,9 +38,7 @@ export function IngestionScreen() {
           renderLabel={(k) => TAB_LABEL[k]}
         />
         <div className="mt-4">
-          {tab === 'fastf1' ? (
-            <FastF1Tab />
-          ) : tab === 'upload' ? (
+          {tab === 'upload' ? (
             <ManualUploadTab />
           ) : tab === 'unknown' ? (
             <UnknownDriverTab />

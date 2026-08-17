@@ -114,7 +114,7 @@ function UnknownResult({ data }: { data: UnknownFingerprintResponse }) {
             key={w}
             data-testid="unknown-warning"
             data-code={w}
-            className="rounded border border-confidence-medium px-1.5 py-0.5 font-mono text-[10px] text-confidence-medium"
+            className="rounded border border-alert-ink px-1.5 py-0.5 font-mono text-[10px] text-alert-ink"
           >
             {messageFor(w)}
           </span>

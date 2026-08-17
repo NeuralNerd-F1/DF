@@ -98,7 +98,7 @@ export function PredictionScreen() {
     <div data-testid="prediction-screen">
       <header className="mb-5">
         <h1 className="font-display text-[34px] font-bold uppercase leading-none tracking-[0.03em] text-text-primary">
-          Prediction + Setup
+          Prediction + Setup Tendencies
         </h1>
         <p className="mt-2 text-[13px] text-text-secondary">
           Select a telemetry segment — the classifier identifies the driver and explains its

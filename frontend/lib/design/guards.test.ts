@@ -30,9 +30,30 @@ function codeOf(rel: string): string {
 }
 
 describe('design-system guards (F16 §7.1/§7.3)', () => {
-  it('tailwind.config.js carries every §10.1 token', () => {
+  it('tailwind.config.js carries every pastel-reference token', () => {
     const cfg = readFileSync(join(ROOT, 'tailwind.config.js'), 'utf8');
-    for (const hex of ['#0D0D0D', '#E8002D', '#C0392B', '#F0F0F0', '#888888', '#1A1A1A', '#2B2B2B']) {
+    for (const hex of [
+      '#F6F5FA', // paper bg
+      '#FFFFFF', // surface
+      '#EEECF5', // raised
+      '#DCD8E8', // border
+      '#2B2733', // text
+      '#6C6579', // text-2
+      '#9A93A8', // text-3
+      '#CE3A72', // assert-ink
+      '#94284F', // assert-deep
+      '#FBD5E3', // assert-fill
+      '#4F69C9', // against-ink
+      '#D8DFFB', // against-fill
+      '#7A5DC0', // uncertain-ink
+      '#E4DAF8', // uncertain-fill
+      '#B4AEC0', // unavailable
+      '#FCE6C3', // alert-fill
+      '#B07520', // alert-ink
+      '#CBA45E', // watch-ink
+      '#8B93A6', // threshold
+      '#E0DEE8', // track
+    ]) {
       expect(cfg).toContain(hex);
     }
     expect(cfg).toContain('font-inter');

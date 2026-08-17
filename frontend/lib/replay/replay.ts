@@ -4,7 +4,7 @@ import type { ConfidenceState, ReplayFingerprintSnapshot, ReplayLap } from '@/li
 
 // Alert-state → visual tone. The gauge/timeline colour off the monitor's alert_state (div #72),
 // NOT a numeric τ compare — τ (threshold) is dropped by the route. The semantic (alert) is kept
-// separate in code even though the colours reuse the existing green/amber/red confidence tokens.
+// separate in code AND in colour: monitor tones map to the operational token family.
 export type AlertTone = 'nominal' | 'watch' | 'alert' | 'idle';
 
 export function alertTone(state: string | null | undefined): AlertTone {
@@ -21,24 +21,26 @@ export function alertTone(state: string | null | undefined): AlertTone {
   }
 }
 
-// Colour classes per tone (the colours themselves live once in tailwind.config.js — no literal here).
+// Colour classes per tone (the colours themselves live once in tailwind.config.js — no literal
+// here). Monitor states are OPERATIONAL tokens, never the confidence (assert/epistemic) family:
+// nominal sits on the baseline grey and escalation is by intensity, not hue.
 export const ALERT_FILL_CLASS: Record<AlertTone, string> = {
-  nominal: 'fill-confidence-high',
-  watch: 'fill-confidence-medium',
-  alert: 'fill-confidence-low',
-  idle: 'fill-border',
+  nominal: 'fill-threshold',
+  watch: 'fill-watch',
+  alert: 'fill-alert-ink',
+  idle: 'fill-unavailable',
 };
 export const ALERT_STROKE_CLASS: Record<AlertTone, string> = {
-  nominal: 'stroke-confidence-high',
-  watch: 'stroke-confidence-medium',
-  alert: 'stroke-confidence-low',
-  idle: 'stroke-border',
+  nominal: 'stroke-threshold',
+  watch: 'stroke-watch',
+  alert: 'stroke-alert-ink',
+  idle: 'stroke-unavailable',
 };
 export const ALERT_TEXT_CLASS: Record<AlertTone, string> = {
-  nominal: 'text-confidence-high',
-  watch: 'text-confidence-medium',
-  alert: 'text-confidence-low',
-  idle: 'text-text-secondary',
+  nominal: 'text-threshold',
+  watch: 'text-watch',
+  alert: 'text-alert-ink',
+  idle: 'text-text-tertiary',
 };
 
 // The stint's τ — LapDeviation.threshold is constant per stint but null on BASELINE/SKIPPED laps,

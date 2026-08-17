@@ -16,7 +16,7 @@ const PAD = 16;
 
 type Props = { laps: readonly ReplayLap[]; reachedIndex: number; colour?: string };
 
-export function FingerprintDriftPanel({ laps, reachedIndex, colour = '#E10600' }: Props) {
+export function FingerprintDriftPanel({ laps, reachedIndex, colour = '#CE3A72' }: Props) {
   // Bounds over the FULL replay so the frame holds still during playback (no swimming axes).
   const all = driftTrail(laps, laps.length - 1);
   const shown = driftTrail(laps, reachedIndex);

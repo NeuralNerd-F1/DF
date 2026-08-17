@@ -12,9 +12,9 @@ const err = (code: string, status: number, detail = '') => ({ ok: false, code, d
 afterEach(() => vi.clearAllMocks());
 
 describe('ManualUploadTab (master §10.4, div #58)', () => {
-  it('renders an F05 unavailable notice before any upload', () => {
+  it('renders the drop-a-CSV empty state before any upload', () => {
     render(<ManualUploadTab />);
-    expect(screen.getByTestId('empty-state')).toHaveTextContent(/arrives in F05/i);
+    expect(screen.getByTestId('empty-state')).toHaveTextContent(/Drop a telemetry CSV/i);
   });
 
   it('POSTs the real endpoint and surfaces the honest 503 — never a fabricated cleaning report', async () => {

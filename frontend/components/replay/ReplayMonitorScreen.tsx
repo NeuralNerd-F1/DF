@@ -221,7 +221,7 @@ export function ReplayMonitorScreen({ initialDrivers }: { initialDrivers: Driver
                 Load replay
               </button>
               {mode === 'grid' && initialDrivers.length === 0 ? (
-                <p className="w-full font-mono text-[9px] text-confidence-medium" data-testid="grid-no-drivers-note">
+                <p className="w-full font-mono text-[9px] text-alert-ink" data-testid="grid-no-drivers-note">
                   Driver list unavailable — grid mode needs /drivers.
                 </p>
               ) : null}
@@ -250,7 +250,7 @@ export function ReplayMonitorScreen({ initialDrivers }: { initialDrivers: Driver
                       title={`Round ${s.round} · ${(s.drivers ?? []).length} drivers`}
                       className={`rounded border px-2.5 py-1 font-mono text-[11px] transition-colors focus:outline-none focus:ring-1 focus:ring-accent ${
                         selected
-                          ? 'border-accent bg-accent/10 text-text-primary'
+                          ? 'border-accent-deep bg-accent-fill text-text-primary'
                           : 'border-border text-text-secondary hover:border-text-secondary hover:text-text-primary'
                       }`}
                     >
@@ -281,7 +281,7 @@ export function ReplayMonitorScreen({ initialDrivers }: { initialDrivers: Driver
                         title={`${d.n_laps} replayable laps`}
                         className={`rounded border px-2.5 py-1 font-mono text-[11px] transition-colors focus:outline-none focus:ring-1 focus:ring-accent ${
                           selected
-                            ? 'border-accent bg-accent/10 text-text-primary'
+                            ? 'border-accent-deep bg-accent-fill text-text-primary'
                             : 'border-border text-text-secondary hover:border-text-secondary hover:text-text-primary'
                         }`}
                       >
@@ -346,7 +346,7 @@ function ModeToggle({ mode, onSwitch }: { mode: Mode; onSwitch: (m: Mode) => voi
               data-selected={selected || undefined}
               className={`rounded border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] transition-colors focus:outline-none focus:ring-1 focus:ring-accent ${
                 selected
-                  ? 'border-accent bg-accent/10 text-text-primary'
+                  ? 'border-accent-deep bg-accent-fill text-text-primary'
                   : 'border-border text-text-secondary hover:border-text-secondary hover:text-text-primary'
               }`}
             >
@@ -412,7 +412,7 @@ function ReplayMonitor({
       {partial ? (
         <div
           data-testid="partial-notice"
-          className="rounded border border-l-4 border-border border-l-confidence-medium bg-card p-2 font-mono text-[10px] text-confidence-medium"
+          className="rounded border border-l-4 border-border border-l-alert-ink bg-alert-fill p-2 font-mono text-[10px] text-alert-ink"
         >
           Showing a partial replay (some laps were truncated).
         </div>

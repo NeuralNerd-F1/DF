@@ -173,7 +173,7 @@ function CellBody({
   return (
     <div className="space-y-2">
       {res.partial ? (
-        <p className="font-mono text-[9px] text-confidence-medium" data-testid="cell-partial">
+        <p className="font-mono text-[9px] text-alert-ink" data-testid="cell-partial">
           partial replay
         </p>
       ) : null}
@@ -181,7 +181,7 @@ function CellBody({
         <div
           role="alert"
           data-testid="cell-alert"
-          className="rounded border-l-2 border-l-accent bg-card px-2 py-1 font-mono text-[9px] text-accent"
+          className="rounded border-l-2 border-l-alert-ink bg-alert-fill px-2 py-1 font-mono text-[9px] text-alert-ink"
         >
           ALERT · lap {alert.alert_lap} · {alert.alert_confidence} · {alert.laps_since_threshold_crossed}{' '}
           since crossing

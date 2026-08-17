@@ -39,7 +39,7 @@ export function DistinctiveFeatures({ featureDelta, domainDelta, driver1, driver
   return (
     <div data-testid="distinctive-features" data-mode={perFeature ? 'feature' : 'domain'}>
       {!perFeature ? (
-        <p className="mb-2 font-mono text-[9px] text-confidence-medium" data-testid="domain-fallback-note">
+        <p className="mb-2 font-mono text-[9px] text-alert-ink" data-testid="domain-fallback-note">
           Signed per-feature SHAP unavailable for this pair — showing the per-domain delta.
         </p>
       ) : null}

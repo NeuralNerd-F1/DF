@@ -54,7 +54,7 @@ export function DeviationTimeline({ laps, reachedIndex, className = '', compact 
               y1={yOf(tau)}
               x2={W - PAD}
               y2={yOf(tau)}
-              className="stroke-accent"
+              className="stroke-threshold"
               strokeWidth={1}
               strokeDasharray="4 3"
             />
@@ -62,7 +62,7 @@ export function DeviationTimeline({ laps, reachedIndex, className = '', compact 
               x={W - PAD}
               y={yOf(tau) - 2.5}
               textAnchor="end"
-              className="fill-accent font-mono"
+              className="fill-threshold font-mono"
               fontSize={6}
             >
               τ {tau.toFixed(2)}

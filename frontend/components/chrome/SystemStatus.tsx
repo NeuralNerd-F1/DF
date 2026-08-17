@@ -39,15 +39,15 @@ export function SystemStatus() {
 
   const { dot, text, tone } =
     status.kind === 'active'
-      ? { dot: 'bg-confidence-high', text: 'Model active', tone: 'text-confidence-high' }
+      ? { dot: 'bg-accent', text: 'Model active', tone: 'text-accent' }
       : status.kind === 'partial'
         ? {
-            dot: 'bg-confidence-medium',
+            dot: 'bg-alert-ink',
             text: `${status.loaded}/${status.total} models`,
-            tone: 'text-confidence-medium',
+            tone: 'text-alert-ink',
           }
         : status.kind === 'offline'
-          ? { dot: 'bg-confidence-low', text: 'API offline', tone: 'text-confidence-low' }
+          ? { dot: 'bg-unavailable', text: 'API offline', tone: 'text-unavailable' }
           : { dot: 'bg-border', text: 'Probing…', tone: 'text-text-secondary' };
 
   return (

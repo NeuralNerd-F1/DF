@@ -36,7 +36,7 @@ export function SegmentPicker({
               data-selected={selected || undefined}
               className={`rounded border px-3 py-2 text-left transition-colors focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50 ${
                 selected
-                  ? 'border-accent bg-accent/10'
+                  ? 'border-accent-deep bg-accent-fill'
                   : 'border-border hover:border-text-secondary'
               }`}
             >

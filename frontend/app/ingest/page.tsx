@@ -4,7 +4,7 @@ import { IngestionScreen } from '@/components/ingestion/IngestionScreen';
 import { PredictionScreen } from '@/components/prediction/PredictionScreen';
 
 export const metadata: Metadata = {
-  title: 'APEX — Prediction + Setup',
+  title: 'APEX — Prediction + Setup Tendencies',
   description:
     'Pick a real held-out lap and watch the classifier identify the driver — or ingest a FastF1 session, upload telemetry, and project an unknown driver.',
 };

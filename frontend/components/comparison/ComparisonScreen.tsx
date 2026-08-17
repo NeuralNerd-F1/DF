@@ -33,7 +33,7 @@ import { SetupDeltaTable } from './SetupDeltaTable';
 const chip = (selected: boolean): string =>
   `rounded border px-2.5 py-1 font-mono text-[11px] transition-colors focus:outline-none focus:ring-1 focus:ring-accent ${
     selected
-      ? 'border-accent bg-accent/10 text-text-primary'
+      ? 'border-accent-deep bg-accent-fill text-text-primary'
       : 'border-border text-text-secondary hover:border-text-secondary hover:text-text-primary'
   }`;
 

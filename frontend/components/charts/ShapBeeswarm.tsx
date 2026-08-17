@@ -13,7 +13,7 @@ export type BeeswarmLap = {
 };
 
 // Colour-by-circuit — a stable palette indexed by the sorted circuit order (deterministic).
-const PALETTE = ['#E8002D', '#3671C6', '#27F4D2', '#FF8000', '#229971', '#64C4FF', '#F5A623', '#9B59B6'];
+const PALETTE = ['#C22F49', '#3760AE', '#2A8879', '#CE7A22', '#2C7860', '#37799B', '#3781C2', '#757A84'];
 function circuitColour(circuit: string, order: string[]): string {
   const i = order.indexOf(circuit);
   return PALETTE[(i < 0 ? 0 : i) % PALETTE.length];

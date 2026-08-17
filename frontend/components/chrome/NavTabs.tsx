@@ -9,8 +9,8 @@ import { usePathname } from 'next/navigation';
 const TABS = [
   { label: 'Driver Overview', href: '/', match: ['/', '/drivers'] },
   { label: 'Comparison', href: '/compare', match: ['/compare'] },
-  { label: 'Prediction + Setup', href: '/ingest', match: ['/ingest'] },
-  { label: 'Tyre Wear', href: '/tyres', match: ['/tyres'] },
+  { label: 'Prediction + Setup Tendencies', href: '/ingest', match: ['/ingest'] },
+  { label: 'Tyre Analysis', href: '/tyres', match: ['/tyres'] },
   { label: 'Replay', href: '/replay', match: ['/replay'] },
 ] as const;
 

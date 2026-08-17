@@ -18,7 +18,11 @@ from app.contracts.errors import ErrorCode
 
 @pytest.fixture
 def cfg(repo_config_path: Path) -> AppConfig:
-    return load_config(repo_config_path)
+    config = load_config(repo_config_path)
+    # These tests exercise the enabled-cache contract; the repo default (off on this
+    # branch) must not decide what the class does when a deployment turns it on.
+    config.cache.enabled = True
+    return config
 
 
 def _fake_cache(cfg: AppConfig, *, log_path: str | None = None, clock=None) -> RedisCache:

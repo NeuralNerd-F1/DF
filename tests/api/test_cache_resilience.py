@@ -37,6 +37,7 @@ def _set_predictor(api: SimpleNamespace) -> None:
 
 async def test_100_predictions_succeed_with_redis_down(api: SimpleNamespace) -> None:
     """RQ5: disable Redis, 100 consecutive predictions → zero failures, CACHE_UNAVAILABLE logged."""
+    api.config.cache.enabled = True  # the resilience contract is for an ENABLED cache
     api.state.cache = RedisCache(
         _DownClient(),
         config=api.config.cache,
@@ -58,6 +59,7 @@ async def test_100_predictions_succeed_with_redis_down(api: SimpleNamespace) -> 
 
 async def test_predict_consistent_under_cache(api: SimpleNamespace) -> None:
     """Same input → same output, and the second identical request is a cache HIT (reused)."""
+    api.config.cache.enabled = True  # the resilience contract is for an ENABLED cache
     api.state.cache = RedisCache(
         fakeredis.aioredis.FakeRedis(),
         config=api.config.cache,

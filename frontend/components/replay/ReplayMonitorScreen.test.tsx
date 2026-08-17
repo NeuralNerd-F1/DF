@@ -188,7 +188,9 @@ describe('ReplayMonitorScreen — monitor + playback', () => {
     expect(screen.getByTestId('alert-banner')).toBeInTheDocument();
     expect(screen.getByTestId('alert-lap')).toHaveTextContent('Lap 4');
     expect(screen.getByTestId('alert-confidence')).toHaveTextContent('HIGH confidence');
-    expect(screen.getByTestId('alert-pit-window')).toHaveTextContent('5 laps remaining');
+    expect(screen.getByTestId('alert-pit-window')).toHaveTextContent(
+      'historical pit window: 5 laps (median-based)',
+    );
   });
 });
 

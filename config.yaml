@@ -321,7 +321,7 @@ api:
 # policy VERBATIM. The offline suite uses a FakeCache and never reads this DSN. The three cache codes
 # (CACHE_MISS/CACHE_UNAVAILABLE/CACHE_DEGRADED) are pre-seeded in errors.py; no new cache code.
 cache:
-  enabled: true                     # false → RedisCache is a no-op (always CACHE_MISS); system unaffected
+  enabled: false                    # dissertation branch: cache off (RedisCache no-op, always CACHE_MISS); system unaffected
   url_env_var: APEX_REDIS_URL       # env var holding the Redis DSN (e.g. rediss://…@upstash)
   key_prefix: apex                  # namespace root; full key = {prefix}:v{api.version}:{ns}:{id}
   driver_profile_ttl_s: 3600        # §9 — 1-hour driver-profile TTL (the one master-named TTL)

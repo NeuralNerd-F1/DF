@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { TyreWearScreen } from '@/components/tyres/TyreWearScreen';
 
 export const metadata: Metadata = {
-  title: 'APEX — Tyre Wear',
+  title: 'APEX — Tyre Analysis',
   description:
     'Fuel-corrected stint degradation per driver and compound, measured from clean race laps.',
 };

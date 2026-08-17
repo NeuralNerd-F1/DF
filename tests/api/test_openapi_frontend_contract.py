@@ -142,7 +142,11 @@ def test_compare_response_fields() -> None:
 
 
 def test_ingest_status_response_fields() -> None:
-    props = _schemas()["IngestStatusResponse"]["properties"]
+    # /ingest/status is include_in_schema=False (outside the presented surface), so its DTO is
+    # not in the OpenAPI components; the frontend poll contract is asserted on the model itself.
+    from app.api.schemas import IngestStatusResponse
+
+    props = IngestStatusResponse.model_json_schema()["properties"]
     for field in ("status", "progress", "error_detail", "result"):
         assert field in props, f"IngestStatusResponse lost {field!r} — FastF1 pipeline poll"
 

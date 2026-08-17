@@ -81,7 +81,7 @@ export function TyreWearScreen() {
     <div data-testid="tyre-wear-screen">
       <header className="mb-5">
         <h1 className="font-display text-[34px] font-bold uppercase leading-none tracking-[0.03em] text-text-primary">
-          Tyre Wear Analysis
+          Tyre Analysis
         </h1>
         <p className="mt-2 text-[13px] text-text-secondary">
           Stint degradation measured from clean race laps, fuel-corrected per race.

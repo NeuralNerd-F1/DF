@@ -35,7 +35,9 @@ describe('AlertBanner (div #74 closed — real payload)', () => {
     expect(screen.getByTestId('alert-lap')).toHaveTextContent('Lap 18');
     expect(screen.getByTestId('alert-confidence')).toHaveTextContent('HIGH confidence');
     expect(screen.getByTestId('alert-laps-since')).toHaveTextContent('3 laps since threshold crossed');
-    expect(screen.getByTestId('alert-pit-window')).toHaveTextContent('pit window: 4 laps remaining');
+    expect(screen.getByTestId('alert-pit-window')).toHaveTextContent(
+      'historical pit window: 4 laps (median-based)',
+    );
   });
 
   it('renders the feature drivers with their attribution weights', () => {
@@ -59,7 +61,9 @@ describe('AlertBanner (div #74 closed — real payload)', () => {
     render(
       <AlertBanner lap={lap('ALERT', { ...ALERT, optimal_window_remaining_laps: null })} />,
     );
-    expect(screen.getByTestId('alert-pit-window')).toHaveTextContent('pit window unavailable');
+    expect(screen.getByTestId('alert-pit-window')).toHaveTextContent(
+      'no historical pit-window estimate',
+    );
   });
 
   it('marks a recovered stint (payload present, state back under τ) as past-alert, not active', () => {

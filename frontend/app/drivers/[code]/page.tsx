@@ -79,7 +79,7 @@ export default async function DriverProfilePage({ params }: { params: { code: st
           <FactsCard driver={driver} stability={fp.data.stability} />
           <section className="rounded-md border border-border bg-card p-4" data-testid="setup-card">
             <h2 className="mb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-text-secondary">
-              Setup recommendation
+              Setup tendencies
             </h2>
             {setupRes.ok ? (
               <SetupList setup={setupRes.data} />

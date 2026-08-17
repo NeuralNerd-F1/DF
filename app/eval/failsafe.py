@@ -266,6 +266,9 @@ async def rq5_cache(config: AppConfig) -> FailsafeTestResult:
     try:
         cfg = _harness_config(config)
         assert cfg.failsafe is not None and cfg.cache is not None and cfg.api is not None
+        # Test 4's premise is an ENABLED cache whose Redis is down; the deployment's cache
+        # toggle must not decide whether the resilience mechanism itself gets exercised.
+        cfg.cache.enabled = True
         pred = fake_prediction()
         body = {"feature_vector": {"F01": 0.5, "F02": 0.3}, "circuit": "Bahrain"}
         n = cfg.failsafe.n_predictions

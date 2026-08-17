@@ -11,7 +11,7 @@ from app.api.errors import forbidden
 router = APIRouter(tags=["metrics"])
 
 
-@router.get("/metrics")
+@router.get("/metrics", include_in_schema=False)  # internal-only (403 external) — keep out of /docs
 async def get_metrics(request: Request, state: AppState = Depends(get_apex_state)) -> Response:
     if not metrics_mod.is_internal(request, state.config):
         raise forbidden("metrics endpoint is internal only")

@@ -36,9 +36,22 @@ async def test_replay_reaches_engine_and_404s_on_unknown(api: SimpleNamespace) -
 def test_all_endpoints_present_in_openapi(api: SimpleNamespace) -> None:
     paths = api.app.openapi()["paths"]
     for p in (
-        "/ingest/session",
-        "/ingest/status/{session_id}",
         "/ingest/upload",
         "/replay/{session_id}/{driver_id}",
     ):
         assert p in paths
+    # Queue endpoints are include_in_schema=False: still routable, outside the presented surface.
+    def _all_paths(routes: list) -> set[str]:
+        found: set[str] = set()
+        for r in routes:
+            if (p := getattr(r, "path", None)) is not None:
+                found.add(p)
+            # FastAPI's _IncludedRouter wraps the real APIRouter in .original_router
+            nested = getattr(r, "original_router", r)
+            found |= _all_paths(getattr(nested, "routes", []))
+        return found
+
+    routed = _all_paths(api.app.routes)
+    for p in ("/ingest/session", "/ingest/status/{session_id}"):
+        assert p not in paths
+        assert p in routed

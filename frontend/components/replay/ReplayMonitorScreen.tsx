@@ -151,7 +151,7 @@ export function ReplayMonitorScreen({ initialDrivers }: { initialDrivers: Driver
           Race Replay Monitor
         </h1>
         <p className="mt-2 text-[13px] text-text-secondary">
-          A persisted session replayed lap-by-lap through the degradation monitor — deviation,
+          A persisted session replayed lap-by-lap through the behavioural deviation monitor — deviation,
           threshold and alerts exactly as they would have fired live.
         </p>
       </header>
@@ -435,7 +435,7 @@ function ReplayMonitor({
         </section>
         <section className="rounded-md border border-border bg-card p-4">
           <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-text-secondary">
-            Degradation timeline
+            Deviation timeline
           </p>
           <DeviationTimeline laps={laps} reachedIndex={idx} />
         </section>

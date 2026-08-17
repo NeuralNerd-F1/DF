@@ -56,7 +56,7 @@ export function SetupDeltaTable({
 
   // A 404 for either driver is honest absence, not an error (no setup for this circuit).
   if ((!setup1.ok && setup1.code === 'NOT_FOUND') || (!setup2.ok && setup2.code === 'NOT_FOUND')) {
-    return <EmptyState message="Setup recommendation not available for one driver at this circuit." className="py-3" />;
+    return <EmptyState message="Setup tendencies not available for one driver at this circuit." className="py-3" />;
   }
   if (!setup1.ok) return <ErrorCard code={setup1.code} detail={setup1.detail} />;
   if (!setup2.ok) return <ErrorCard code={setup2.code} detail={setup2.detail} />;

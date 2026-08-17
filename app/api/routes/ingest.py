@@ -26,7 +26,12 @@ if TYPE_CHECKING:
 router = APIRouter(tags=["ingest"])
 
 
-@router.post("/ingest/session", response_model=IngestSessionResponse, status_code=202)
+@router.post(
+    "/ingest/session",
+    response_model=IngestSessionResponse,
+    status_code=202,
+    include_in_schema=False,  # dissertation branch: functional, outside the presented surface
+)
 async def ingest_session(
     req: IngestSessionRequest,
     celery_app: Celery = Depends(get_celery),
@@ -47,7 +52,11 @@ async def ingest_session(
     )
 
 
-@router.get("/ingest/status/{session_id}", response_model=IngestStatusResponse)
+@router.get(
+    "/ingest/status/{session_id}",
+    response_model=IngestStatusResponse,
+    include_in_schema=False,  # dissertation branch: functional, outside the presented surface
+)
 async def ingest_status(
     session_id: str, job_store: JobStore = Depends(get_job_store)
 ) -> IngestStatusResponse:

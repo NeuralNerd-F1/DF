@@ -183,7 +183,7 @@ export function PredictionScreen() {
                 <PageError code={setupState.code} detail={setupState.detail} />
               ) : (
                 <p className="font-mono text-[11px] text-text-secondary" data-testid="setup-absent">
-                  No setup recommendation — the gate named no driver to recommend for.
+                  No setup tendency estimate — the gate named no driver to estimate for.
                 </p>
               )}
             </section>

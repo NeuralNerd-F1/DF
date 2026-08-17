@@ -5,7 +5,7 @@ import { FEATURE_LABELS } from '@/lib/design/features';
 
 // The degradation alert banner (master §10.7). The route now forwards the F10 DegradationAlert
 // as of each lap (div #74 closed), so the banner shows the REAL payload: alert confidence, feature
-// drivers, laps since the threshold crossing, recommended pit window. It renders from the lap the
+// drivers, laps since the threshold crossing, historical pit window. It renders from the lap the
 // alert fires on and stays up for the rest of the replay (the payload advances with the prefix —
 // laps_since_threshold_crossed grows); scrubbing back before the firing lap hides it (alert=null —
 // the monitor knew nothing yet). No alert in the whole replay → never renders (nominal monitoring).
@@ -34,7 +34,7 @@ export function AlertBanner({ lap }: { lap: ReplayLap | null }) {
             active ? 'text-accent' : 'text-text-secondary'
           }`}
         >
-          Degradation alert
+          Behavioural deviation alert
         </span>
         <span className="font-mono text-xs text-text-primary" data-testid="alert-lap">
           Lap {alert.alert_lap}
@@ -51,8 +51,8 @@ export function AlertBanner({ lap }: { lap: ReplayLap | null }) {
         </span>
         <span className="font-mono text-xs text-text-secondary" data-testid="alert-pit-window">
           {window != null
-            ? `recommended pit window: ${window} lap${window === 1 ? '' : 's'} remaining`
-            : 'pit window unavailable'}
+            ? `historical pit window: ${window} lap${window === 1 ? '' : 's'} (median-based)`
+            : 'no historical pit-window estimate'}
         </span>
         {!active ? (
           <span className="font-mono text-[10px] text-text-secondary" data-testid="alert-recovered">

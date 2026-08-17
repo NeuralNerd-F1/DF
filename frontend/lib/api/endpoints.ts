@@ -105,7 +105,11 @@ export function postUpload(file: File): Promise<ApiResult<UploadResponse>> {
 // session comes from the /sessions catalog (div #77 closed); the driver is a code from /drivers.
 // A fresh checkout 503s (no data) until the DB is populated; the screen renders that honestly.
 export function getReplay(sessionId: string, driverId: string): Promise<ApiResult<ReplayResponse>> {
-  return fetchApi<ReplayResponse>(`/replay/${enc(sessionId)}/${enc(driverId)}`, v.zReplay);
+  // The replay is the documented heavy read (26 causal monitor re-runs per request), and grid mode
+  // queues several of them against one worker — give it a budget above the 10s default.
+  return fetchApi<ReplayResponse>(`/replay/${enc(sessionId)}/${enc(driverId)}`, v.zReplay, {
+    timeoutMs: 30_000,
+  });
 }
 
 // GET /sessions — every persisted session with its replayable driver codes (the session picker).

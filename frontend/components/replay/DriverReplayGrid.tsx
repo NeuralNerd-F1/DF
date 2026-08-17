@@ -39,15 +39,15 @@ export function DriverReplayGrid({
 
   // Fetch (or re-fetch) a single cell — this is the per-cell Retry, keeping each panel independent.
   const fetchCell = useCallback(
-    (i: number) => {
+    (i: number): Promise<void> => {
       const d = drivers[i];
-      if (!d) return;
+      if (!d) return Promise.resolve();
       setCells((prev) => {
         const next = prev.slice();
         next[i] = { kind: 'loading' };
         return next;
       });
-      getReplay(sessionId, d.code).then((res) => {
+      return getReplay(sessionId, d.code).then((res) => {
         setCells((prev) => {
           const next = prev.slice();
           next[i] = { kind: 'result', res };
@@ -59,9 +59,23 @@ export function DriverReplayGrid({
   );
 
   // On mount / session change: rewind the shared playback and fan out one request per driver.
+  // The fan-out is a rolling queue, not N-wide parallel: each replay costs ~1s of CPU on the
+  // single-worker API, so unbounded parallelism just stacks tail latency into client timeouts.
+  // Two in flight keeps cells filling progressively while every request finishes promptly.
   useEffect(() => {
     reset();
-    drivers.forEach((_, i) => fetchCell(i));
+    let cancelled = false;
+    let cursor = 0;
+    const next = (): Promise<void> => {
+      if (cancelled || cursor >= drivers.length) return Promise.resolve();
+      const i = cursor++;
+      return fetchCell(i).then(next);
+    };
+    void next();
+    void next();
+    return () => {
+      cancelled = true;
+    };
   }, [drivers, sessionId, reset, fetchCell]);
 
   // The shared scrubber spans the longest successful replay; each cell clamps to its own length.

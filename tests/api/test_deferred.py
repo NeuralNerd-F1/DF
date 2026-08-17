@@ -35,12 +35,10 @@ async def test_replay_reaches_engine_and_404s_on_unknown(api: SimpleNamespace) -
 
 def test_all_endpoints_present_in_openapi(api: SimpleNamespace) -> None:
     paths = api.app.openapi()["paths"]
-    for p in (
-        "/ingest/upload",
-        "/replay/{session_id}/{driver_id}",
-    ):
+    for p in ("/replay/{session_id}/{driver_id}",):
         assert p in paths
-    # Queue endpoints are include_in_schema=False: still routable, outside the presented surface.
+    # Queue + upload + unknown-projection endpoints are include_in_schema=False: still routable,
+    # outside the presented surface.
     def _all_paths(routes: list) -> set[str]:
         found: set[str] = set()
         for r in routes:
@@ -52,6 +50,11 @@ def test_all_endpoints_present_in_openapi(api: SimpleNamespace) -> None:
         return found
 
     routed = _all_paths(api.app.routes)
-    for p in ("/ingest/session", "/ingest/status/{session_id}"):
+    for p in (
+        "/ingest/session",
+        "/ingest/status/{session_id}",
+        "/ingest/upload",
+        "/fingerprint/unknown",
+    ):
         assert p not in paths
         assert p in routed

@@ -116,7 +116,11 @@ def test_confidence_breakdown_fields() -> None:
 
 
 def test_unknown_fingerprint_response_fields() -> None:
-    props = _schemas()["UnknownFingerprintResponse"]["properties"]
+    # /fingerprint/unknown is include_in_schema=False (outside the presented surface), so its DTO
+    # is not in the OpenAPI components; the contract is asserted on the model itself.
+    from app.api.schemas import UnknownFingerprintResponse
+
+    props = UnknownFingerprintResponse.model_json_schema()["properties"]
     for field in (
         "fingerprint_id",
         "fingerprint_vector",
@@ -152,8 +156,11 @@ def test_ingest_status_response_fields() -> None:
 
 
 def test_upload_response_fields() -> None:
-    # /ingest/upload is a 503 stub (F05), but its schema ships so the report table is a 1-line swap.
-    props = _schemas()["UploadResponse"]["properties"]
+    # /ingest/upload is include_in_schema=False (outside the presented surface), so its DTO is
+    # not in the OpenAPI components; the contract is asserted on the model itself.
+    from app.api.schemas import UploadResponse
+
+    props = UploadResponse.model_json_schema()["properties"]
     for field in ("upload_id", "laps_accepted", "laps_rejected", "cleaning_report", "warnings"):
         assert field in props, f"UploadResponse lost {field!r} — breaks the Manual Upload swap-in"
 

@@ -31,7 +31,11 @@ _CLIENT_400 = frozenset(
 )
 
 
-@router.post("/ingest/upload", response_model=UploadResponse)
+@router.post(
+    "/ingest/upload",
+    response_model=UploadResponse,
+    include_in_schema=False,  # dissertation branch: functional, outside the presented surface
+)
 async def ingest_upload(
     file: UploadFile = File(...),
     driver_label: str | None = Form(default=None),

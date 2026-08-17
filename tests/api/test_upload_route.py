@@ -105,8 +105,7 @@ async def test_upload_route_without_medians_still_returns_report(api: SimpleName
     assert any("training medians" in w for w in body["warnings"])
 
 
-def test_openapi_upload_has_multipart_request_body(api: SimpleNamespace) -> None:
-    """The live route publishes a multipart request body (the F17 client regenerates against it)."""
-    op = api.app.openapi()["paths"]["/ingest/upload"]["post"]
-    assert "requestBody" in op
-    assert "multipart/form-data" in op["requestBody"]["content"]
+def test_upload_hidden_from_presented_surface(api: SimpleNamespace) -> None:
+    """The route stays functional (the live POSTs above) but is include_in_schema=False on this
+    branch — outside the presented OpenAPI surface."""
+    assert "/ingest/upload" not in api.app.openapi()["paths"]

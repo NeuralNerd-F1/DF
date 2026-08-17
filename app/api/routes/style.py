@@ -61,7 +61,11 @@ def _reject_laps(state: AppState, circuit: str, detail: str, message: str) -> No
     raise invalid_input(message)
 
 
-@router.post("/fingerprint/unknown", response_model=UnknownFingerprintResponse)
+@router.post(
+    "/fingerprint/unknown",
+    response_model=UnknownFingerprintResponse,
+    include_in_schema=False,  # dissertation branch: functional, outside the presented surface
+)
 async def fingerprint_unknown(
     req: UnknownFingerprintRequest,
     projector: ProjectFn = Depends(get_projector),

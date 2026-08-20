@@ -27,11 +27,11 @@ held_out_circuits: [Belgium, Italy]
 circuit_types: [street, high_speed, technical, mixed]
 
 # The named numeric constants the constitution requires live in config.
-# Canonical home for each value — feature blocks reference these, never re-declare.
+# Canonical home for each value. Feature blocks reference these and never re-declare them.
 thresholds:
-  confidence_gate: 0.65          # classifier max-prob floor; below -> LOW_CONFIDENCE (§5.1)
+  confidence_gate: 0.65          # classifier max-prob floor. Below this the result is LOW_CONFIDENCE (§5.1)
   entropy_ambiguous_bits: 2.9    # Shannon entropy above -> AMBIGUOUS (§5.1)
-  null_ceiling: 6                # > N NULL features -> reject vector; shared F03/F06 (§4.5)
+  null_ceiling: 6                # more than N NULL features rejects the vector. Shared by F03 and F06 (§4.5)
   min_clean_laps: 30             # min clean laps per driver-circuit combination (§3.2)
   sample_rate_floor_hz: 20       # effective sampling-rate floor after interpolation (§3.3)
   laptime_bound_pct: 115         # lap-time must be within this % of driver median (§3.3)

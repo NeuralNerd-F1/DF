@@ -206,14 +206,14 @@ class _DQLedger:
 def _assert_no_leakage(train: pd.DataFrame, config: AppConfig) -> None:
     """Fail loud if any held-out circuit survives into the training set (non-negotiable #2).
 
-    Called inside :func:`fit_normaliser` *after* the exclusion filter as a tripwire (it would
-    only fire if the filter logic were broken), and directly testable on an unfiltered frame.
-    Raises :class:`NormalisationError` — no artefact is written on a poisoned run. The
-    ``config.normalise is None`` precondition is checked here too, so a direct caller gets the
-    typed failure rather than a bare ``AttributeError`` (non-negotiable #1).
+    Called inside :func:`fit_normaliser` *after* the exclusion filter as a tripwire. It would
+    only fire if the filter logic were broken, and it is directly testable on an unfiltered
+    frame. Raises :class:`NormalisationError`, so no artefact is written on a poisoned run. The
+    ``config.normalise is None`` precondition is checked here too, so a direct caller gets a
+    typed failure and not a bare ``AttributeError`` (non-negotiable #1).
     """
     if config.normalise is None:
-        raise NormalisationError("config.normalise block absent; cannot check for leakage")
+        raise NormalisationError("config.normalise block absent, so leakage cannot be checked")
     held_out = set(config.held_out_circuits)
     present = set(train[config.normalise.grouping_key].unique()) if len(train) else set()
     leaked = sorted(held_out & present)

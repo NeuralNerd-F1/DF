@@ -535,9 +535,10 @@ def _is_eligible(is_clean: object, track_status: object, green_code: str) -> boo
 
 def _cosine_distance(x: np.ndarray, b: np.ndarray) -> tuple[float, np.ndarray | None]:
     """``(1 − cos(x, b), per-feature ½(x̂ᵢ − b̂ᵢ)² terms)``. The exact additive decomposition
-    (divergence #11) uses the unit-vector identity ``1 − cos = ½‖x̂ − b̂‖²`` — valid because x̂/b̂
-    are unit-normalised here. A zero-norm / non-finite vector → ``(NaN, None)`` (the DISTANCE_NAN
-    path); the terms sum to the distance to float tolerance (the attribution invariant)."""
+    (divergence #11) uses the unit-vector identity ``1 − cos = ½‖x̂ − b̂‖²``, which holds because
+    x̂ and b̂ are unit-normalised here. A zero-norm or non-finite vector returns ``(NaN, None)``,
+    the DISTANCE_NAN path. The terms sum to the distance to float tolerance, which is the
+    attribution invariant."""
     xn = float(np.linalg.norm(x))
     bn = float(np.linalg.norm(b))
     if not (math.isfinite(xn) and math.isfinite(bn)) or xn == 0.0 or bn == 0.0:

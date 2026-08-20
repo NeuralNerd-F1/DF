@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { PredictionScreen } from '@/components/prediction/PredictionScreen';
 
 export const metadata: Metadata = {
-  title: 'APEX — Prediction + Setup Tendencies',
+  title: 'APEX Prediction and Setup Tendencies',
   description:
     'Pick a real held-out lap and watch the classifier identify the driver, explain its decision, and estimate setup tendencies.',
 };

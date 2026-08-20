@@ -24,8 +24,8 @@ const barlowCondensed = Barlow_Condensed({
 });
 
 export const metadata: Metadata = {
-  title: 'APEX — Driver Profiling',
-  description: 'F1 driver behavioural profiling — behavioural fingerprints from raw telemetry.',
+  title: 'APEX Driver Profiling',
+  description: 'F1 driver behavioural profiling. Behavioural fingerprints built from raw telemetry.',
 };
 
 // Dark theme only (master §10.1 / §9 Styling). The `dark` class + font variables live on <html>.
@@ -56,7 +56,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="flex-1">{children}</div>
 
         <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-6 py-4 font-mono text-[9px] uppercase tracking-[0.2em] text-text-secondary">
-          <span>APEX — Adaptive Performance &amp; Experience Profiling System</span>
+          <span>APEX, the Adaptive Performance and Experience Profiling System</span>
           <span className="flex items-center gap-4">
             <span>XGBoost classifier · UMAP projection · SHAP explanations</span>
             <span className="text-accent">Research prototype</span>

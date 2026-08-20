@@ -27,10 +27,10 @@ const param = (over: Partial<SetupParameterSchema>): SetupParameterSchema =>
 describe('tendencyText (system input #2 — honest directions only)', () => {
   it('states the direction vs the served grid average', () => {
     expect(tendencyText(param({}))).toBe(
-      'more front downforce — sharper turn-in (vs grid average 4.2)',
+      'more front downforce for sharper turn-in (vs grid average 4.2)',
     );
     expect(tendencyText(param({ value: 3.1 }))).toBe(
-      'less front downforce — calmer front end (vs grid average 4.2)',
+      'less front downforce for a calmer front end (vs grid average 4.2)',
     );
   });
 

@@ -101,7 +101,7 @@ export function PredictionScreen() {
           Prediction + Setup Tendencies
         </h1>
         <p className="mt-2 text-[13px] text-text-secondary">
-          Select a telemetry segment — the classifier identifies the driver and explains its
+          Pick a telemetry segment and the classifier will identify the driver and explain its
           decision.
         </p>
       </header>
@@ -112,7 +112,7 @@ export function PredictionScreen() {
         <PageError code={segmentsError.code} detail={segmentsError.detail} />
       ) : segments !== null && segments.length === 0 ? (
         <p className="font-mono text-[11px] text-text-secondary" data-testid="no-segments">
-          No sample segments available — build the driver profiles artefact first.
+          No sample segments available. Build the driver profiles artefact first.
         </p>
       ) : segments !== null ? (
         <SegmentPicker
@@ -183,7 +183,7 @@ export function PredictionScreen() {
                 <PageError code={setupState.code} detail={setupState.detail} />
               ) : (
                 <p className="font-mono text-[11px] text-text-secondary" data-testid="setup-absent">
-                  No setup tendency estimate — the gate named no driver to estimate for.
+                  No setup tendency estimate, because the gate named no driver to estimate for.
                 </p>
               )}
             </section>
@@ -191,7 +191,7 @@ export function PredictionScreen() {
 
           <section className="mt-4 rounded-md border border-border bg-card p-4">
             <h2 className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-text-secondary">
-              Classifier output — all drivers
+              Classifier output across all drivers
             </h2>
             <ClassProbabilityChart
               probabilities={state.prediction.class_probabilities ?? {}}

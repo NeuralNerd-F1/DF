@@ -44,7 +44,7 @@ export const ERROR_MESSAGE: Partial<Record<AnyErrorCode, string>> = {
   STALE_DATA: 'Showing cached data.',
   // Codes surfaced in-band by /predict and the unknown-driver projection that had no fallback message.
   INFERENCE_ERROR: 'Prediction failed. Please retry.',
-  SPARSE_PROJECTION: 'Sparse projection — fewer than 30 clean laps. Result shown with reduced confidence.',
+  SPARSE_PROJECTION: 'Sparse projection. Fewer than 30 clean laps, so the result is shown with reduced confidence.',
   OUT_OF_DISTRIBUTION: 'Outside the known F1 driver distribution.',
   UI_NETWORK: 'Cannot reach the APEX API.',
   UI_TIMEOUT: 'Request timed out.',

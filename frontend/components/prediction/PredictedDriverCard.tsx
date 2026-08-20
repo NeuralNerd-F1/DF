@@ -53,9 +53,9 @@ export function PredictedDriverCard({
         </div>
       ) : (
         <p className="mt-2 font-mono text-[12px] text-text-primary" data-testid="gated-prediction">
-          No driver named — the confidence gate returned{' '}
+          No driver named. The confidence gate returned{' '}
           <span className="text-accent">{prediction.confidence_state ?? 'an uncertain state'}</span>{' '}
-          rather than forcing an answer.
+          and stopped there, because the evidence was too thin to name anyone.
         </p>
       )}
 
@@ -109,7 +109,7 @@ export function PredictedDriverCard({
         data-testid="truth-line"
         data-correct={correct}
       >
-        Actual driver: {trueDriver} — {correct ? 'correct ✓' : 'incorrect ✗'}
+        Actual driver: {trueDriver} ({correct ? 'correct ✓' : 'incorrect ✗'})
       </p>
 
       {code !== null ? (

@@ -104,8 +104,8 @@ export function DeviationGauge({ score, state, max, threshold = null, className 
       </svg>
       <p className="mt-1 font-mono text-[9px] text-text-secondary" data-testid="gauge-threshold-note">
         {hasTau
-          ? `τ = ${(threshold as number).toFixed(2)} — alert threshold calibrated for this stint`
-          : 'τ unavailable — monitor not activated for this stint'}
+          ? `τ = ${(threshold as number).toFixed(2)}, the alert threshold calibrated for this stint`
+          : 'τ unavailable. The monitor was not activated for this stint.'}
       </p>
     </div>
   );

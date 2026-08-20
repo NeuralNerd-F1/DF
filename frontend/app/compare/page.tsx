@@ -5,7 +5,7 @@ import { PageError } from '@/components/ds/PageError';
 import { getDrivers } from '@/lib/api/endpoints';
 
 export const metadata: Metadata = {
-  title: 'APEX — Comparison',
+  title: 'APEX Comparison',
   description:
     'Compare two drivers: shared-scale radars, signed SHAP delta, distinctive features, and setup delta.',
 };

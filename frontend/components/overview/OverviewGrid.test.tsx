@@ -44,7 +44,7 @@ describe('OverviewGrid', () => {
       />,
     );
     expect(
-      screen.getByText('2 behavioural fingerprints — 8,030 clean laps of telemetry — 2022–2025 seasons.'),
+      screen.getByText('2 behavioural fingerprints, 8,030 clean laps of telemetry, 2022 to 2025 seasons.'),
     ).toBeInTheDocument();
   });
 

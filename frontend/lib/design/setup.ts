@@ -21,13 +21,13 @@ export type SetupMeta = {
 export const SETUP_META: Readonly<Record<string, SetupMeta>> = {
   front_wing_angle: {
     label: 'Front wing angle',
-    more: 'more front downforce — sharper turn-in',
-    less: 'less front downforce — calmer front end',
+    more: 'more front downforce for sharper turn-in',
+    less: 'less front downforce for a calmer front end',
   },
   rear_wing_angle: {
     label: 'Rear wing angle',
-    more: 'more rear downforce — stability over top speed',
-    less: 'less rear downforce — top speed over stability',
+    more: 'more rear downforce, favouring stability over top speed',
+    less: 'less rear downforce, favouring top speed over stability',
   },
   brake_bias: {
     label: 'Brake bias',
@@ -67,7 +67,7 @@ export const SETUP_META: Readonly<Record<string, SetupMeta>> = {
   brake_duct_aperture: {
     label: 'Brake duct aperture',
     more: 'more brake cooling',
-    less: 'less brake cooling — lower drag',
+    less: 'less brake cooling for lower drag',
   },
 };
 

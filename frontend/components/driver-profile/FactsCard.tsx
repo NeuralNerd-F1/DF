@@ -43,7 +43,7 @@ export function FactsCard({
     p && p.seasons && p.seasons.length > 0
       ? p.seasons.length === 1
         ? String(p.seasons[0])
-        : `${Math.min(...p.seasons)}–${Math.max(...p.seasons)}`
+        : `${Math.min(...p.seasons)} to ${Math.max(...p.seasons)}`
       : null;
 
   return (
@@ -61,13 +61,13 @@ export function FactsCard({
         <Row
           label="Consistency"
           value={p?.lap_time_consistency_s != null ? `±${p.lap_time_consistency_s.toFixed(2)}s` : '—'}
-          hint="Median within-session lap-time spread (σ) over clean laps — lower is more repeatable"
+          hint="Median within-session lap-time spread over clean laps. Lower means more repeatable."
           missing={p?.lap_time_consistency_s == null}
         />
         <Row
           label="ID rate"
           value={p?.identification_f1 != null ? `${Math.round(p.identification_f1 * 100)}%` : '—'}
-          hint="Held-out F1 — how reliably the classifier identifies this driver on circuits it never trained on"
+          hint="How reliably the classifier identifies this driver on circuits it never trained on (held-out F1)"
           missing={p?.identification_f1 == null}
         />
         <Row

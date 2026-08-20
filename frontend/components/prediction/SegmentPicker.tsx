@@ -20,7 +20,7 @@ export function SegmentPicker({
         Telemetry segment
       </h2>
       <p className="mt-1 font-mono text-[10px] leading-snug text-text-secondary">
-        Real laps from the held-out circuits — the classifier never saw these circuits in training.
+        Real laps from the held-out circuits. The classifier never saw these circuits in training.
         Pick one and it identifies the driver.
       </p>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">

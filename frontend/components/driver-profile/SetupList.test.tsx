@@ -84,7 +84,7 @@ describe('SetupList — the SetupPanel honesty rules, in compact rows', () => {
   it('a WIDE parameter shows its range — a point value would overstate certainty', () => {
     render(<SetupList setup={makeSetup()} />);
     const row = screen.getByTestId('setup-param-brake_bias');
-    expect(row).toHaveTextContent('54.0–60.5 % front');
+    expect(row).toHaveTextContent('54.0 to 60.5 % front');
     expect(row).toHaveTextContent('WIDE');
   });
 
@@ -104,7 +104,7 @@ describe('SetupList — the SetupPanel honesty rules, in compact rows', () => {
     render(<SetupList setup={makeSetup()} />);
     // value 4.401 < grid_mean 5.9 → the "less" phrase, with the reference named.
     expect(screen.getByTestId('setup-tendency-front_wing_angle')).toHaveTextContent(
-      'less front downforce — calmer front end (vs grid average 5.9)',
+      'less front downforce for a calmer front end (vs grid average 5.9)',
     );
   });
 

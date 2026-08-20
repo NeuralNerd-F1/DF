@@ -17,7 +17,7 @@ export function OverviewGrid({
   animate?: boolean;
 }) {
   if (initialDrivers.length === 0) {
-    return <EmptyState message="No driver fingerprints yet — run an ingestion batch first." />;
+    return <EmptyState message="No driver fingerprints yet. Run an ingestion batch first." />;
   }
 
   const drivers = orderByIdentification(initialDrivers);
@@ -27,10 +27,10 @@ export function OverviewGrid({
   const subtitle = [
     `${summary.nDrivers} behavioural fingerprint${summary.nDrivers === 1 ? '' : 's'}`,
     summary.nLaps != null ? `${summary.nLaps.toLocaleString('en-GB')} clean laps of telemetry` : null,
-    summary.seasonSpan ? `${summary.seasonSpan[0]}–${summary.seasonSpan[1]} seasons` : null,
+    summary.seasonSpan ? `${summary.seasonSpan[0]} to ${summary.seasonSpan[1]} seasons` : null,
   ]
     .filter(Boolean)
-    .join(' — ');
+    .join(', ');
 
   return (
     <div>
@@ -60,10 +60,10 @@ export function OverviewGrid({
         Radar axes show where the classifier&apos;s attention concentrates per driver (mean |SHAP|
         per domain), scaled to the grid maximum on each axis. Key signals are the three features the
         model leans on most, with direction from the driver&apos;s rank against the grid.{' '}
-        <span className="text-text-primary">Laps</span> — clean laps in the training matrix.{' '}
-        <span className="text-text-primary">Consistency</span> — median within-session lap-time
-        spread. <span className="text-text-primary">ID rate</span> — how reliably the classifier
-        identifies the driver on circuits it never trained on (held-out F1).
+        <span className="text-text-primary">Laps</span> counts clean laps in the training
+        matrix. <span className="text-text-primary">Consistency</span> is the median within-session
+        lap-time spread. <span className="text-text-primary">ID rate</span> is how reliably the
+        classifier identifies the driver on circuits it never trained on (held-out F1).
       </p>
     </div>
   );

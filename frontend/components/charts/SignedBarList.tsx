@@ -42,7 +42,7 @@ export function SignedBarList({
               className="flex items-center gap-2"
               data-testid={`signed-bar-${feature}`}
               data-direction={confirms ? 'confirms' : 'argues'}
-              title={`${feature} — signed SHAP ${value.toFixed(3)}`}
+              title={`${feature}, signed SHAP ${value.toFixed(3)}`}
             >
               <span className="w-36 shrink-0 truncate text-right font-mono text-[10px] text-text-secondary">
                 {label.charAt(0).toUpperCase() + label.slice(1)}

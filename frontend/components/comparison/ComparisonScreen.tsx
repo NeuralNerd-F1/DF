@@ -209,8 +209,8 @@ export function ComparisonScreen({
             />
           </div>
           <p className="mt-2 font-mono text-[9px] text-text-secondary" data-testid="radar-scale-note">
-            Axes = mean |SHAP| attribution per domain, each axis scaled to this pair&apos;s maximum —
-            the two radars and the delta share one scale.
+            Axes show mean |SHAP| attribution per domain, each axis scaled to this pair&apos;s
+            maximum. The two radars and the delta all share one scale.
           </p>
 
           <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -227,13 +227,13 @@ export function ComparisonScreen({
             </section>
             <section className="rounded-md border border-border bg-card p-4">
               <h2 className="mb-3 font-mono text-[9px] uppercase tracking-[0.18em] text-text-secondary">
-                Compatibility — {circuit}
+                Compatibility at {circuit}
               </h2>
               <CompatibilityProjection setup1={setup1} setup2={setup2} driver1={d1} driver2={d2} />
             </section>
             <section className="rounded-md border border-border bg-card p-4">
               <h2 className="mb-3 font-mono text-[9px] uppercase tracking-[0.18em] text-text-secondary">
-                Setup delta — {circuit}
+                Setup delta at {circuit}
               </h2>
               <SetupDeltaTable setup1={setup1} setup2={setup2} driver1={d1} driver2={d2} />
             </section>
@@ -251,8 +251,8 @@ function Header() {
         Comparison
       </h1>
       <p className="mt-2 text-[13px] text-text-secondary">
-        Two behavioural fingerprints side by side — where the model tells them apart, and what that
-        implies for the car.
+        Two behavioural fingerprints side by side. Where the model tells them apart, and what
+        that implies for the car.
       </p>
     </header>
   );

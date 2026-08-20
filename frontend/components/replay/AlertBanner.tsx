@@ -56,7 +56,7 @@ export function AlertBanner({ lap }: { lap: ReplayLap | null }) {
         </span>
         {!active ? (
           <span className="font-mono text-[10px] text-text-secondary" data-testid="alert-recovered">
-            deviation back under τ — alert fired earlier in this stint
+            deviation back under τ, after an alert fired earlier in this stint
           </span>
         ) : null}
       </div>
@@ -72,7 +72,7 @@ export function AlertBanner({ lap }: { lap: ReplayLap | null }) {
                 key={f}
                 className="rounded border border-border px-1.5 py-0.5 font-mono text-[9px] text-text-primary"
                 data-testid={`alert-driver-${f}`}
-                title={`${f} — share of the deviation score attributed to this feature`}
+                title={`${f}, share of the deviation score attributed to this feature`}
               >
                 {FEATURE_LABELS[f] ?? f}
                 {typeof w === 'number' && Number.isFinite(w) ? (

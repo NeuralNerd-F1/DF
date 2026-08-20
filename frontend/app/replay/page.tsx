@@ -4,8 +4,8 @@ import { ReplayMonitorScreen } from '@/components/replay/ReplayMonitorScreen';
 import { getDrivers } from '@/lib/api/endpoints';
 
 export const metadata: Metadata = {
-  title: 'APEX — Race Replay Monitor',
-  description: 'Historical race replay — lap-by-lap behavioural deviation monitor (Screen 6).',
+  title: 'APEX Race Replay Monitor',
+  description: 'Historical race replay. A lap-by-lap behavioural deviation monitor.',
 };
 
 // Screen 6 (master §10.7). SSR only the driver identities (team colours + the catalog-unavailable

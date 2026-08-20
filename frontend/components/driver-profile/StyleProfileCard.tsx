@@ -20,7 +20,7 @@ export function StyleProfileCard({
         Style profile
       </h2>
       <p className="mt-1 font-mono text-[10px] leading-snug text-text-secondary">
-        Where the classifier&apos;s attention concentrates for {code} — mean |SHAP| per domain,
+        Where the classifier&apos;s attention concentrates for {code}, as mean |SHAP| per domain,
         scaled to the grid maximum on each axis.
       </p>
       <div className="mt-2 flex justify-center">
@@ -29,7 +29,7 @@ export function StyleProfileCard({
           size={250}
           showLabels
           colour={colour}
-          ariaLabel={`${code} style profile — axes scaled to grid maximum`}
+          ariaLabel={`${code} style profile, axes scaled to grid maximum`}
         />
       </div>
       <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-border pt-3">

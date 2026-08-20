@@ -24,7 +24,7 @@ function displayValue(p: SetupParameterSchema): string {
   if (String(p.kind) === 'CATEGORY' && p.category) return p.category;
   if (p.value_range && p.value == null) {
     const [lo, hi] = p.value_range;
-    return `${lo.toFixed(1)}–${hi.toFixed(1)} ${p.unit}`;
+    return `${lo.toFixed(1)} to ${hi.toFixed(1)} ${p.unit}`;
   }
   if (p.value == null) return '—';
   if (typeof p.value === 'string') return p.value;

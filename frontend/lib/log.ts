@@ -4,5 +4,5 @@
 export function logClientError(code: string, detail: string, context?: string): void {
   const prefix = context ? `${context}: ` : '';
   // eslint-disable-next-line no-console
-  console.error(`[apex] ${prefix}${code}${detail ? ` — ${detail}` : ''}`);
+  console.error(`[apex] ${prefix}${code}${detail ? `: ${detail}` : ''}`);
 }

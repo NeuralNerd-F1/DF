@@ -58,7 +58,7 @@ export function CompatibilityProjection({
   return (
     <div data-testid="compatibility-projection">
       <p className="mb-1 font-mono text-[10px] uppercase text-text-secondary">
-        Compatibility Δ (setup-reliability proxy — not a circuit-aware score)
+        Compatibility Δ (a setup-reliability proxy, not a circuit-aware score)
       </p>
       <GaugeNeedle
         label="compatibility delta"

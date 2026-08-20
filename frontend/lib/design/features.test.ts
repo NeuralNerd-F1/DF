@@ -48,7 +48,7 @@ describe('signalText — direction words come ONLY from the grid percentile', ()
 describe('signalDetail — hover provenance carries the measured numbers', () => {
   it('names the feature, attribution and grid rank', () => {
     expect(signalDetail({ feature: 'F02', attribution: 1.1397, percentile: 1.0 })).toBe(
-      'F02 throttle modulation — model attribution 1.14 · grid rank 100%',
+      'F02 throttle modulation, model attribution 1.14 · grid rank 100%',
     );
   });
 

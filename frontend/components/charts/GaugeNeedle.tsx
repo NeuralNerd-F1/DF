@@ -44,7 +44,7 @@ export function GaugeNeedle({ label, value, range, min, max, unit, rating, class
   const suffix = unit ? ` ${unit}` : '';
   const headerValue =
     isWide && range
-      ? `${fmt(range[0])}–${fmt(range[1])}${suffix}`
+      ? `${fmt(range[0])} to ${fmt(range[1])}${suffix}`
       : typeof value === 'number'
         ? `${fmt(value)}${suffix}`
         : typeof value === 'string'

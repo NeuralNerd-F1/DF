@@ -107,7 +107,7 @@ export function OverviewCard({
               animate={animate}
               staggerMs={STAGGER.screen1Axis}
               durationMs={DURATION.screen1Bloom}
-              ariaLabel={`${driver.code} fingerprint — axes scaled to grid maximum`}
+              ariaLabel={`${driver.code} fingerprint, axes scaled to grid maximum`}
               className="-mr-1 -mt-1 shrink-0"
             />
           </div>
@@ -130,7 +130,7 @@ export function OverviewCard({
             ) : (
               <li
                 className="font-mono text-[11px] text-text-secondary"
-                title="This fingerprint predates the SHAP attribution fill — no model attribution stored"
+                title="This fingerprint predates the SHAP attribution fill, so no model attribution is stored"
               >
                 No attribution available
               </li>
@@ -147,7 +147,7 @@ export function OverviewCard({
                 {profile ? profile.laps_analysed.toLocaleString('en-GB') : '—'}
               </StatValue>
             </div>
-            <div title="Median within-session lap-time spread (σ) over clean laps — lower is more repeatable">
+            <div title="Median within-session lap-time spread over clean laps. Lower means more repeatable.">
               <dt className="font-mono text-[8.5px] uppercase tracking-[0.18em] text-text-secondary">
                 Consistency
               </dt>
@@ -157,7 +157,7 @@ export function OverviewCard({
                   : '—'}
               </StatValue>
             </div>
-            <div title="Held-out F1 — how reliably the classifier identifies this driver on circuits it never trained on">
+            <div title="How reliably the classifier identifies this driver on circuits it never trained on (held-out F1)">
               <dt className="font-mono text-[8.5px] uppercase tracking-[0.18em] text-text-secondary">
                 ID rate
               </dt>

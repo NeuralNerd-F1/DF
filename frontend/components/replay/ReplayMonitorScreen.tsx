@@ -151,8 +151,8 @@ export function ReplayMonitorScreen({ initialDrivers }: { initialDrivers: Driver
           Race Replay Monitor
         </h1>
         <p className="mt-2 text-[13px] text-text-secondary">
-          A persisted session replayed lap-by-lap through the behavioural deviation monitor — deviation,
-          threshold and alerts exactly as they would have fired live.
+          A persisted session replayed lap by lap through the behavioural deviation monitor.
+          Deviation, threshold and alerts appear exactly as they would have fired live.
         </p>
       </header>
 
@@ -164,7 +164,7 @@ export function ReplayMonitorScreen({ initialDrivers }: { initialDrivers: Driver
           <div className="space-y-3" data-testid="catalog-fallback">
             <ErrorCard code={catalog.code} detail={catalog.detail} onRetry={loadCatalog} />
             <p className="font-mono text-[9px] text-text-secondary" data-testid="catalog-unavailable-note">
-              Session catalog unavailable — enter a session id manually.
+              Session catalog unavailable. Enter a session id manually.
             </p>
             <ModeToggle mode={mode} onSwitch={switchMode} />
             <div className="flex flex-wrap items-end gap-3">
@@ -222,14 +222,14 @@ export function ReplayMonitorScreen({ initialDrivers }: { initialDrivers: Driver
               </button>
               {mode === 'grid' && initialDrivers.length === 0 ? (
                 <p className="w-full font-mono text-[9px] text-alert-ink" data-testid="grid-no-drivers-note">
-                  Driver list unavailable — grid mode needs /drivers.
+                  Driver list unavailable. Grid mode needs /drivers.
                 </p>
               ) : null}
             </div>
           </div>
         ) : catalog.sessions.length === 0 ? (
           <p className="font-mono text-[11px] text-text-secondary" data-testid="catalog-empty">
-            No sessions persisted yet — seed the demo race or run an ingestion batch, then reload.
+            No sessions persisted yet. Seed the demo race or run an ingestion batch, then reload.
           </p>
         ) : (
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -491,7 +491,7 @@ function MonitorStatus({
         ))}
       </dl>
       <p className="mt-3 font-mono text-[9px] leading-relaxed text-text-secondary">
-        Scores are causal — lap k uses only laps 1…k, exactly what a live monitor would have known.
+        Scores are causal. Lap k uses only laps 1 to k, exactly what a live monitor would have known.
       </p>
     </div>
   );

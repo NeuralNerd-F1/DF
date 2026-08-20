@@ -101,5 +101,5 @@ export function signalDetail(signal: DriverSignal): string {
     signal.percentile === null || signal.percentile === undefined
       ? 'no grid rank'
       : `grid rank ${Math.round(signal.percentile * 100)}%`;
-  return `${signal.feature} ${label} — model attribution ${signal.attribution.toFixed(2)} · ${rank}`;
+  return `${signal.feature} ${label}, model attribution ${signal.attribution.toFixed(2)} · ${rank}`;
 }

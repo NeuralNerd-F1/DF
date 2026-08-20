@@ -31,8 +31,8 @@ export function FingerprintDriftPanel({ laps, reachedIndex, colour = '#CE3A72' }
           Fingerprint evolution
         </p>
         <p className="mt-2 font-mono text-[10px] text-text-secondary" data-testid="drift-empty-note">
-          No fingerprint snapshots in this replay — the style-space projection was unavailable while
-          it ran.
+          No fingerprint snapshots in this replay. The style-space projection was unavailable
+          while it ran.
         </p>
       </div>
     );
@@ -92,9 +92,9 @@ export function FingerprintDriftPanel({ laps, reachedIndex, colour = '#CE3A72' }
         })}
       </svg>
       <p className="mt-1 font-mono text-[9px] leading-relaxed text-text-secondary" data-testid="drift-caption">
-        The F08 style-space projection recomputed as each lap arrives — the driver&apos;s fingerprint
-        as the monitor sees it mid-stint. Projection axes carry no physical units; the per-lap
-        6-domain radar is not exposed by the system.
+        The style-space projection is recomputed as each lap arrives, so this is the driver&apos;s
+        fingerprint as the monitor sees it mid-stint. Projection axes carry no physical units. The
+        per-lap 6-domain radar is not exposed by the system.
       </p>
     </div>
   );

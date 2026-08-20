@@ -94,7 +94,7 @@ export function TyreWearScreen() {
         <Skeleton className="h-64 w-full" />
       ) : codes.length === 0 ? (
         <p className="font-mono text-[11px] text-text-secondary" data-testid="no-tyre-data">
-          No tyre-wear data — build the driver profiles artefact first.
+          No tyre-wear data. Build the driver profiles artefact first.
         </p>
       ) : (
         <>
@@ -170,7 +170,7 @@ export function TyreWearScreen() {
                 <Tile
                   label="Total delta"
                   value={`+${stats.total_delta_s.toFixed(2)}s`}
-                  hint="Degradation rate × (median stint length − 1) — pace lost over a typical stint"
+                  hint="Pace lost over a typical stint, from the degradation rate and median stint length"
                 />
                 <Tile
                   label="Cliff lap (est.)"
@@ -186,7 +186,7 @@ export function TyreWearScreen() {
               <section className="mt-4 rounded-md border border-border bg-card p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-text-secondary">
-                    Lap-time degradation — fuel-corrected
+                    Lap-time degradation, fuel-corrected
                   </h2>
                   <span className="rounded border border-border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-text-primary">
                     {active} / {activeCompound}

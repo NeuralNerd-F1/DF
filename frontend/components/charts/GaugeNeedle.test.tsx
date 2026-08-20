@@ -17,7 +17,7 @@ describe('GaugeNeedle (master §10.3)', () => {
     );
     expect(screen.getByTestId('gauge-range')).toBeInTheDocument();
     expect(screen.queryByTestId('gauge-needle')).toBeNull();
-    expect(screen.getByTestId('gauge-value')).toHaveTextContent('2–8 deg');
+    expect(screen.getByTestId('gauge-value')).toHaveTextContent('2 to 8 deg');
   });
 
   it('renders "—" for an absent value and a string for a categorical value (never faked)', () => {

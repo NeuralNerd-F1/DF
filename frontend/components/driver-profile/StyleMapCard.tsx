@@ -79,10 +79,10 @@ export function StyleMapCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-text-secondary">
-            Style map — UMAP projection
+            Style map, UMAP projection
           </h2>
           <p className="mt-1 font-mono text-[10px] leading-snug text-text-secondary">
-            Drivers placed by behavioural similarity over all 28 features — closer means more alike.
+            Drivers placed by behavioural similarity over all 28 features. Closer means more alike.
             The axes are the projection&apos;s own coordinates and carry no physical units.
           </p>
         </div>

@@ -28,7 +28,7 @@ describe('FactsCard', () => {
     expect(card).toHaveTextContent('4,116');
     expect(card).toHaveTextContent('±1.14s');
     expect(card).toHaveTextContent('53%');
-    expect(card).toHaveTextContent('2022–2025');
+    expect(card).toHaveTextContent('2022 to 2025');
     expect(card).toHaveTextContent('23');
   });
 

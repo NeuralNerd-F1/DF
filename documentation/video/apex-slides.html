@@ -240,13 +240,13 @@ Identification  Style     Explainability
     <p class="eyebrow">Engineering</p>
     <h2>No component fails silently</h2>
     <div class="principles">
-      <div><b>Typed failure everywhere</b><p>69 error codes, each with a triggering test ·
+      <div><b>Typed failure everywhere</b><p>61 error codes, each with a triggering test ·
         append-only data-quality log · executable 7-fault injection harness</p></div>
       <div><b>No normalisation leakage</b><p>Train-only fits with fail-loud tripwires —
         no artefact is written on a poisoned run</p></div>
       <div><b>Reproducible</b><p>Fixed seeds · content-hashed, timestamp-free artefacts ·
         every training run logged</p></div>
-      <div><b>Tested</b><p>1,349 tests across backend and interface — failure paths included,
+      <div><b>Tested</b><p>1,250 tests across backend and interface — failure paths included,
         not just happy paths</p></div>
     </div>
     <div class="footer"><span>the failure contract</span><span>uncertainty is rendered, never disguised</span></div>
@@ -261,12 +261,12 @@ Identification  Style     Explainability
         identification on real held-out laps, including one the system refuses.</p></div>
       <div><span class="n">02</span><b>Comparison</b><p>Two teammates, one shared scale —
         the fingerprint's geometry.</p></div>
-      <div><span class="n">03</span><b>Replay monitor</b><p>A real race, replayed causally —
+      <div><span class="n">03</span><b>Replay monitor</b><p>A controlled degradation scenario, replayed causally —
         the alert firing as a live pit wall would have seen it.</p></div>
     </div>
     <p style="margin-top:2.6vh">Then: the development environment, and the code the whole system
       stands on.</p>
-    <div class="footer"><span>live · real 2022–2025 data</span><span>nothing staged, nothing mocked</span></div>
+    <div class="footer"><span>live · real 2022–2025 data</span><span>replay race synthesised; the model scoring it is not</span></div>
   </section>
 
   <!-- ============ 10 · CLOSE ============ -->

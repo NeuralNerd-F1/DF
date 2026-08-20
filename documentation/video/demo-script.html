@@ -97,7 +97,7 @@
     environment and source code → close.</strong> Voiceover is written word-for-word at
     130&nbsp;wpm — <strong>narrate it in your own voice; never text-to-speech</strong>
     (presentation and English proficiency are assessed). The deck is
-    <code>docs/video/apex-slides.html</code>: slides 1–9 are the introduction, slide 10 the close,
+    <code>documentation/video/apex-slides.html</code>: slides 1–9 are the introduction, slide 10 the close,
     slides 11–13 a code appendix for the viva — the video itself shows code in the editor.
   </p>
 
@@ -289,9 +289,11 @@
         <li>Switch to ALL DRIVERS · 10× · Play; run to 26/26; hold the finished grid</li>
       </ul></div>
     <div class="cell vo"><h4>Voiceover</h4>
-      <p>The last interaction: the fingerprint as a baseline in time. A real race, replayed lap
-      by lap, strictly causally — lap fifteen is scored knowing only laps one to fifteen, exactly
-      what a live pit wall would have known.</p>
+      <p>The last interaction: the fingerprint as a baseline in time. This race is synthetic — a
+      controlled drift scenario, so I know where the deviation is and you can watch the detector
+      find it. Everything scoring it is the deployed model, replayed lap by lap, strictly causally
+      — lap fifteen is scored knowing only laps one to fifteen, exactly what a live pit wall
+      would have known.</p>
       <p>Each lap the system measures how far the behaviour's shape has rotated from the driver's
       own baseline; the dashed line is his threshold, calibrated per driver, per circuit type.
       Two consecutive crossings — and there it is. High confidence, the exact features driving it
@@ -319,7 +321,7 @@
       </ul></div>
     <div class="cell vo"><h4>Voiceover</h4>
       <p>Under the hood. The repository mirrors the pipeline — and every source package is
-      shadowed by a test package: one thousand three hundred and forty-nine tests, and the rule
+      shadowed by a test package: one thousand two hundred and fifty tests, and the rule
       that every error code has a test that triggers it. One more convention worth showing:
       there are no magic numbers anywhere in the code. Every threshold you saw — the confidence
       gate, the lap minimums — lives here, in one typed configuration file.</p></div>
@@ -392,7 +394,7 @@
         <tr><td>"2,100 real stints" · median lead "9 laps"</td><td class="n">2,138 · p50 = 9.0</td><td><code>rq4_detector.json</code></td></tr>
         <tr><td>Self-resolving alerts "91%"</td><td class="n">0.9136</td><td><code>rq4_detector.json</code></td></tr>
         <tr><td>Representation finding "erased driver signal"</td><td class="n">0.4068 → 0.6225 (ablation 0.614)</td><td><code>ablation.json</code> · <code>train_real_summary.json</code></td></tr>
-        <tr><td>Error codes "every code tested" · tests "1,349"</td><td class="n">69 · 1,078 + 271</td><td>design record §10</td></tr>
+        <tr><td>Error codes "every code tested" · tests "1,250"</td><td class="n">61 · 1,017 + 233</td><td>design record §10</td></tr>
         <tr><td>LEC laps "3,900"</td><td class="n">3,914</td><td>Driver Overview card (served)</td></tr>
         <tr><td>Chance level "under 8%"</td><td class="n">1/13 = 0.0769</td><td>arithmetic</td></tr>
       </tbody>
@@ -416,7 +418,7 @@
   <footer>
     <span>APEX · COMP702 demo video · slides → software → dev environment</span>
     <span>Target ≈9:20 of 10:00 · 130 wpm · own voice only</span>
-    <span>Deck: docs/video/apex-slides.html (slides 1–10 + appendix)</span>
+    <span>Deck: documentation/video/apex-slides.html (slides 1–10 + appendix)</span>
     <span>All numbers artefact-verified</span>
   </footer>
 </div>

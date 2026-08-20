@@ -85,7 +85,7 @@ app/api/         routes + Pydantic schemas
 app/cache/       Redis read cache (an optimisation, never a hard dependency)
 app/replay/      read-only growing-prefix replay engine
 app/eval/        evaluation orchestrator + RQ5 failsafe harness
-app/db/          SQLAlchemy models, repository, circuit breaker
+app/db/          SQLAlchemy models, async session, circuit breaker, health probe
 scripts/         training-matrix build, real training run, evaluation scripts
 frontend/        Next.js app — the five presented screens
 artefacts/       normalisation.json, umap_model.pkl, pca_fallback.pkl, models
@@ -102,7 +102,9 @@ build actually runs on. Commands below assume the project venv is active.
 - Lint: `ruff check . --fix`
 - Types: `mypy app`
 - Migrations: `alembic revision --autogenerate -m "..."` then `alembic upgrade head`
-- Run API: `uvicorn app.api.main:app --port 8001`
+- Run API: `uvicorn app.api.main:create_app --factory --port 8001` (the app is a factory, so
+  `--factory` is required), with `APEX_DATABASE_URL` set in the same shell
+- Full startup walkthrough, including the demo DSN and the common failures: `RUNNING.md`
 - Frontend: `cd frontend && npm run dev`
 
 ## Conventions

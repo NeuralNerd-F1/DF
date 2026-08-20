@@ -48,7 +48,6 @@ pandas-stubs==3.0.3.260530
 pathspec==1.1.1
 pluggy==1.6.0
 prometheus_client==0.25.0
-prompt_toolkit==3.0.52
 protobuf==6.33.6
 psycopg==3.3.4
 psycopg-binary==3.3.4

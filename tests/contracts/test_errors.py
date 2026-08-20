@@ -40,12 +40,6 @@ EXPECTED_CODES: set[str] = {
     "IMPUTED",
     # Corner decomposition (F09)
     "CORNER_001",
-    # Manual upload (F05)
-    "UPLOAD_001",
-    "UPLOAD_002",
-    "UPLOAD_003",
-    "UPLOAD_004",
-    "RESAMPLED",
     # Classifier (F06)
     "LOW_CONFIDENCE",
     "AMBIGUOUS",
@@ -82,14 +76,11 @@ EXPECTED_CODES: set[str] = {
     "CACHE_MISS",
     "CACHE_UNAVAILABLE",
     "CACHE_DEGRADED",
-    # Queue + replay (F14)
-    "QUEUE_UNAVAILABLE",
-    "INGEST_TASK_FAILED",
+    # Replay (F14)
     "REPLAY_PARTIAL",
     # Database / platform (F12, F13)
     "DB_UNAVAILABLE",
     "HEALTH_FAIL",
-    "DB_INTEGRITY",
     "NOT_FOUND",
     "FORBIDDEN",
     "API_ERROR",

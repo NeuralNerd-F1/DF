@@ -10,12 +10,12 @@ This script ORCHESTRATES; it computes no feature maths of its own.
 
 Three things it must get right, all of them documented decisions rather than defaults:
 
-**1. Resampling (§3.4 RESAMPLED).** FastF1's public telemetry is ~7.5 Hz with irregular gaps,
+**1. Resampling (§3.4).** FastF1's public telemetry is ~7.5 Hz with irregular gaps,
 below ``thresholds.sample_rate_floor_hz`` (20) -- every raw lap would be rejected ``LAP_004``.
-The corpus measures inter-sample Δt std/mean ~0.61, far above ``upload.sampling_delta_std_fraction``
-(0.20), so it formally meets APEX's own "inconsistent sampling" test and §3.4 prescribes a
-linear-interpolation resample to ``upload.resample_target_hz``. That is applied here, per lap,
-before validation. NOTE FOR THE WRITE-UP: upsampling clears the floor but adds no information --
+The corpus measures inter-sample Δt std/mean ~0.61, so it formally meets APEX's own "inconsistent
+sampling" test and §3.4 prescribes a linear-interpolation resample to
+``ingest.resample_target_hz``. That is applied here, per lap, before validation.
+NOTE FOR THE WRITE-UP: upsampling clears the floor but adds no information --
 the true information rate stays ~7.5 Hz, and any feature reading high-frequency content
 (modulation rate, jerk) is interpolation-smoothed. Recorded in the matrix metadata.
 
@@ -153,12 +153,11 @@ def record_dq(
 
 
 def resample_lap(lap: pd.DataFrame, hz: int) -> pd.DataFrame:
-    """Linear-interpolate one lap's channels onto a uniform ``hz`` grid (§3.4 RESAMPLED).
+    """Linear-interpolate one lap's channels onto a uniform ``hz`` grid (§3.4).
 
-    Mirrors ``app/pipeline/upload.py::_resample_lap_to_hz`` but is applied UNCONDITIONALLY:
-    upload resamples only when Δt is inconsistent, whereas here the raw rate is uniformly below
-    the 20 Hz floor and every lap needs lifting. Per-lap scalar context (lap_time, compound,
-    stint, tyre_age, ...) is constant within a lap and is carried through unchanged.
+    Applied UNCONDITIONALLY: the raw corpus rate is uniformly below the 20 Hz floor, so every lap
+    needs lifting. Per-lap scalar context (lap_time, compound, stint, tyre_age, ...) is constant
+    within a lap and is carried through unchanged.
     """
     t = pd.to_numeric(lap["time"], errors="coerce").to_numpy(dtype=float)
     order = np.argsort(t, kind="stable")
@@ -466,13 +465,13 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     log_path = out_path.parent / "build_dq.jsonl"
 
-    if config.upload is None:
+    if config.ingest is None:
         # No default: silently resampling at some assumed rate would put an unstated Hz into
         # every feature in the matrix. The rate is a config value or the build does not run.
-        print("config.upload block absent; resample_target_hz is required (§3.4 RESAMPLED)",
+        print("config.ingest block absent; resample_target_hz is required (§3.4)",
               file=sys.stderr)
         raise SystemExit(2)
-    hz = config.upload.resample_target_hz
+    hz = config.ingest.resample_target_hz
 
     units, missing_seasons = discover(Path(args.data_dir), args.seasons)
     for season in missing_seasons:
@@ -510,7 +509,7 @@ def main() -> None:
         units = units[: args.limit_units]
     print(f"corpus: {len(units)} driver-sessions | "
           f"stable-core drivers ({len(core)}): {sorted(core)}")
-    print(f"resample: {hz} Hz (§3.4 RESAMPLED; raw corpus ~7.5 Hz < "
+    print(f"resample: {hz} Hz (§3.4; raw corpus ~7.5 Hz < "
           f"{config.thresholds.sample_rate_floor_hz} Hz floor)")
 
     held_out = set(config.held_out_circuits)
@@ -573,7 +572,7 @@ def main() -> None:
     meta = {
         "seasons": args.seasons,
         "resample_hz": hz,
-        "raw_rate_note": "FastF1 public telemetry ~7.5 Hz; upsampled per §3.4 RESAMPLED. "
+        "raw_rate_note": "FastF1 public telemetry ~7.5 Hz; upsampled per §3.4. "
                          "Upsampling clears the 20 Hz floor but adds no information.",
         "stable_core_drivers": sorted(core),
         "circuits": sorted(matrix["circuit"].unique().tolist()),

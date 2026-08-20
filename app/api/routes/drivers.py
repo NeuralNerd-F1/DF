@@ -1,8 +1,9 @@
-"""GET /drivers, /drivers/{id}/fingerprint, /drivers/{id}/setup/{circuit}, /drivers/{id}/stability.
+"""GET /drivers, /drivers/{id}/fingerprint, /drivers/{id}/setup/{circuit}, /tyres.
 
 The path ``{id}`` is the driver **code** (e.g. "VER"). The read endpoints serve the F12
-``fingerprints`` table (empty → [] / 404 until an F14/F20 batch populates it); ``/setup`` serves the
-F11 handle. NL description + multi-season stability are pure F07 functions over the DB rows.
+``fingerprints`` table (empty → [] / 404 until the table is populated); ``/setup`` serves the F11
+handle. NL description + multi-season stability are pure F07 functions over the DB rows; stability
+rides along on the ``/fingerprint`` payload rather than costing the screen a second round-trip.
 """
 
 from __future__ import annotations
@@ -185,26 +186,6 @@ def _stability_of(fps: list[models.Fingerprint], state: AppState) -> StabilityRe
         pairwise_js={},
         seasons_available=len(seasons),
         partial=len(seasons) < min_seasons,
-    )
-
-
-@router.get("/drivers/{driver_id}/stability", response_model=StabilityResponse)
-async def driver_stability(
-    driver_id: str,
-    response: Response,
-    session: AsyncSession = Depends(get_db_session),
-    state: AppState = Depends(get_apex_state),
-) -> StabilityResponse:
-    fps = await _fps_for_code(session, driver_id)  # 404 if the driver code is unknown
-    stab = _stability_of(fps, state)
-    if stab.partial:  # §8.5 — 206 if fewer than 3 seasons available
-        response.status_code = 206
-    return StabilityResponse(
-        driver_id=driver_id,
-        stability_score=stab.stability_score,
-        pairwise_js=stab.pairwise_js,
-        seasons_available=stab.seasons_available,
-        partial=stab.partial,
     )
 
 

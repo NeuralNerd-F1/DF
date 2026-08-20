@@ -30,8 +30,8 @@ from app.db.results import DatabaseUnavailableError
 T = TypeVar("T")
 
 # Transport-level faults that a retry might clear. IntegrityError / ProgrammingError etc. are NOT
-# here — a data/constraint fault must propagate immediately (the caller maps it to DB_INTEGRITY),
-# never retried or counted as a transport failure. Two distinct timeouts must both be caught: the
+# here — a data/constraint fault must propagate immediately to the caller, never retried or
+# counted as a transport failure. Two distinct timeouts must both be caught: the
 # builtin ``TimeoutError`` that ``asyncio.wait_for`` raises (per-attempt cap), AND SQLAlchemy's own
 # ``sqlalchemy.exc.TimeoutError`` from pool exhaustion — which does NOT subclass the builtin, so
 # omitting it would let a pool-timeout bypass the retry loop and the breaker's failure accounting.

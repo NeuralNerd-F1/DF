@@ -294,40 +294,7 @@ class StyleSpaceResponse(ApiModel):
     unknown_drivers: list[StyleSpaceDriver] = Field(default_factory=list)
 
 
-# --- F14 (Celery/replay) request + response schemas ---------------------------------------------
-class IngestSessionRequest(ApiModel):
-    """POST /ingest/session body — the FastF1 session coordinates to ingest async (§8.5)."""
-
-    year: int = Field(ge=1950, le=2100)
-    event: str = Field(min_length=1, max_length=128)
-    session: str = Field(default="R", min_length=1, max_length=8)
-
-
-class IngestSessionResponse(ApiModel):
-    session_id: str
-    laps_accepted: int
-    laps_rejected: int
-    rejection_summary: dict[str, int] = Field(default_factory=dict)
-    quality_report: dict[str, Any] = Field(default_factory=dict)
-
-
-class IngestStatusResponse(ApiModel):
-    status: Literal["PENDING", "PROCESSING", "COMPLETE", "FAILED"]
-    progress: float
-    error_detail: str | None = None
-    # The terminal report — the §8.5 IngestSessionResponse fields (laps_accepted, rejection_summary,
-    # quality_report, …). Populated once the job is COMPLETE; None while it is still running (F14).
-    result: dict[str, Any] | None = None
-
-
-class UploadResponse(ApiModel):
-    upload_id: str
-    laps_accepted: int
-    laps_rejected: int
-    cleaning_report: dict[str, Any] = Field(default_factory=dict)
-    warnings: list[str] = Field(default_factory=list)
-
-
+# --- F19 replay + session catalog response schemas -----------------------------------------------
 class ReplayAlert(ApiModel):
     """The F10 ``DegradationAlert`` as of one replayed lap (§5.3 / §10.7 banner payload). Mirrors
     ``app.monitoring.detector.DegradationAlert`` field-for-field; closes the F19 alert seam

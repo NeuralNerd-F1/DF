@@ -202,68 +202,6 @@ export const zTyreWear = z
   .object({ drivers: z.record(z.record(zTyreCompound)).optional() })
   .passthrough();
 
-// POST /fingerprint/unknown (F08). radar_values/style_description are returned EMPTY by the route
-// (div #59) — guarded but not relied upon. nearest_neighbours/risk_flags/warnings drive the UI.
-export const zNeighbour = z
-  .object({
-    driver: z.string(),
-    cosine_similarity: z.number(),
-    distance: z.number(),
-  })
-  .passthrough();
-export const zDataQuality = z
-  .object({
-    n_laps_used: z.number(),
-    n_laps_rejected: z.number(),
-    imputed_features: z.array(z.string()).optional(),
-  })
-  .passthrough();
-export const zUnknownFingerprint = z
-  .object({
-    fingerprint_id: z.string(),
-    fingerprint_vector: z.array(z.number()).nullish(),
-    radar_values: radar.optional(),
-    style_description: z.string().optional(),
-    nearest_neighbours: z.array(zNeighbour).optional(),
-    risk_flags: z.array(z.string()).optional(),
-    data_quality: zDataQuality,
-    confidence_state: z.string().nullish(),
-    warnings: z.array(z.string()).optional(),
-  })
-  .passthrough();
-
-// POST /ingest/session -> 202 (F14). Counts are honest 0-placeholders on enqueue.
-export const zIngestSession = z
-  .object({
-    session_id: z.string(),
-    laps_accepted: z.number(),
-    laps_rejected: z.number(),
-    rejection_summary: z.record(z.number()).optional(),
-    quality_report: z.record(z.unknown()).optional(),
-  })
-  .passthrough();
-
-// GET /ingest/status/{id} (F14). status drives the pipeline rail; result populated on COMPLETE.
-export const zIngestStatus = z
-  .object({
-    status: z.enum(['PENDING', 'PROCESSING', 'COMPLETE', 'FAILED']),
-    progress: z.number(),
-    error_detail: z.string().nullish(),
-    result: z.record(z.unknown()).nullish(),
-  })
-  .passthrough();
-
-// POST /ingest/upload -> 503 stub (F05, div #58). Guard exists so the report table is a 1-line swap.
-export const zUpload = z
-  .object({
-    upload_id: z.string(),
-    laps_accepted: z.number(),
-    laps_rejected: z.number(),
-    cleaning_report: z.record(z.unknown()).optional(),
-    warnings: z.array(z.string()).optional(),
-  })
-  .passthrough();
-
 // --- F19 Screen 6 (Historical Race Replay Monitor) ------------------------------------------------
 // GET /replay/{session}/{driver} (F14 → F10). The replay redesign widened the DTO: per-lap τ
 // (threshold) + the full DegradationAlert as of that lap ride along (closes div #72–#74). Guard the

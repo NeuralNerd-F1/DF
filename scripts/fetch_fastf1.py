@@ -155,7 +155,7 @@ def _driver_frame(lap_rows: pd.DataFrame) -> tuple[pd.DataFrame, int, str | None
 
     Telemetry is written at its RAW sample rate -- deliberately NOT upsampled. FastF1's public
     car data is ~4-10 Hz with irregular gaps, below APEX's 20 Hz `sample_rate_floor_hz`; the
-    resample to a uniform grid is Stage B's job (§3.4 RESAMPLED), so the corpus on disk stays a
+    resample to a uniform grid is Stage B's job (§3.4), so the corpus on disk stays a
     faithful record and the resampling policy stays changeable without a re-download.
 
     Returns ``(frame, n_laps_without_telemetry, reason)`` -- the count is COUNTED and reported

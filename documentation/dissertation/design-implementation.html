@@ -1,0 +1,1306 @@
+<title>APEX Dissertation Chapters</title>
+<style>
+  :root {
+    --bg:            #F6F5FA;
+    --surface:       #FFFFFF;
+    --raised:        #EEECF5;
+    --border:        #DCD8E8;
+    --border-strong: #B4AEC0;
+    --ink:           #2B2733;
+    --muted:         #6A6377;
+    --accent:        #CE3A72;
+    --accent-deep:   #94284F;
+    --ok:            #2A8879;
+    --warn:          #B07520;
+    --purple:        #7A5DC0;
+    --rule:          #DCD8E8;
+    --serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "JetBrains Mono", "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:            #17151D;
+      --surface:       #1E1B26;
+      --raised:        #262230;
+      --border:        #37323F;
+      --border-strong: #6A6377;
+      --ink:           #E9E6EF;
+      --muted:         #96A0AD;
+      --accent:        #E06A96;
+      --accent-deep:   #F0A3BF;
+      --ok:            #4BB39A;
+      --warn:          #D9A05B;
+      --purple:        #A78BE0;
+      --rule:          #37323F;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:            #17151D;
+    --surface:       #1E1B26;
+    --raised:        #262230;
+    --border:        #37323F;
+    --border-strong: #6A6377;
+    --ink:           #E9E6EF;
+    --muted:         #96A0AD;
+    --accent:        #E06A96;
+    --accent-deep:   #F0A3BF;
+    --ok:            #4BB39A;
+    --warn:          #D9A05B;
+    --purple:        #A78BE0;
+    --rule:          #37323F;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 1.0625rem;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 1.25rem 6rem;
+  }
+  .sheet { max-width: 46rem; margin: 0 auto; }
+
+  a { color: var(--accent-deep); text-decoration-color: var(--border-strong); text-underline-offset: 2px; }
+  a:hover { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  header.front { padding: 4.5rem 0 2.5rem; border-bottom: 1px solid var(--rule); }
+  .eyebrow {
+    font-family: var(--sans); font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+    margin: 0 0 1rem;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 700; font-size: 2.5rem;
+    line-height: 1.12; margin: 0 0 0.75rem; letter-spacing: -0.01em; text-wrap: balance;
+  }
+  .subtitle { font-size: 1.1rem; color: var(--muted); margin: 0 0 1.5rem; max-width: 38rem; }
+  .frontmeta {
+    font-family: var(--sans); font-size: 0.8rem; color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: 0.4rem 1.6rem; margin: 0; padding: 0; list-style: none;
+  }
+  .frontmeta strong { color: var(--ink); font-weight: 600; }
+
+  .note {
+    font-family: var(--sans); font-size: 0.85rem; line-height: 1.55;
+    color: var(--muted); background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 0.9rem 1.1rem; margin: 2rem 0;
+  }
+  .note strong { color: var(--ink); }
+
+  nav.toc { margin: 2.5rem 0 0; font-family: var(--sans); }
+  nav.toc h2 { font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.75rem; }
+  nav.toc ol { margin: 0; padding: 0; list-style: none; columns: 2; column-gap: 2.5rem; font-size: 0.86rem; line-height: 1.9; }
+  nav.toc ol li { break-inside: avoid; }
+  nav.toc .ch { font-weight: 700; margin-top: 0.35rem; }
+  nav.toc a { text-decoration: none; color: var(--ink); }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .n { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 0.5em; font-weight: 600; }
+  @media (max-width: 40rem) { nav.toc ol { columns: 1; } }
+
+  .chapter { margin-top: 5rem; }
+  .chapter-head { border-top: 3px solid var(--ink); padding-top: 1.25rem; margin-bottom: 2.5rem; }
+  .chapter-head .chno {
+    font-family: var(--sans); font-weight: 700; font-size: 0.78rem;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.5rem;
+  }
+  .chapter-head h2 { font-size: 2rem; line-height: 1.15; margin: 0 0 0.6rem; letter-spacing: -0.01em; text-wrap: balance; }
+  .chapter-head .abstract { color: var(--muted); font-size: 1rem; margin: 0; max-width: 40rem; }
+
+  h3 {
+    font-family: var(--sans); font-size: 1.22rem; font-weight: 700;
+    line-height: 1.25; margin: 2.8rem 0 0.9rem; letter-spacing: -0.005em; text-wrap: balance;
+  }
+  h3 .n, h4 .n { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 0.55em; }
+  h4 {
+    font-family: var(--sans); font-size: 0.98rem; font-weight: 700;
+    margin: 2rem 0 0.6rem; text-wrap: balance;
+  }
+  p { margin: 0 0 1.1rem; }
+  ul, ol { margin: 0 0 1.1rem; padding-left: 1.4rem; }
+  li { margin-bottom: 0.35rem; }
+
+  code {
+    font-family: var(--mono); font-size: 0.82em;
+    background: var(--raised); border-radius: 4px; padding: 0.08em 0.35em;
+  }
+
+  .tablewrap { overflow-x: auto; margin: 1.4rem 0 1.8rem; }
+  table {
+    border-collapse: collapse; width: 100%;
+    font-family: var(--sans); font-size: 0.83rem; line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+  }
+  caption {
+    caption-side: top; text-align: left; font-family: var(--sans);
+    font-size: 0.78rem; color: var(--muted); padding-bottom: 0.55rem;
+  }
+  caption b { color: var(--ink); font-weight: 700; }
+  th {
+    text-align: left; font-weight: 600; font-size: 0.72rem;
+    letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted);
+    border-bottom: 1.5px solid var(--border-strong); padding: 0.4rem 1rem 0.4rem 0;
+  }
+  td { border-bottom: 1px solid var(--rule); padding: 0.5rem 1rem 0.5rem 0; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:last-child, th:last-child { padding-right: 0; }
+
+  figure { margin: 1.8rem 0 2rem; }
+  figure svg { max-width: 100%; height: auto; display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+  figcaption {
+    font-family: var(--sans); font-size: 0.78rem; color: var(--muted);
+    margin-top: 0.6rem; line-height: 1.5;
+  }
+  figcaption b { color: var(--ink); font-weight: 700; }
+
+  .principle { margin: 0 0 1.05rem; padding-left: 1.1rem; border-left: 3px solid var(--border-strong); }
+  .principle p { margin-bottom: 0.2rem; }
+  .principle .enf { font-family: var(--sans); font-size: 0.78rem; color: var(--muted); }
+  .principle b:first-child { font-family: var(--sans); }
+
+  .pathkey { font-family: var(--sans); font-size: 0.78rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0.35rem 1.4rem; margin: 0 0 1.1rem; }
+  .dot { display: inline-block; width: 0.62em; height: 0.62em; border-radius: 50%; margin-right: 0.4em; vertical-align: baseline; }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.purple { background: var(--purple); }
+
+  footer.back {
+    margin-top: 5rem; padding-top: 1.5rem; border-top: 1px solid var(--rule);
+    font-family: var(--sans); font-size: 0.78rem; color: var(--muted); line-height: 1.7;
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="sheet">
+
+<header class="front">
+  <p class="eyebrow">COMP702 · MSc Dissertation · APEX</p>
+  <h1>Design &amp; Implementation</h1>
+  <p class="subtitle">Two chapters of the dissertation: the design of a fail-safe behavioural
+  profiling system for Formula&nbsp;1 telemetry, and the account of how it was built.</p>
+  <ul class="frontmeta">
+    <li><strong>Corpus</strong> 2022–2025 · 53,928 lap vectors</li>
+    <li><strong>Drivers</strong> 13 · 25 circuits · 2 held out</li>
+    <li><strong>Codebase</strong> 19,884 LOC · 1,354 tests · 69 error codes</li>
+  </ul>
+</header>
+
+<div class="note">
+  <strong>Note on numbering.</strong> These chapters are numbered 3 (Design) and 4 (Implementation)
+  on the assumption that Introduction and Background/Related&nbsp;Work precede them and Evaluation
+  follows as Chapter&nbsp;5; renumber if the final structure differs. Every quantitative claim in
+  both chapters traces to a content-hashed artefact under <code>artefacts/real/</code> in the
+  project repository; the evaluation protocol behind each number is given in Chapter&nbsp;5.
+</div>
+
+<nav class="toc" aria-label="Contents">
+  <h2>Contents</h2>
+  <ol>
+    <li class="ch"><a href="#ch3">Chapter 3 — Design</a></li>
+    <li><a href="#s3-1"><span class="n">3.1</span>Design context and goals</a></li>
+    <li><a href="#s3-2"><span class="n">3.2</span>Design principles</a></li>
+    <li><a href="#s3-3"><span class="n">3.3</span>Architecture</a></li>
+    <li><a href="#s3-4"><span class="n">3.4</span>Data pipeline</a></li>
+    <li><a href="#s3-5"><span class="n">3.5</span>The fingerprint and its models</a></li>
+    <li><a href="#s3-6"><span class="n">3.6</span>Serving and interface</a></li>
+    <li><a href="#s3-7"><span class="n">3.7</span>The failure contract</a></li>
+    <li><a href="#s3-8"><span class="n">3.8</span>Evaluation design</a></li>
+    <li><a href="#s3-9"><span class="n">3.9</span>Trade-offs</a></li>
+    <li class="ch"><a href="#ch4">Chapter 4 — Implementation</a></li>
+    <li><a href="#s4-1"><span class="n">4.1</span>Method</a></li>
+    <li><a href="#s4-2"><span class="n">4.2</span>Technology stack</a></li>
+    <li><a href="#s4-3"><span class="n">4.3</span>Repository organisation</a></li>
+    <li><a href="#s4-4"><span class="n">4.4</span>Pipeline implementation</a></li>
+    <li><a href="#s4-5"><span class="n">4.5</span>Model implementation</a></li>
+    <li><a href="#s4-6"><span class="n">4.6</span>Platform implementation</a></li>
+    <li><a href="#s4-7"><span class="n">4.7</span>Frontend implementation</a></li>
+    <li><a href="#s4-8"><span class="n">4.8</span>Evaluation framework</a></li>
+    <li><a href="#s4-9"><span class="n">4.9</span>Quality assurance</a></li>
+    <li><a href="#s4-10"><span class="n">4.10</span>Implementation challenges</a></li>
+    <li><a href="#s4-11"><span class="n">4.11</span>The divergence ledger</a></li>
+  </ol>
+</nav>
+
+<!-- ============================= CHAPTER 3 ============================= -->
+<section class="chapter" id="ch3">
+<div class="chapter-head">
+  <p class="chno">Chapter 3</p>
+  <h2>Design</h2>
+  <p class="abstract">This chapter presents the design of APEX: the principles fixed before any
+  code was written, the layered architecture those principles produce, the design of each
+  pipeline stage and model, and the considered alternatives that were rejected. The design is
+  argued from its central representation outward — the driver behavioural fingerprint — and from
+  one governing commitment: no component fails silently.</p>
+</div>
+
+<h3 id="s3-1"><span class="n">3.1</span>Design context and goals</h3>
+
+<p>Two drivers in mechanically identical cars produce measurably different telemetry. APEX
+treats that difference as a behavioural signature. The system ingests public Formula&nbsp;1
+telemetry, reduces each accepted lap to a 28-feature behavioural vector, aggregates those
+vectors into a per-driver <em>fingerprint</em>, and then does four things with it: validates it
+(driver identification — if identity is not recoverable from the fingerprint, it carries no
+signal), gives it geometry (a continuous style space), explains it (exact SHAP attribution), and
+applies it downstream (behavioural deviation monitoring and setup-tendency estimation). Every
+research question in Chapter&nbsp;1 is a question about this one representation, and the design
+is organised accordingly: the fingerprint is the core, identification is its validation, and the
+remaining capabilities are its applications.</p>
+
+<p>Three properties of the problem shaped the design more than any other consideration. First,
+the data source is public and imperfect: the telemetry feed arrives at roughly 7.5&nbsp;Hz with
+a boolean brake channel, so the design must state what the feed can and cannot support rather
+than assume laboratory-grade signals. Second, the central scientific claim — that the
+fingerprint generalises to circuits the system has never seen — is only testable if the
+evaluation circuits are quarantined from every fitting operation from the first line of code;
+leakage prevention is therefore an architectural concern, not an evaluation-time check. Third,
+the system serves model outputs to an interface, and a model output of unwarranted confidence is
+a worse failure than an honest refusal; uncertainty handling is consequently designed in as a
+first-class output type rather than added as presentation.</p>
+
+<p>The design goals follow directly: (i)&nbsp;a single audited path from raw telemetry to the
+fingerprint, with every loss of data counted and attributed; (ii)&nbsp;models that abstain, with
+typed uncertainty states, rather than force answers; (iii)&nbsp;a train/held-out boundary that
+is mechanically enforced rather than promised; (iv)&nbsp;reproducibility to the byte for every
+trained artefact; and (v)&nbsp;an interface that renders what the system knows, including what
+it does not know.</p>
+
+<h3 id="s3-2"><span class="n">3.2</span>Design principles</h3>
+
+<p>Five constraints were fixed in the project specification before implementation began, and
+they are enforced mechanically — by types, tripwires, and tests — rather than by convention.
+They are stated once here; the rest of both chapters refers to them by number.</p>
+
+<div class="principle">
+  <p><b>Principle 1 — No silent failure.</b> Every failure path returns a typed result carrying
+  an explicit error code. No bare <code>except</code>, no dropped lap, no swallowed fault.</p>
+  <p class="enf">Enforced by a 69-member <code>ErrorCode</code> enumeration, an append-only
+  <code>data_quality_log</code>, and a read-only failure audit run against every module.</p>
+</div>
+<div class="principle">
+  <p><b>Principle 2 — No normalisation leakage.</b> Scalers and statistics are fitted on the
+  training split only, persisted as artefacts, and loaded read-only by everything downstream.
+  The held-out circuits (Belgium and Italy) never touch a <code>.fit()</code> call.</p>
+  <p class="enf">Enforced by a single-writer/two-reader normalisation module and
+  <code>_assert_no_leakage</code> tripwires at all four fit sites in the system.</p>
+</div>
+<div class="principle">
+  <p><b>Principle 3 — Reproducibility.</b> All seeds are fixed in configuration; artefacts are
+  content-hashed and timestamp-free, so re-running a build produces byte-identical output.</p>
+  <p class="enf">Enforced by seed&nbsp;42 across numpy/XGBoost/Optuna, single-threaded training
+  where parallelism breaks determinism, one MLflow run per training, and deterministic artefact
+  hashing.</p>
+</div>
+<div class="principle">
+  <p><b>Principle 4 — Mandatory confidence gates.</b> A model output below its confidence
+  threshold returns a typed uncertainty state — <code>LOW_CONFIDENCE</code>,
+  <code>AMBIGUOUS</code>, <code>OUT_OF_DISTRIBUTION</code> — never a forced answer.</p>
+  <p class="enf">Enforced by a calibrated gate at maximum probability &lt;&nbsp;0.65, entropy
+  and distance gates on the other models, and an interface that colours by the served state and
+  never re-derives a threshold.</p>
+</div>
+<div class="principle">
+  <p><b>Principle 5 — Failure paths are unit-tested.</b> Every error code has a test that
+  triggers it; a feature is not complete because its happy path works.</p>
+  <p class="enf">Enforced by 50 backend test modules mirroring the application tree, synthetic
+  passing <em>and</em> failing fixtures, and a conformance check before any feature is accepted.</p>
+</div>
+<div class="principle">
+  <p><b>Corollary — Honest degradation.</b> Where a component cannot deliver, it says so in the
+  type system rather than substituting a plausible value. <code>DEGRADED</code> is a first-class
+  status, and the interface renders explicit unavailable states rather than fabricating.</p>
+</div>
+
+<p>Principle&nbsp;2 dominates the architecture. It makes normalisation a chokepoint that every
+downstream model must pass through, and it is the reason the classifier, style space, deviation
+detector, and setup engine each re-derive and re-assert the train/held-out boundary
+independently rather than trusting their caller: the redundancy is deliberate, so that a single
+filter bug cannot silently poison an artefact. Principle&nbsp;4 supplies the system's most
+distinctive behaviour — the licence to abstain — whose quantitative payoff is measured in
+Chapter&nbsp;5. Principles 1, 3, and 5 are what make the other two auditable.</p>
+
+<h3 id="s3-3"><span class="n">3.3</span>Architecture</h3>
+
+<p>The system is one funnel with typed boundaries. Telemetry becomes behavioural features;
+features become the fingerprint; everything else is either a validation of the fingerprint or
+an application of it. Figure&nbsp;3.1 shows the architecture with its failure philosophy made
+explicit: the three path colours are the design in one picture.</p>
+
+<p class="pathkey">
+  <span><span class="dot ok"></span>success path</span>
+  <span><span class="dot warn"></span>failure path — typed error, logged, surfaced</span>
+  <span><span class="dot purple"></span>uncertainty state — “I don't know”, served, never forced</span>
+</p>
+
+<figure>
+<svg viewBox="0 0 900 400" role="img" aria-label="APEX architecture: a left-to-right pipeline from ingestion through validation, features, and normalisation to the fingerprint models, API, and interface. Data faults branch to a typed-error path feeding the data-quality log and the interface; model faults branch to a served uncertainty state that travels the success path.">
+  <defs>
+    <marker id="a-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--ok)"/>
+    </marker>
+    <marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--warn)"/>
+    </marker>
+    <marker id="a-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--purple)"/>
+    </marker>
+    <marker id="a-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+  <g font-family="var(--sans)" font-size="12.5" fill="var(--ink)">
+    <!-- success spine -->
+    <g>
+      <rect x="24"  y="60" width="102" height="44" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+      <text x="75"  y="86" text-anchor="middle">Ingestion</text>
+      <rect x="164" y="60" width="102" height="44" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+      <text x="215" y="86" text-anchor="middle">Validation</text>
+      <rect x="304" y="60" width="102" height="44" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+      <text x="355" y="86" text-anchor="middle">Features</text>
+      <rect x="444" y="60" width="122" height="44" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+      <text x="505" y="86" text-anchor="middle">Normalisation</text>
+      <rect x="604" y="48" width="132" height="68" rx="6" fill="none" stroke="var(--ink)" stroke-width="2"/>
+      <text x="670" y="76" text-anchor="middle" font-weight="700">Fingerprint</text>
+      <text x="670" y="94" text-anchor="middle" fill="var(--muted)" font-size="11">+ four models</text>
+      <rect x="774" y="60" width="102" height="44" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+      <text x="825" y="86" text-anchor="middle">API → UI</text>
+      <line x1="126" y1="82" x2="160" y2="82" stroke="var(--ok)" stroke-width="2" marker-end="url(#a-ok)"/>
+      <line x1="266" y1="82" x2="300" y2="82" stroke="var(--ok)" stroke-width="2" marker-end="url(#a-ok)"/>
+      <line x1="406" y1="82" x2="440" y2="82" stroke="var(--ok)" stroke-width="2" marker-end="url(#a-ok)"/>
+      <line x1="566" y1="82" x2="600" y2="82" stroke="var(--ok)" stroke-width="2" marker-end="url(#a-ok)"/>
+      <line x1="736" y1="82" x2="770" y2="82" stroke="var(--ok)" stroke-width="2" marker-end="url(#a-ok)"/>
+    </g>
+    <!-- cache -->
+    <g>
+      <path d="M 30 168 h 90 a 6 6 0 0 1 6 6 v 32 a 6 6 0 0 1 -6 6 h -90 a 6 6 0 0 1 -6 -6 v -32 a 6 6 0 0 1 6 -6 z" fill="none" stroke="var(--muted)" stroke-width="1.3"/>
+      <text x="75" y="192" text-anchor="middle" fill="var(--muted)" font-size="11.5">Telemetry cache</text>
+      <line x1="75" y1="164" x2="75" y2="108" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#a-mut)"/>
+      <text x="84" y="140" fill="var(--muted)" font-size="10.5">serves on outage · STALE_DATA</text>
+    </g>
+    <!-- typed error path -->
+    <g>
+      <line x1="215" y1="104" x2="215" y2="252" stroke="var(--warn)" stroke-width="2" marker-end="url(#a-warn)"/>
+      <line x1="355" y1="104" x2="355" y2="240" stroke="var(--warn)" stroke-width="2"/>
+      <line x1="355" y1="240" x2="290" y2="266" stroke="var(--warn)" stroke-width="2" marker-end="url(#a-warn)"/>
+      <text x="365" y="180" fill="var(--warn)" font-size="10.5">out-of-range → NULL, coded</text>
+      <text x="120" y="180" fill="var(--warn)" font-size="10.5" text-anchor="start"></text>
+      <rect x="140" y="256" width="200" height="48" rx="6" fill="none" stroke="var(--warn)" stroke-width="1.6"/>
+      <text x="240" y="277" text-anchor="middle" fill="var(--warn)">Typed error · code</text>
+      <text x="240" y="294" text-anchor="middle" fill="var(--warn)" font-size="11">data_quality_log row</text>
+      <line x1="340" y1="280" x2="770" y2="280" stroke="var(--warn)" stroke-width="2" marker-end="url(#a-warn)"/>
+      <text x="556" y="272" text-anchor="middle" fill="var(--warn)" font-size="10.5">API serves the tally · UI shows the reason verbatim</text>
+      <rect x="774" y="256" width="102" height="48" rx="6" fill="none" stroke="var(--warn)" stroke-width="1.6"/>
+      <text x="825" y="284" text-anchor="middle" fill="var(--warn)">UI</text>
+    </g>
+    <!-- uncertainty path -->
+    <g>
+      <line x1="670" y1="116" x2="670" y2="168" stroke="var(--purple)" stroke-width="2" marker-end="url(#a-purple)"/>
+      <rect x="580" y="172" width="180" height="46" rx="6" fill="none" stroke="var(--purple)" stroke-width="1.6"/>
+      <text x="670" y="192" text-anchor="middle" fill="var(--purple)">Uncertainty state</text>
+      <text x="670" y="208" text-anchor="middle" fill="var(--purple)" font-size="10.5">LOW_CONFIDENCE · AMBIGUOUS · OOD</text>
+      <line x1="764" y1="195" x2="825" y2="195" stroke="var(--purple)" stroke-width="2"/>
+      <line x1="825" y1="195" x2="825" y2="112" stroke="var(--purple)" stroke-width="2" marker-end="url(#a-purple)"/>
+      <text x="700" y="238" fill="var(--purple)" font-size="10.5">served as an answer, in its own colour</text>
+    </g>
+    <!-- engineering strip -->
+    <text x="450" y="360" text-anchor="middle" fill="var(--muted)" font-size="11">
+      Engineering infrastructure beneath the funnel (§3.6): API · persistence · cache/queue · replay · interface · testing
+    </text>
+    <line x1="24" y1="336" x2="876" y2="336" stroke="var(--rule)" stroke-width="1"/>
+  </g>
+</svg>
+<figcaption><b>Figure 3.1</b> — The architecture and its failure philosophy. Data faults leave
+the funnel sideways as typed errors that are logged and shown to the user verbatim; model faults
+are not errors at all but served uncertainty states that travel the success path. The two
+destinations are different on purpose.</figcaption>
+</figure>
+
+<p>The amber and purple paths embody the design's central distinction. A <em>data fault</em> — a
+source outage, a malformed lap, an out-of-range feature — becomes a typed error with a logged
+reason that the interface shows verbatim. A <em>model fault</em> is not an error: it is a served
+uncertainty state (Principle&nbsp;4). The answer “I don't know” travels the success path and is
+rendered in its own epistemic colour rather than disguised as a weak answer. This distinction
+recurs at every layer of the design and is the reason the system can miss a performance target
+and still be operating exactly as designed.</p>
+
+<p>The alternative — one monolithic pipeline — was rejected because it makes failure isolation
+impossible: one exception tears down unrelated capability. Layers with typed result boundaries
+(<code>ValidationResult</code>, <code>FeatureResult</code>, <code>PredictionResult</code>, and
+their peers) let each stage fail alone, carry its reason, and leave the remainder serving.</p>
+
+<h3 id="s3-4"><span class="n">3.4</span>Data pipeline</h3>
+
+<h4>3.4.1 Ingestion</h4>
+
+<p>FastF1 is the primary telemetry source, with OpenF1 and Ergast as fallbacks for tyre and lap
+context. Each source sits behind a circuit breaker (5&nbsp;s timeout, 3 retries with 1–2–4&nbsp;s
+backoff, breaker opening after 3 faults in 30&nbsp;s); an outage serves from the local Parquet
+telemetry cache tagged <code>STALE_DATA</code> rather than failing. The breaker constants were
+fixed a priori as conventional operational settings — fail fast within an operator's attention
+span, outlive a transient network blip but not a real outage — and nothing downstream is
+sensitive to them, which is why they were never tuned. Telemetry is cached at its raw sample
+rate, so the resampling policy remains changeable without a re-download.</p>
+
+<h4>3.4.2 Validation — nine filters, every loss counted</h4>
+
+<p>Every lap passes a chain of nine filters before it may contribute to any statistic. Each
+filter has its own error code, and each rejection is logged; the acceptance rate is a reported
+number, not an absorbed one. Of 64,364 laps seen across 2022–2025, 53,972 survived — an 84%
+acceptance rate dominated by green-flag status and pit events.</p>
+
+<div class="tablewrap">
+<table>
+<caption><b>Table 3.1</b> — The validation filter chain and its effect on the real corpus.</caption>
+<thead><tr><th>Code</th><th>Rejects / tags</th><th>Real corpus</th></tr></thead>
+<tbody>
+<tr><td><code>LAP_001</code></td><td>Not green-flag (safety car / VSC / red)</td><td>6,809 rejected</td></tr>
+<tr><td><code>LAP_002</code></td><td>Out-lap or in-lap</td><td>3,032 rejected</td></tr>
+<tr><td><code>LAP_003</code></td><td>&gt;10% consecutive NaN in a channel</td><td>—</td></tr>
+<tr><td><code>LAP_004</code></td><td>Effective sample rate below the 20&nbsp;Hz floor</td><td>52 rejected</td></tr>
+<tr><td><code>LAP_005</code></td><td>Speed anomaly (&gt;1% stationary samples)</td><td>40 rejected</td></tr>
+<tr><td><code>LAP_006</code></td><td>Lap time outside 115% of driver session median</td><td>459 rejected</td></tr>
+<tr><td><code>COMBO_001</code></td><td>&lt;30 clean laps for a driver–circuit pair</td><td>107 pairs excluded</td></tr>
+<tr><td><code>LAP_INTERP</code></td><td>1–5-sample NaN gap — accepted, interpolated, tagged</td><td>tag</td></tr>
+<tr><td><code>LAP_PARTIAL</code></td><td>Tyre age unknown — accepted, drift features NULL</td><td>tag</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Three thresholds deserve their rationale. The <em>20&nbsp;Hz floor</em>: the behaviours that
+distinguish drivers — brake-release shape, throttle ramp rate, brake–throttle overlap — live in
+transitions of roughly 100–300&nbsp;ms, and resolving a transition needs several samples inside
+it; at 20&nbsp;Hz a 150&nbsp;ms ramp spans three samples, at 5&nbsp;Hz it is a single step. The
+public feed arrives at ≈7.5&nbsp;Hz, so the corpus is linearly resampled to 50&nbsp;Hz before
+validation; this clears the floor mechanically but adds no information, and that honesty is
+recorded in the matrix metadata and in the limitations (§3.9, Chapter&nbsp;5) rather than hidden
+by the resample. The <em>115% lap-time bound</em> is modelled on the sport's own 107% qualifying
+rule but set deliberately looser: a race lap at 110% of the driver's session median is usually
+traffic or tyre management — genuine behaviour worth keeping — while beyond 115% the lap is
+almost always damage, a cool-down, or an unwound system state that would contaminate a
+behavioural baseline. The <em>30-clean-lap floor</em> exists because per-cell statistics
+(medians, deviations, detector baselines) must be stable against outliers; below roughly 30
+samples a single unusual lap visibly moves them. The same floor gates style-space projection for
+unknown drivers, so every per-cell number in the system rests on the same minimum evidence.</p>
+
+<h4>3.4.3 Feature extraction</h4>
+
+<p>Each accepted lap yields a fixed 28-feature behavioural vector across six domains — throttle,
+braking, speed, gear, engine, cornering — plus consistency, corner-balance, and tyre-age drift
+terms that feed the models but no radar axis. A feature outside its documented physical range is
+set NULL and logged (<code>FEATURE_001</code>), never clipped silently. Vector assembly
+tolerates up to six NULLs (≈21% of the vector) via train-median imputation, each imputation
+tagged <code>IMPUTED</code>; the seventh NULL rejects the lap with
+<code>LAP_NULL_EXCESS</code>. The ceiling is a designed boundary: every imputed value pulls
+toward the population median, which by construction erases exactly the individuality the
+classifier needs, so past six NULLs the vector is more imputation than measurement.</p>
+
+<h4>3.4.4 Normalisation — the leakage chokepoint</h4>
+
+<p>Six circuit-sensitive features are z-scored per circuit; the rest pass through. The module is
+deliberately shaped as one writer and two readers: <code>fit_normaliser</code> is the only
+function in the system that computes normalisation statistics, and the readers
+(<code>load_normalisation_params</code>, <code>apply_normalisation</code>) are provably free of
+any fit call — a static scan asserts it. Parameters are persisted to
+<code>artefacts/normalisation.json</code>, content-hashed, and loaded read-only by training,
+validation, serving, and upload alike. An unknown circuit falls back to global parameters and
+logs <code>NORMALISATION_FALLBACK</code>. Figure&nbsp;3.2 shows the boundary this module
+defends.</p>
+
+<figure>
+<svg viewBox="0 0 900 330" role="img" aria-label="The leakage boundary: the training split feeds the single writer fit_normaliser, which persists normalisation.json; two read-only readers apply it to training, serving, and upload data. The held-out circuits Belgium and Italy sit on the far side of a barred boundary and never reach any fit call.">
+  <defs>
+    <marker id="b-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--ok)"/>
+    </marker>
+    <marker id="b-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+  <g font-family="var(--sans)" font-size="12.5" fill="var(--ink)">
+    <rect x="24" y="40" width="150" height="52" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+    <text x="99" y="62" text-anchor="middle">Training split</text>
+    <text x="99" y="80" text-anchor="middle" fill="var(--muted)" font-size="11">23 circuits</text>
+
+    <rect x="250" y="40" width="170" height="52" rx="6" fill="none" stroke="var(--ok)" stroke-width="2"/>
+    <text x="335" y="62" text-anchor="middle" font-weight="700">fit_normaliser</text>
+    <text x="335" y="80" text-anchor="middle" fill="var(--muted)" font-size="11">the only writer</text>
+    <line x1="174" y1="66" x2="246" y2="66" stroke="var(--ok)" stroke-width="2" marker-end="url(#b-ok)"/>
+    <text x="210" y="58" text-anchor="middle" fill="var(--ok)" font-size="10.5">fits</text>
+
+    <path d="M 500 46 h 130 a 6 6 0 0 1 6 6 v 30 a 6 6 0 0 1 -6 6 h -130 a 6 6 0 0 1 -6 -6 v -30 a 6 6 0 0 1 6 -6 z" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+    <text x="565" y="68" text-anchor="middle" font-family="var(--mono)" font-size="11">normalisation.json</text>
+    <text x="565" y="102" text-anchor="middle" fill="var(--muted)" font-size="10.5">content-hashed artefact</text>
+    <line x1="420" y1="66" x2="490" y2="66" stroke="var(--ok)" stroke-width="2" marker-end="url(#b-ok)"/>
+    <text x="455" y="58" text-anchor="middle" fill="var(--ok)" font-size="10.5">persists</text>
+
+    <rect x="700" y="20" width="176" height="44" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+    <text x="788" y="47" text-anchor="middle">apply_normalisation</text>
+    <rect x="700" y="76" width="176" height="44" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+    <text x="788" y="103" text-anchor="middle">load … params</text>
+    <line x1="640" y1="56" x2="696" y2="42" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#b-mut)"/>
+    <line x1="640" y1="76" x2="696" y2="96" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#b-mut)"/>
+    <text x="668" y="72" text-anchor="middle" fill="var(--muted)" font-size="10.5">read-only</text>
+    <text x="788" y="140" text-anchor="middle" fill="var(--muted)" font-size="10.5">provably no fit call — scanned</text>
+
+    <!-- boundary -->
+    <line x1="24" y1="190" x2="876" y2="190" stroke="var(--warn)" stroke-width="2" stroke-dasharray="8 5"/>
+    <text x="450" y="182" text-anchor="middle" fill="var(--warn)" font-size="11" font-weight="600">the train / held-out boundary — tripwired at all four fit sites</text>
+
+    <rect x="24" y="216" width="220" height="58" rx="6" fill="none" stroke="var(--purple)" stroke-width="1.6"/>
+    <text x="134" y="240" text-anchor="middle" fill="var(--purple)" font-weight="700">Belgium · Italy</text>
+    <text x="134" y="258" text-anchor="middle" fill="var(--purple)" font-size="11">held out from the first line of code</text>
+    <line x1="248" y1="245" x2="330" y2="245" stroke="var(--purple)" stroke-width="2"/>
+    <line x1="330" y1="245" x2="330" y2="98" stroke="var(--purple)" stroke-width="2" stroke-dasharray="2 5"/>
+    <g stroke="var(--purple)" stroke-width="2.4">
+      <line x1="322" y1="160" x2="338" y2="176"/>
+      <line x1="338" y1="160" x2="322" y2="176"/>
+    </g>
+    <text x="352" y="172" fill="var(--purple)" font-size="10.5">never reaches any .fit()</text>
+    <text x="352" y="252" fill="var(--muted)" font-size="10.5">evaluated once, read-only, in Chapter 5 — through the same two readers</text>
+    <line x1="560" y1="245" x2="700" y2="245" stroke="var(--muted)" stroke-width="1.6"/>
+    <line x1="700" y1="245" x2="788" y2="128" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#b-mut)" stroke-opacity="0"/>
+    <line x1="700" y1="245" x2="770" y2="245" stroke="var(--muted)" stroke-width="0"/>
+  </g>
+</svg>
+<figcaption><b>Figure 3.2</b> — The normalisation chokepoint. One function may compute
+statistics; two provably fit-free readers apply them everywhere else. The held-out circuits sit
+on the far side of a tripwired boundary and reach the models only through the readers, once, at
+evaluation time.</figcaption>
+</figure>
+
+<p>One consequence of this design is recorded here because it shapes the whole results chapter:
+the per-circuit normalisation assumption was ultimately <em>inverted by evidence</em> for the
+classifier alone. The ablation study found that the raw levels of the six circuit-sensitive
+features carry substantial driver-discriminative signal that per-circuit z-scoring erases
+(held-out macro-F1 0.614 raw against 0.413 normalised on never-trained circuits, so the effect
+cannot be circuit-identity leakage). The finding was operationalised through a config-recorded
+decision — the classifier's pipeline serves raw features, its provenance recorded in the model
+bundle itself — while every other model keeps the leakage-guarded normalised pipeline. The
+design lesson is stated in §3.9; the implementation of the change in §4.5; the evidence in
+Chapter&nbsp;5.</p>
+
+<h3 id="s3-5"><span class="n">3.5</span>The fingerprint and its models</h3>
+
+<h4>3.5.1 The fingerprint</h4>
+
+<p>Each driver's clean training laps aggregate to a 56-dimensional behavioural distribution —
+the mean and spread of all 28 features. This is the system's central representation.
+Identification validates that it carries driver-specific signal; the style space gives it
+geometry; SHAP explains it; the extended analyses apply it. Everything else in this section is
+designed around that role.</p>
+
+<h4>3.5.2 Identification — the fingerprint's validation</h4>
+
+<p>The identification model is an XGBoost multi-class classifier over the 28 behavioural
+features, isotonic-calibrated on a disjoint 20% split, with hyperparameters selected by a
+resumable Optuna study. Cross-validation uses <code>StratifiedGroupKFold</code> grouped by
+circuit, so that an entire circuit sits in one fold: lap-level splitting would let the same
+circuit appear on both sides of a fold, leaking circuit identity into apparent “driver”
+performance — the leakage that flatters most published driver-classification numbers. Group CV
+costs headline score and buys validity; the trade is accepted knowingly.</p>
+
+<p>XGBoost was chosen over its alternatives for three load-bearing properties. The data is
+tabular — 28 engineered features, ~54,000 rows — which is the regime where gradient-boosted
+trees remain state of the art. Native NaN handling matches the tolerated-NULL contract with no
+imputation at serve time; <code>TreeExplainer</code> yields <em>exact</em> SHAP values rather
+than sampling approximations, which Principle&nbsp;4 and RQ2 both rely on; and calibrated
+probabilities make the confidence gate meaningful. Random forests lose the exact explainability
+and calibrate worse (they are retained as a baseline in Chapter&nbsp;5); deep and sequence
+models need more data than four seasons of one series provide and would surrender explainability
+and reproducibility for uncertain gains (§3.9).</p>
+
+<h4>3.5.3 Confidence-aware inference — the licence to abstain</h4>
+
+<p>The classifier answers only when it is entitled to. Below the calibrated 0.65 gate the result
+is <code>LOW_CONFIDENCE</code>; high distribution entropy takes precedence and returns
+<code>AMBIGUOUS</code>. The gate is only meaningful if “0.65” means what it says: an
+uncalibrated maximum probability of 0.65 can correspond to a 40% or a 90% empirical hit rate.
+Isotonic regression was chosen over Platt scaling because it assumes no particular
+miscalibration shape, and it is fitted on a split the booster never saw. The 0.65 value itself
+was fixed a priori: for 13 classes it demands 8.5× the chance probability mass before the system
+will name a driver — post-calibration, roughly “right two times in three” as the minimum
+standard for a named answer. On the held-out circuits the served system chooses to answer on
+71.9% of laps and is right 74.8% of the time when it does, against 63.6% when forced to answer
+everything: abstention is not a failure mode but the mechanism that turns a hard problem into a
+trustworthy system.</p>
+
+<p>Following an external design review, every prediction additionally carries a <em>propagated
+confidence</em>: data completeness × distribution familiarity × calibrated model confidence.
+Each factor is a distance from a boundary the system already enforces (the NULL ceiling, the
+ambiguity entropy bound, the calibrated maximum probability), multiplied so that one weak link
+drags the composite down. The composition introduces no new thresholds, and it explains the
+gate's verdict without ever overriding it — <code>confidence_state</code> remains authoritative
+(Principle&nbsp;4).</p>
+
+<h4>3.5.4 Explainability</h4>
+
+<p>A <code>TreeExplainer</code> over the champion's base booster produces per-prediction
+attributions, a global signed-SHAP artefact, and the six-domain signature that drives the
+interface. Explainability never blocks a prediction: a SHAP fault degrades to
+<code>SHAP_UNAVAILABLE</code> and the prediction returns without it. The same discipline extends
+to every other output — deviation alerts ship their exact per-feature attribution, and setup
+tendencies ship the basis of the heuristic that produced them — so that no served claim is
+unaccompanied by its provenance.</p>
+
+<h4>3.5.5 Style space — the fingerprint's geometry</h4>
+
+<p>The 56-dimensional aggregates project by UMAP to a 5D fingerprint coordinate and a 2D view.
+Unknown drivers project by forward pass — never a retrain — gated for sparsity
+(<code>SPARSE_PROJECTION</code> below the same 30-clean-lap floor) and out-of-distribution
+distance (<code>OUT_OF_DISTRIBUTION</code> at Mahalanobis &gt;&nbsp;3&nbsp;SD on any principal
+component). UMAP was chosen because style neighbourhoods are what the space is for, and UMAP
+preserves local neighbourhood structure through non-linear relationships PCA flattens. But UMAP
+fitted on 13 points is fragile and non-deterministic across library versions, so a PCA fallback
+is trained and persisted alongside it: if UMAP cannot serve, the surface degrades to a
+deterministic projection (<code>UMAP_FALLBACK</code>) instead of dying — the honest-degradation
+corollary in action. The full chain degrades in order: UMAP → PCA → raw-space nearest-neighbour
+ranking (<code>PROJECTION_FALLBACK</code>) → a typed refusal (<code>MODEL_NOT_FOUND</code>).</p>
+
+<p>A design review caught that the 56-dimensional aggregate mixed unit-scale fractions with raw
+physical units spanning four orders of magnitude — a Euclidean UMAP would have measured unit
+scale, not style — so a train-only aggregate scaler was added inside the leakage guard and
+recorded as a numbered divergence (§4.11). The episode is reported rather than absorbed because
+it is the clearest instance of Principle&nbsp;2's redundancy paying for itself.</p>
+
+<h4>3.5.6 Corner decomposition — an ablation instrument</h4>
+
+<p>Corners segment into slow, medium, and high-speed classes by apex radius
+(r&nbsp;=&nbsp;1/κ at the apex sample), each yielding a five-feature sub-vector
+(apex speed, lateral g, throttle, brake, steering-reversal rate) aggregated into per-driver
+sub-fingerprints. Its deliverable is an ablation — does corner-type information improve
+identification? — designed so that a neutral result is a legitimate finding, not a failure. It
+deliberately does not retrain the served champion.</p>
+
+<h4>3.5.7 Behavioural deviation monitoring</h4>
+
+<p>The deviation monitor is deliberately not a learned model, and deliberately not “tyre death
+prediction”. No labelled degradation events exist to learn from, so a learned model would have
+nothing defensible to fit; a calibrated statistical detector is explainable and its
+false-positive rate is derivable. Per lap, the detector computes the cosine distance between the
+standardised 26-feature behavioural vector (the two tyre-age slope features are excluded — as
+broadcast columns they would double-count and leak future laps into replay) and a baseline built
+from the stint's first three clean laps, smooths it with a 3-lap rolling mean, and compares
+against a threshold τ&nbsp;=&nbsp;μ&nbsp;+&nbsp;2σ calibrated per driver per circuit type from
+training data. Two consecutive crossings confirm an alert; a single crossing is a persisted
+<code>WATCH</code>. The alert payload carries an exact cosine decomposition — per-feature
+contributions that sum to the score, via 1&nbsp;−&nbsp;cos&nbsp;θ&nbsp;=&nbsp;½‖x̂&nbsp;−&nbsp;b̂‖²
+— and a pit-window figure stated as what it is: the historical median laps-to-pit for that
+calibration cell, not a recommendation.</p>
+
+<p>The distance function was chosen against two considered alternatives. Euclidean distance
+conflates magnitude with shape: fuel burn and track evolution move every feature's magnitude lap
+by lap, which would read as constant “degradation”. Mahalanobis whitens by a covariance the data
+cannot support: a 26×26 covariance estimated per 30-lap cell is singular or wildly unstable.
+Cosine on standardised features isolates exactly the quantity of interest — has the <em>shape</em>
+of the driver's behaviour rotated away from their own baseline — and is scale-free by
+construction. The threshold sits two calibrated standard deviations above each cell's own mean
+deviation: under approximate normality, a ≈2% one-sided per-lap false-positive rate, squared by
+the two-consecutive-lap confirmation to well under one false alert per thousand scored laps; and
+because σ comes from the same per-cell calibration as μ, a naturally erratic driver–circuit
+pairing earns a proportionally wider band instead of a stream of false alerts.</p>
+
+<h4>3.5.8 Setup tendency estimation</h4>
+
+<p>An exploratory extension, framed as exactly that. APEX estimates telemetry-derived setup
+<em>tendencies</em> associated with a driver's behavioural fingerprint — heuristic targets,
+never ground-truth engineering setups, because no public ground-truth setup data exists. The
+design is three layers: a learned mapping from the 5D fingerprint (concatenated with a
+drop-first circuit one-hot) to ten setup parameters; an FIA constraint engine (bound clipping,
+a Monaco maximum-downforce override, consistency warnings); and per-parameter confidence
+scoring that returns a range rather than a value below the reliability floor
+(<code>WIDE_CONFIDENCE</code>, ±15%).</p>
+
+<p>The training targets are transparent, monotonic maps of named fingerprint features — a
+documented heuristic, deliberately without fitted constants, so the learning is confined to the
+fingerprint→setup mapping. The consequence is a compounding uncertainty the system must not
+hide, which is why the approximation disclaimer is a required response field, direction language
+(“less front downforce than the grid reference”) replaces engineering point-values, every
+tendency names the basis features of its target heuristic, and the specification's own finding —
+only about five of the ten parameters are reliably inferrable — is reported, never silently
+narrowed. The extension earns its place through one measured property: the served per-parameter
+reliability score correlates with held-out error at r&nbsp;=&nbsp;−0.80 — when the system says
+<em>trust me less</em>, it is measurably less trustworthy.</p>
+
+<h3 id="s3-6"><span class="n">3.6</span>Serving and interface</h3>
+
+<p>The engineering layer supports the system and is not claimed as research. The serving stack
+is a FastAPI service over PostgreSQL persistence (ten tables covering drivers, sessions, laps,
+fingerprints, predictions, and the data-quality log), with the inference pipeline resident in
+process. Three design decisions carry the principles into serving:</p>
+
+<ul>
+<li><strong>Best-effort startup, honest health.</strong> The application factory loads model
+handles best-effort in its lifespan: a handle that fails to load degrades to <code>None</code>
+with a logged reason, and <code>GET /health</code> reports exactly what is unready (503 if and
+only if the database is down or a handle is missing). A fresh checkout without artefacts serves
+an honest 503, never a fake 200.</li>
+<li><strong><code>/predict</code> never 5xxs on model output and writes nothing.</strong> A
+gated or uncertain prediction is a 200 with a typed state (Principle&nbsp;4). The endpoint is
+stateless by design: a live feature-vector POST has no persisted lap identity, and fabricating
+foreign keys to force a write would violate Principle&nbsp;1. Persistence of predictions belongs
+to the batch-ingestion path, which owns real lap identities.</li>
+<li><strong>Optional infrastructure is actually optional.</strong> The Redis cache fronts the
+expensive endpoints behind its own circuit breaker and is non-critical: the system runs with
+Redis down. The Celery queue serves batch ingestion; the replay engine re-runs the deviation
+monitor over a growing prefix of a persisted stint — read-only, deterministic, and causal: lap
+<em>k</em> uses only laps 1…<em>k</em>, exactly what a live monitor would have known.</li>
+</ul>
+
+<p>The interface is Next.js with a generated, runtime-validated API client returning a
+four-state result union — loading, empty, error, success — which is Principle&nbsp;1 reaching
+the browser. Confidence colour is driven by the served state; no component re-derives a
+threshold. The palette itself is semantic: assert rose when the model states something,
+epistemic purple when it declines, operational amber when it serves compromised. Six screens run
+on the real 2022–2025 corpus — driver overview, driver profile, prediction with setup
+tendencies, comparison, tyre analysis, and a causal race-replay monitor — and every element
+whose backing data the API does not serve is rendered as an explicit unavailable state behind a
+named seam, never fabricated (§4.7).</p>
+
+<h3 id="s3-7"><span class="n">3.7</span>The failure contract</h3>
+
+<p>The failure contract is the design's connective tissue. Sixty-nine typed error codes form an
+enumeration that is the single vocabulary of failure across the backend, the database, the API
+surface, and the interface; strings are never hardcoded. The codes partition into data-quality
+codes (ingestion, validation, features, upload), model lifecycle codes (training, loading,
+inference), uncertainty states (which are <em>not</em> failures — §3.3), and operational codes
+(cache, queue, database, API). Every rejected lap, imputed value, fallback, and degraded load
+writes a row to the append-only <code>data_quality_log</code>, and the interface surfaces the
+tallies with their reasons verbatim. Two properties make the contract more than a logging
+convention: every code has a unit test that triggers it (Principle&nbsp;5), and an executable
+fault-injection harness (§3.8) demonstrates the seven specification failure scenarios end to end
+on the assembled system.</p>
+
+<h3 id="s3-8"><span class="n">3.8</span>Evaluation design</h3>
+
+<p>Evaluation is designed into the architecture rather than appended to it; the full protocol
+and results belong to Chapter&nbsp;5, but three structural choices are design decisions and are
+recorded here. First, the <em>held-out-circuit quarantine</em>: Belgium and Italy were excluded
+from every fitting operation from the first line of code, so the headline identification number
+is a genuine circuit-generalisation measurement rather than a random-split score. Second, the
+<em>evaluation framework orchestrates and recomputes nothing</em>: it calls the same read-only
+surfaces the application serves and harvests the champion training result, with a repository
+scan asserting it contains no fit call and no metric arithmetic of its own — so the evaluation
+cannot quietly diverge from the system it evaluates. Third, the <em>failsafe harness is
+executable</em>: RQ5's evidence is seven fault-injection scenarios (gate behaviour under
+ambiguity, source outage → stale-cache serving, the NULL-tolerance boundary, the cache forced
+down across 100 consecutive predictions, database down with no partial write, an
+out-of-distribution projection, and a raising SHAP explainer) run against the real assembled
+application, not asserted in prose.</p>
+
+<h3 id="s3-9"><span class="n">3.9</span>Trade-offs — the roads not taken</h3>
+
+<p>Every load-bearing choice had a considered alternative. Table&nbsp;3.2 records the ones that
+shaped the system; each row is argued in the section that owns it.</p>
+
+<div class="tablewrap">
+<table>
+<caption><b>Table 3.2</b> — Considered alternatives and the grounds for rejection.</caption>
+<thead><tr><th>Alternative</th><th>Rejected because</th></tr></thead>
+<tbody>
+<tr><td>Random forest classifier</td><td>Weaker probability calibration and no exact SHAP — both
+load-bearing for Principle&nbsp;4 and RQ2. Kept as a baseline in Chapter&nbsp;5.</td></tr>
+<tr><td>Deep / sequence models</td><td>Four seasons of one series is small data; end-to-end
+representation learning would surrender exact explainability and reproducibility for uncertain
+gains. Revisited as future work in Chapter&nbsp;6.</td></tr>
+<tr><td>Learned degradation model</td><td>No labelled degradation events exist to learn from. A
+calibrated statistical detector is defensible, explainable, and its false-positive rate is
+derivable (§3.5.7).</td></tr>
+<tr><td>One monolithic pipeline</td><td>Failure isolation becomes impossible — one exception
+tears down unrelated capability. Layers with typed boundaries let each fail alone (§3.3).</td></tr>
+<tr><td>Hidden failure recovery</td><td>Silently retrying or substituting defaults violates
+Principle&nbsp;1: a masked fault reappears as an unexplainable result. Every recovery is coded
+and logged.</td></tr>
+<tr><td>Lap-level cross-validation</td><td>The same circuit on both sides of a fold leaks
+circuit identity into “driver” performance. Group-by-circuit CV costs headline score and buys
+validity (§3.5.2).</td></tr>
+<tr><td>CVAE performance predictor (original plan)</td><td>Removed at specification stage,
+before any code: the replanning note records the three saved weeks, redistributed to hardening,
+failure testing, and evaluation — the work that became RQ5's strength. Performance prediction
+survives only in its measured, non-generative form: the fuel-corrected tyre curves.</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Two further design lessons deserve prose. The <em>per-circuit normalisation inversion</em>
+(§3.4.4) shows a design assumption — that circuit normalisation removes only nuisance variance —
+being overturned by the system's own evaluation machinery and then operationalised through a
+recorded decision rather than a quiet patch: the architecture's willingness to be corrected by
+evidence is itself a designed property. And the <em>single shared feature pipeline</em> was a
+deliberate bet: one audited pipeline with per-model feature subsets (the monitor uses 26 of 28;
+corner decomposition adds its own) was chosen over per-model pipelines because one leakage
+boundary to defend beats four; the concentration risk is real and is mitigated by the tripwires
+and per-feature range tests rather than denied.</p>
+
+</section>
+
+<!-- ============================= CHAPTER 4 ============================= -->
+<section class="chapter" id="ch4">
+<div class="chapter-head">
+  <p class="chno">Chapter 4</p>
+  <h2>Implementation</h2>
+  <p class="abstract">This chapter describes how the design of Chapter&nbsp;3 was realised: the
+  specification-driven method, the technology stack and the constraints that shaped it, the
+  implementation of each layer in dependency order, and the quality-assurance regime that gates
+  every merge. It closes with the implementation challenges that most tested the design and the
+  divergence ledger that keeps every departure from the specification reviewable.</p>
+</div>
+
+<h3 id="s4-1"><span class="n">4.1</span>Method — specification-driven development</h3>
+
+<p>The system was built as twenty-one features in strict dependency order: one feature, one
+specification, one focused build. Each specification was written and adversarially reviewed
+<em>before</em> implementation — typically through multi-lens review passes covering fidelity to
+the master specification, leakage and reproducibility, failure handling, and house conventions —
+so that design questions were settled on paper where they are cheap to change. Each build ended
+with a conformance check against the specification's own acceptance criteria and failure-mode
+table, and merged only with the full test suite, lint, and strict type-checking green.
+Table&nbsp;4.1 shows the build order; the layering is the dependency structure of §3.3 made into
+a schedule.</p>
+
+<div class="tablewrap">
+<table>
+<caption><b>Table 4.1</b> — Features in build order. Every feature was specified, built, gated,
+and merged before its dependents began.</caption>
+<thead><tr><th>Layer</th><th>Features</th><th>Delivers</th></tr></thead>
+<tbody>
+<tr><td>0 — Contracts</td><td>F00</td><td>Error-code enumeration, typed result objects,
+<code>config.yaml</code>, repository skeleton</td></tr>
+<tr><td>1 — Data pipeline</td><td>F01–F05</td><td>Ingestion with breakers and cache; the
+nine-filter validator; the 28-feature extraction (split F03a scalar / F03b positional);
+circuit-aware normalisation; manual CSV upload</td></tr>
+<tr><td>2 — Machine learning</td><td>F06–F11</td><td>Classifier (split F06a training / F06b
+inference); SHAP explainability; UMAP style space; corner decomposition; deviation detector;
+setup engine</td></tr>
+<tr><td>3 — Platform</td><td>F12–F15</td><td>PostgreSQL schema and migrations; the FastAPI
+surface; Redis cache, Celery queue, and replay engine; the fault-injection harness</td></tr>
+<tr><td>4 — Frontend</td><td>F16–F19</td><td>Design system and the six screens</td></tr>
+<tr><td>5 — Evaluation &amp; writing</td><td>F20–F22</td><td>The evaluation framework; the
+dissertation</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Three method-level instruments did disproportionate work. The <em>divergence ledger</em>
+(§4.11) records every departure from the master specification as a numbered, reasoned entry —
+78 by the end of the build. The <em>automated review gates</em> — an ML-correctness audit
+(scaler leakage, unseeded randomness, held-out contamination, missing gates), a failure audit
+(every documented failure mode actually handled, coded, logged, and surfaced), a
+principles review against the working diff, and a per-feature conformance check — ran on every
+feature in addition to lint (<code>ruff</code>), strict typing (<code>mypy</code>,
+<code>tsc</code>), and both test suites. Finally, AI assistance was used throughout the build as
+an engineering accelerator and is declared per COMP702 policy; the research design, the
+decisions recorded in these chapters, and the dissertation prose are the author's own.</p>
+
+<h3 id="s4-2"><span class="n">4.2</span>Technology stack</h3>
+
+<p>The backend is Python on FastAPI with Pydantic&nbsp;v2 contracts, SQLAlchemy&nbsp;2.0 async
+ORM with Alembic migrations, and Celery for batch work; the ML stack is pandas/numpy
+(vectorised throughout — no per-row Python loops), XGBoost with scikit-learn's calibration,
+Optuna for hyperparameter search, umap-learn with a PCA fallback, SHAP for exact tree
+explanation, and MLflow for run tracking; storage is PostgreSQL and Redis, with Redis explicitly
+non-critical. The frontend is Next.js 14 (App Router) in strict TypeScript with D3, Three.js
+(with a D3 2D fallback), Zustand, and Tailwind.</p>
+
+<p>The runtime is Python 3.14, and wheel availability on that platform forced four dependency
+decisions that were documented as ratified migrations rather than absorbed silently
+(Table&nbsp;4.2) — an application of Principle&nbsp;1 to the build environment itself: every
+departure has a traceable cause.</p>
+
+<div class="tablewrap">
+<table>
+<caption><b>Table 4.2</b> — Ratified stack migrations. Each is recorded in the project
+constitution with its reason.</caption>
+<thead><tr><th>Migration</th><th>Forced by</th><th>Consequence</th></tr></thead>
+<tbody>
+<tr><td>pandas 3.x / numpy 2.x on Python 3.12+</td><td>numpy 2.5 declares
+<code>Requires-Python ≥3.12</code>; the pinned versions are the only wheels supporting the
+runtime</td><td>All feature code written against copy-on-write pandas and strict numpy-2
+casting semantics</td></tr>
+<tr><td><code>mlflow-skinny</code> instead of full MLflow</td><td>Full MLflow caps
+<code>pandas&lt;3</code>, which would downgrade the data stack</td><td>Same tracking API on a
+sqlite store; champion selection recorded per run</td></tr>
+<tr><td>numpy 2.5.0 → 2.4.6 at SHAP's arrival</td><td>SHAP's numba dependency caps
+<code>numpy&lt;2.5</code></td><td>The full pre-existing suite was re-run green on 2.4.6
+<em>before</em> any SHAP code was written</td></tr>
+<tr><td>psycopg v3 instead of asyncpg</td><td>asyncpg ships no wheel for the runtime and needs a
+compiler unavailable in the environment</td><td>Same async SQLAlchemy dialect; the DB test suite
+is driver-independent by design</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>scikit-learn's removal of <code>CalibratedClassifierCV(cv="prefit")</code> in the pinned
+release is handled by wrapping the trained booster in a <code>FrozenEstimator</code> for
+calibration — a small example of the pattern the whole chapter repeats: platform drift is met
+with a documented adaptation, never a silent workaround.</p>
+
+<h3 id="s4-3"><span class="n">4.3</span>Repository organisation</h3>
+
+<p>The application is 46 modules in 11 dependency-ordered packages: <code>app/contracts</code>
+(the error enumeration and typed result objects), <code>app/pipeline</code> (ingest, validate,
+features, normalise, upload), <code>app/ml</code> (classifier training and inference, explain,
+style space, corners), <code>app/monitoring</code> (the deviation detector),
+<code>app/personalisation</code> (the setup engine), <code>app/db</code>, <code>app/api</code>,
+<code>app/cache</code>, <code>app/tasks</code>, <code>app/replay</code>, and
+<code>app/eval</code>. The test tree mirrors it — one test module per source module. The
+per-feature specifications and the index that tracked build order, status, and the divergence
+ledger were development instruments rather than deliverables; they are preserved in the
+project's version history and are cited throughout this chapter from there, keeping the working
+tree to the system itself. A single <code>config.yaml</code> is the source of truth for every constant: 198
+keys across 22 typed configuration blocks, each parsed into a Pydantic model with cross-block
+validators. No threshold lives in code; static scans enforce it.</p>
+
+<h3 id="s4-4"><span class="n">4.4</span>Pipeline implementation</h3>
+
+<p><strong>Contracts first (F00).</strong> The error enumeration, the typed result objects, and
+the configuration loader were built before any pipeline code, so that every later feature had
+the failure vocabulary available from its first line. Error codes were pre-seeded for features
+not yet built — the upload codes, the model uncertainty states, the queue codes — which later
+allowed several features to ship with <em>no new codes</em>, a useful indicator that the failure
+taxonomy was designed rather than accreted.</p>
+
+<p><strong>Ingestion (F01).</strong> The FastF1/OpenF1/Ergast clients sit behind the §3.4.1
+circuit breaker, implemented once and reused; raw telemetry is persisted to a Parquet cache at
+source sample rate. Per-lap track status was added to the cache schema and the F01→F02 column
+contract as an additive amendment when validation needed it — the first exercise of the
+amendment discipline that governed all later contract changes.</p>
+
+<p><strong>Validation (F02).</strong> The nine-filter chain of Table&nbsp;3.1 is a pure function
+over the session frame returning a typed <code>ValidationResult</code>; review hardening added
+two codes beyond the specification (<code>ORPHAN_SAMPLES</code> for samples whose lap is null,
+and <code>VALIDATION_ERROR</code> as the malformed-frame backstop, kept distinct from per-lap
+data codes).</p>
+
+<p><strong>Feature extraction (F03a/F03b).</strong> The 28-feature extraction was split into the
+22 scalar-channel features plus the shared vector contract (F03a), and the X/Y-positional
+cornering features, corner balance, and tyre-age slopes (F03b) which plug into the same vector
+without changing it. The NULL contract of §3.4.3 — catch, mark NULL, log, continue; reject past
+six — lives in F03a's assembly and is exercised by both suites.</p>
+
+<p><strong>Normalisation (F04).</strong> The one-writer/two-reader module of §3.4.4 shipped as
+machinery before any training matrix existed; the first real
+<code>artefacts/normalisation.json</code> materialised with the first classifier training. The
+per-circuit fit floor reuses the global 30-clean-lap threshold, applied per circuit — a
+documented decision rather than a new constant.</p>
+
+<p><strong>Manual upload (F05).</strong> The CSV upload endpoint runs the <em>real</em> F02
+validator and F03 extraction behind eight specified edge-case handlers (missing columns,
+suspected-unit errors, corrupt rows, emptiness, and friends — <code>UPLOAD_001–004</code> plus
+tags). It is synchronous and stateless, mirroring <code>/predict</code>: the response is the
+cleaning report, and nothing is written. Imputation uses injected train-only feature medians,
+with a leakage scan asserting no fit and no median computed on upload data
+(Principle&nbsp;2 extended to user-supplied data). Denial-of-service guards cap file size and
+row count before parsing.</p>
+
+<h3 id="s4-5"><span class="n">4.5</span>Model implementation</h3>
+
+<p><strong>The classifier and the champion-bundle seam (F06a/F06b).</strong> The classifier was
+split into training and inference features whose only interface is the registered champion
+bundle (Figure&nbsp;4.1): training produces <code>classifier.pkl</code>,
+<code>normalisation.json</code>, <code>labels.json</code>, and a <code>bundle_meta.json</code>
+provenance sidecar; inference loads them read-only, cross-checks the label map against the
+champion's class count, and refuses to serve (<code>MODEL_NOT_FOUND</code>) on any mismatch —
+fail-loud, never fail-quiet. Training runs a resumable Optuna study (200-trial floor,
+≈3.3&nbsp;minutes per trial, ≈11&nbsp;hours wall) with relational-database storage, so a crash
+resumes rather than restarts — a property exercised in anger when the raw-representation study
+was resumed from trial 31 after an interruption. Isotonic calibration is fitted on a disjoint
+20% split the booster never saw, and every run is logged to MLflow with parameters, metrics, and
+artefacts.</p>
+
+<figure>
+<svg viewBox="0 0 900 300" role="img" aria-label="The champion-bundle seam: training (F06a) writes four artefacts — classifier.pkl, normalisation.json, labels.json, and bundle_meta.json — into the champion bundle; inference (F06b) loads the bundle read-only, cross-checks labels against the model's class count, obeys the recorded representation, and refuses to serve on any mismatch.">
+  <defs>
+    <marker id="c-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--ok)"/>
+    </marker>
+    <marker id="c-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--warn)"/>
+    </marker>
+  </defs>
+  <g font-family="var(--sans)" font-size="12.5" fill="var(--ink)">
+    <rect x="24" y="80" width="180" height="88" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+    <text x="114" y="112" text-anchor="middle" font-weight="700">Training · F06a</text>
+    <text x="114" y="132" text-anchor="middle" fill="var(--muted)" font-size="11">Optuna study (resumable)</text>
+    <text x="114" y="148" text-anchor="middle" fill="var(--muted)" font-size="11">isotonic calibration · MLflow</text>
+
+    <rect x="300" y="36" width="300" height="176" rx="8" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    <text x="450" y="62" text-anchor="middle" font-weight="700" fill="var(--accent)">Champion bundle</text>
+    <g font-family="var(--mono)" font-size="11">
+      <rect x="322" y="76"  width="256" height="26" rx="4" fill="none" stroke="var(--border-strong)"/>
+      <text x="332" y="93">classifier.pkl</text>
+      <rect x="322" y="108" width="256" height="26" rx="4" fill="none" stroke="var(--border-strong)"/>
+      <text x="332" y="125">normalisation.json</text>
+      <rect x="322" y="140" width="256" height="26" rx="4" fill="none" stroke="var(--border-strong)"/>
+      <text x="332" y="157">labels.json</text>
+      <rect x="322" y="172" width="256" height="26" rx="4" fill="none" stroke="var(--border-strong)"/>
+      <text x="332" y="189">bundle_meta.json · representation</text>
+    </g>
+    <line x1="204" y1="124" x2="296" y2="124" stroke="var(--ok)" stroke-width="2" marker-end="url(#c-ok)"/>
+    <text x="250" y="116" text-anchor="middle" fill="var(--ok)" font-size="10.5">writes once</text>
+
+    <rect x="696" y="80" width="180" height="88" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+    <text x="786" y="112" text-anchor="middle" font-weight="700">Inference · F06b</text>
+    <text x="786" y="132" text-anchor="middle" fill="var(--muted)" font-size="11">loads read-only · never refits</text>
+    <text x="786" y="148" text-anchor="middle" fill="var(--muted)" font-size="11">serving obeys the bundle</text>
+    <line x1="604" y1="124" x2="692" y2="124" stroke="var(--ok)" stroke-width="2" marker-end="url(#c-ok)"/>
+    <text x="648" y="116" text-anchor="middle" fill="var(--ok)" font-size="10.5">loads</text>
+
+    <line x1="786" y1="172" x2="786" y2="232" stroke="var(--warn)" stroke-width="2" marker-end="url(#c-warn)"/>
+    <rect x="632" y="236" width="244" height="44" rx="6" fill="none" stroke="var(--warn)" stroke-width="1.6"/>
+    <text x="754" y="255" text-anchor="middle" fill="var(--warn)" font-size="11.5">labels ≠ class count, corrupt sidecar</text>
+    <text x="754" y="271" text-anchor="middle" fill="var(--warn)" font-size="11.5">→ MODEL_NOT_FOUND · refuses to serve</text>
+    <text x="450" y="248" text-anchor="middle" fill="var(--muted)" font-size="10.5">the seam is the only interface between the two features —</text>
+    <text x="450" y="264" text-anchor="middle" fill="var(--muted)" font-size="10.5">no shared state, no retraining path from serving</text>
+  </g>
+</svg>
+<figcaption><b>Figure 4.1</b> — The champion-bundle seam between training and inference. The
+bundle records its own provenance, including which feature representation it was trained on;
+serving obeys the bundle, and any inconsistency is a typed refusal rather than a silent
+degradation.</figcaption>
+</figure>
+
+<p>The seam earned its keep twice. First, when integer-fitted class labels left the index→driver
+map unavailable at serving, the fix was an additive artefact (<code>labels.json</code>) plus a
+load-time cross-check, not a shared import. Second, when the representation finding of §3.4.4
+was operationalised, the change was confined to training —
+<code>use_circuit_normalisation:&nbsp;false</code>, a fresh Optuna study on the raw space, a
+re-registered champion — while <em>serving obeys the bundle</em>: the sidecar records the
+representation, legacy bundles without a sidecar serve normalised, and a corrupt sidecar refuses
+to serve. The served champion's held-out macro-F1 rose from 0.4068 to 0.6225; the run still
+reports <code>DEGRADED</code> against its 0.78 a-priori target, exactly as designed.</p>
+
+<p><strong>Explainability (F07).</strong> The explainer unwraps the calibration wrapper to reach
+the champion's base booster and runs <code>TreeExplainer</code> in exact mode, filling the
+prediction result's SHAP fields, a global signed-SHAP artefact, and the multi-season
+Jensen–Shannon stability measure. Review hardening pinned the class-order mapping to the
+explainer's own driver list and guarded the all-NaN season case — small fixes, each with a
+regression test.</p>
+
+<p><strong>Style space (F08).</strong> The build fits UMAP and the PCA fallback inside the
+leakage guard and persists both, with a cross-bundle fingerprint (the scaler's hash recorded in
+the UMAP bundle) so mismatched artefacts refuse to co-serve. The Gate-2 review before merge
+caught the aggregate-scale defect of §3.5.5; the fix — a train-only aggregate
+<code>StandardScaler</code> applied at a single projection chokepoint — was recorded as
+divergence&nbsp;#6 and flagged to the supervisor, since the master specification is silent on
+aggregate scale. The degrade chain (UMAP → PCA → raw-space nearest neighbours → typed refusal)
+is fully test-covered, including the load-time dimension checks that catch a stale bundle.</p>
+
+<p><strong>Corner decomposition (F09).</strong> Implementation refined the apex-radius estimate
+to the curvature at the speed-minimum sample (robust to the boundary artefacts that dominate a
+window maximum) and established that the five corner sub-features are new derived quantities the
+normaliser never scaled — so F09 is normalisation-free by construction (divergence&nbsp;#23),
+scoring its ablation through scale-invariant XGBoost. Thin cells surface <code>DEGRADED</code>
+with <code>DATA_INSUFFICIENT</code> rather than being padded.</p>
+
+<p><strong>Deviation detector (F10).</strong> Calibration and serving share one pure scoring
+core, giving parity by construction: the τ table is calibrated by the same code path that scores
+live laps. Calibration is train-only and tripwired, its artefact content-hashed and
+timestamp-free; loading refuses on schema, hash, or width mismatches. A structural-versus-
+crossing distinction governs configuration drift: a changed structural knob refuses to load,
+while a changed crossing knob only invalidates the pit-window claim. The 26-dimension
+standardiser of §3.5.7 lives <em>inside</em> the calibration artefact — the same single-writer
+pattern as normalisation, applied one level down.</p>
+
+<p><strong>Setup engine (F11).</strong> Ten per-parameter XGBoost regressors over the 5D
+fingerprint with a drop-first circuit one-hot; the constraint layer applies FIA clipping
+(<code>CONSTRAINT_CLIPPED</code>), the Monaco override (<code>CIRCUIT_OVERRIDE_MONACO</code>),
+and consistency warnings; the confidence layer computes per-parameter reliability as
+1&nbsp;−&nbsp;CV-nRMSE, attenuated for out-of-distribution queries and never NULL. The external
+design review later added the grid-reference tendency phrasing and the served basis-features
+field (§3.5.8) as additive contract changes.</p>
+
+<h3 id="s4-6"><span class="n">4.6</span>Platform implementation</h3>
+
+<p><strong>Persistence (F12).</strong> The ten-table schema is SQLAlchemy&nbsp;2.0 async ORM
+with Alembic migrations. Portable column types (<code>with_variant</code>: native
+JSONB/ENUM/UUID on PostgreSQL, JSON/checked-VARCHAR on SQLite) let the entire DB suite run
+offline on aiosqlite, with a marked test exercising the real migration round-trip against
+PostgreSQL when a DSN is provided. The database sits behind its own async circuit breaker
+(<code>DB_UNAVAILABLE</code>), the health probe never raises, the
+<code>data_quality_log</code> gains its PostgreSQL sink here, and the DSN is environment-only —
+configuration stores the variable's <em>name</em>, never a secret.</p>
+
+<p><strong>API surface (F13).</strong> The FastAPI application factory wires the never-raising
+model handles and the persistence seam into the REST surface: ten synchronous endpoints
+implemented in full, and the four asynchronous/upload/replay routes shipped as honest 503 stubs
+with real schemas until their engines existed — visible incompleteness rather than a fake
+implementation. Handles are dependency-injected and loaded best-effort in the lifespan (§3.6);
+endpoint tests inject fakes through the DI seam. A failure audit on the API layer confirmed the
+serving invariants — <code>/predict</code> never 5xxs on model output, no partial writes,
+rollback before raise, no stack-trace leakage — and its findings (a spoofable metrics-endpoint
+header check among them) were fixed with regression tests.</p>
+
+<p><strong>Cache, queue, and replay (F14).</strong> The Redis cache is cache-aside behind its
+own breaker and never raises: a cache fault logs and falls through to computation
+(<code>CACHE_UNAVAILABLE</code> is a tag, not an outage). Batch ingestion is a Celery task that
+atomically persists laps, predictions, and fingerprints — this path, which owns real lap
+identities, is the writer that the stateless <code>/predict</code> deliberately is not. The
+replay engine re-runs the deviation monitor over a growing prefix of a persisted stint,
+read-only and causal. The test suite runs offline on fakeredis and eager Celery, with marked
+tests gating the real infrastructure.</p>
+
+<p><strong>The fault-injection harness (F15).</strong> The harness assembles the real
+application — real wiring, injected faults — and executes the seven §3.8 scenarios, producing a
+content-hashed results table consumed by the evaluation framework. Its own review hardening
+mattered: the harness was redirected to temporary stores so that running the failsafe suite can
+never pollute the operational cache or data-quality log, and it survives a scenario that raises
+during setup — the failure harness itself obeys the failure contract.</p>
+
+<h3 id="s4-7"><span class="n">4.7</span>Frontend implementation</h3>
+
+<p>The frontend began with the design system and the API client (F16a): design tokens; loading
+states as telemetry-wave skeletons, never spinners; error cards carrying the monospace error
+code and a retry; and a client whose TypeScript types and error-code union are <em>generated</em>
+from a committed OpenAPI snapshot, validated at runtime with zod, and guarded by a backend test
+that fails if the snapshot drifts from the live schema. Every fetch returns the four-state
+result union of §3.6, and the only frontend-local codes are the pre-API failures
+(<code>UI_NETWORK</code>, <code>UI_TIMEOUT</code>, <code>UI_SCHEMA_MISMATCH</code>).</p>
+
+<p>The screens were then built in dependency order (F16b–F19), and the build's most consistent
+pattern deserves its name: the <em>honesty landmine</em>. At each screen, some specified UI
+elements had no backing endpoint — a compatibility score, per-lap SHAP, corner sub-fingerprints,
+the replay threshold and alert payload, a session catalog. Each was either derived honestly from
+what the API does serve (and labelled as a proxy), or rendered as an explicit unavailable state
+behind a named seam in the DTO — never fabricated. Later redesign cycles closed the major seams
+by widening the DTOs with data the models had computed all along: the replay endpoint gained the
+per-lap threshold and the full alert payload, a session catalog replaced raw-UUID entry, and the
+comparison screen gained true per-feature signed-SHAP deltas. One real display bug was found and
+fixed in the process: comparison radars clamped unbounded SHAP magnitudes to a unit radial, so
+most axes rim-clamped into near-identical shapes; the redesign scales both radars and the delta
+by one shared per-axis maximum, stated in an on-screen caption.</p>
+
+<p>The frontend embodies the principles rather than merely consuming them: confidence colour
+comes only from the served state, deterministic seeded layouts keep charts reproducible, and 271
+component tests exercise every screen behaviour <em>and every failure state</em> — the
+no-fabrication tests assert that a missing endpoint renders an unavailable state rather than an
+invented number.</p>
+
+<h3 id="s4-8"><span class="n">4.8</span>Evaluation framework</h3>
+
+<p>The evaluation framework (F20) implements the §3.8 design: one async orchestrator over the
+four evaluation pillars plus the corner ablation, calling only the system's read-only surfaces
+and harvesting the champion's training result. A repository-scan test asserts it contains no fit
+call and no metric arithmetic beyond value-versus-target comparison. It never raises — a pillar
+fault degrades to a skipped pillar with a finding — and its report is content-hashed over
+outcomes and verdicts, mirroring the failsafe report. Offline, the framework still runs as a
+mechanism (the failsafe pillar executes; the data pillars skip with reasons); the real-corpus
+numbers are produced by artefact-gated tests that skip in the absence of the committed champion
+and matrices. A held-out gate added in review ensures the generalisation evaluators score on the
+held-out slice only — and skip with a reason rather than silently scoring on training data.</p>
+
+<h3 id="s4-9"><span class="n">4.9</span>Quality assurance</h3>
+
+<p>The quality regime is the implementation's answer to Principle&nbsp;5, and it is measurable
+(Table&nbsp;4.3). The backend suite mirrors the application tree with synthetic passing and
+failing fixtures; every error code has a triggering test; the suites run fully offline by
+design — aiosqlite for the database, fakeredis and eager Celery for infrastructure, injected
+fakes for model handles — with marked test tiers (<code>artefacts</code>, <code>postgres</code>,
+<code>redis</code>, <code>celery</code>) gating everything that needs real artefacts or
+services. Static scans enforce the structural rules: no fit calls outside the four tripwired
+sites, no magic numbers outside configuration, no hardcoded error strings. The OpenAPI drift
+guard ties the generated frontend client to the live backend schema, so a contract change that
+forgets the frontend fails a backend test.</p>
+
+<div class="tablewrap">
+<table>
+<caption><b>Table 4.3</b> — Codebase and quality metrics, computed from the repository rather
+than estimated.</caption>
+<thead><tr><th>Measure</th><th>Value</th><th>Reading</th></tr></thead>
+<tbody>
+<tr><td>Application code</td><td>19,884 LOC · 46 modules</td><td>11 packages, dependency-ordered</td></tr>
+<tr><td>Backend tests</td><td>17,687 LOC · 55 modules · 1,111 tests</td><td>0.89 test LOC per
+application LOC; suites mirror <code>app/</code></td></tr>
+<tr><td>Frontend</td><td>7,336 LOC + 3,189 test LOC · 243 tests</td><td>every presented screen
+behaviour and failure state exercised</td></tr>
+<tr><td>Functions</td><td>573 · mean complexity 4.3</td><td>AST branch count; p95 = 15, max = 38
+(the detector core)</td></tr>
+<tr><td>Error codes</td><td>69, each with a triggering test</td><td>Principle 5, mechanically
+checked per feature</td></tr>
+<tr><td>Configuration surface</td><td>198 keys, all typed and validated</td><td>no threshold
+lives in code; static scans enforce it</td></tr>
+<tr><td>Divergence ledger</td><td>78 numbered entries</td><td>every departure from the master
+specification, with its reason</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Runtime behaviour was measured rather than asserted (Table&nbsp;4.4). The figures are
+localhost measurements on the development machine with a single worker; they bound the
+architecture, not a production deployment. Serving memory is ≈487&nbsp;MB with all four model
+handles resident.</p>
+
+<div class="tablewrap">
+<table>
+<caption><b>Table 4.4</b> — Measured serving latency (single worker, localhost).</caption>
+<thead><tr><th>Surface</th><th>p50</th><th>p95</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>GET /health</code></td><td>5 ms</td><td>7 ms</td><td>real handle and DB probes,
+not a static response</td></tr>
+<tr><td><code>GET /drivers</code></td><td>10 ms</td><td>11 ms</td><td>13 enriched profiles from
+the artefact</td></tr>
+<tr><td><code>POST /predict</code></td><td>43 ms</td><td>46 ms</td><td>including inline exact
+SHAP; 200 ms budget, <code>PERF_WARN</code> beyond it</td></tr>
+<tr><td><code>GET /replay</code> (26 laps)</td><td>1.17 s</td><td>1.21 s</td><td>26 causal
+monitor re-runs per request, by design — read-only</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s4-10"><span class="n">4.10</span>Implementation challenges</h3>
+
+<p><strong>The representation inversion.</strong> The build's largest course-correction began as
+an evaluation anomaly: cross-validation plateaued far below target on the real corpus, and the
+ablation matrix then showed the identical model scoring 0.614 on raw features against 0.413
+normalised on the held-out circuits. Because the held-out circuits were never trained on, the
+explanation could not be leakage; per-circuit z-scoring was erasing driver signal, and a
+secondary effect (held-out circuits falling to the global-fallback statistics) accounted for
+only a minority of the gap — a paired calibration study bounded that part at roughly three F1
+points. Turning the finding into the served system exercised every discipline this chapter
+describes: a config-recorded decision, a fresh resumable study, provenance in the bundle,
+serving that obeys the bundle, and an in-training counterfactual (the normalised road scores
+0.449 from inside the same run) confirming the inversion. The design assumption, its overturning,
+and the operationalisation are all in the record.</p>
+
+<p><strong>Small-sample geometry.</strong> UMAP fitted on 13 aggregate points is at the edge of
+the method's validity, and it is stochastic: coordinates are reproducible within tolerance under
+a fixed seed, but the persisted model is not byte-identical. The implementation answers with the
+persisted deterministic PCA fallback, a measured stability protocol, and — from the aggregate-
+scale episode — a healthy scepticism that was subsequently encoded as load-time dimension and
+provenance checks on every bundle.</p>
+
+<p><strong>The platform itself.</strong> Building on a leading-edge Python meant wheel
+availability drove four stack migrations (§4.2). The discipline that contained the risk was
+always the same: re-run the full existing suite green on the new pin <em>before</em> writing any
+new feature code, and record the migration with its cause.</p>
+
+<p><strong>Keeping an offline-honest suite.</strong> A test suite that needs live services or
+committed model artefacts stops being run. Nearly every subsystem therefore has an offline
+mechanism tier and a gated real tier; the discipline surfaced real bugs — among them a
+<code>.gitignore</code> pattern that silently swallowed an entire source package from a clean
+checkout, caught only because a clean-checkout import was part of the offline gate.</p>
+
+<h3 id="s4-11"><span class="n">4.11</span>The divergence ledger</h3>
+
+<p>Seventy-eight numbered divergences record every place the implementation departs from the
+master specification, each with its reason and its supervisor-visibility. They are not errata:
+several are the most defensible decisions in the project — the aggregate scaler
+(divergence&nbsp;#6), the stateless <code>/predict</code> (#30), the normalisation-free corner
+ablation (#23), the raw-representation champion. Others record honest deferrals later closed
+(the replay payload seams) or genuine specification gaps (an inverted unit-detection threshold
+copied verbatim and flagged rather than silently corrected). The ledger's purpose is
+methodological: a specification-driven build is only trustworthy if departures from the
+specification are as reviewable as conformance to it. Recording them is what makes the
+departures reviewable rather than invisible — Principle&nbsp;1, applied to the process that
+built the system that enforces it.</p>
+
+</section>
+
+<footer class="back">
+  <p>APEX · COMP702 dissertation — Design &amp; Implementation chapters.<br>
+  Corpus: 2022–2025 FastF1 telemetry · 53,928 lap vectors · 13 drivers · 25 circuits · Belgium
+  and Italy held out.<br>
+  Every number traces to a content-hashed artefact under <code>artefacts/real/</code>; evaluation
+  protocols and results are given in Chapter&nbsp;5.</p>
+</footer>
+
+</div>

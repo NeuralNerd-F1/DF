@@ -79,7 +79,7 @@ async def test_session_scope_rolls_back_on_exception_no_partial_write(
 async def test_session_scope_reraises_integrity_error(
     session_factory: async_sessionmaker, db_config: AppConfig
 ) -> None:
-    """Constraint violation on commit → rollback + re-raise (repository maps to DB_INTEGRITY)."""
+    """Constraint violation on commit → rollback + re-raise unchanged to the caller."""
     breaker = make_db_breaker(db_config)
     async with session_factory() as seed:
         seed.add(models.Driver(code="LEC", full_name="Charles", season=2023))

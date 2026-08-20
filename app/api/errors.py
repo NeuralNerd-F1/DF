@@ -84,7 +84,7 @@ def _log_fault(request: Request, code: ErrorCode, exc: Exception) -> None:
 def register_exception_handlers(app: FastAPI) -> None:
     """Wire the typed exception → HTTP mapping onto the app."""
     # Imported here (not at module top) to keep app.api.errors import-light of the DB stack.
-    from app.db.results import DatabaseUnavailableError, DbIntegrityError
+    from app.db.results import DatabaseUnavailableError
 
     @app.exception_handler(ApiError)
     async def _handle_api_error(_request: Request, exc: ApiError) -> JSONResponse:
@@ -99,22 +99,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         # §11: DB down → 503 DB_UNAVAILABLE (session_scope already rolled back — no partial write).
         _log_fault(request, ErrorCode.DB_UNAVAILABLE, exc)  # §6 "Logged? yes"
         return _json(503, ErrorCode.DB_UNAVAILABLE, "Database temporarily unavailable.")
-
-    @app.exception_handler(DbIntegrityError)
-    async def _handle_db_integrity(request: Request, exc: DbIntegrityError) -> JSONResponse:
-        _log_fault(request, ErrorCode.DB_INTEGRITY, exc)  # §6 "Logged? yes -> data_quality_log"
-        return _json(409, ErrorCode.DB_INTEGRITY, "Record rejected: integrity constraint.")
-
-    from app.tasks.celery import QueueUnavailableError
-
-    @app.exception_handler(QueueUnavailableError)
-    async def _handle_queue_unavailable(
-        request: Request, exc: QueueUnavailableError
-    ) -> JSONResponse:
-        # §8.2 (F14): the Celery broker/worker is unreachable → the batch is refused loudly (never
-        # silently dropped). 503 QUEUE_UNAVAILABLE, logged.
-        _log_fault(request, ErrorCode.QUEUE_UNAVAILABLE, exc)
-        return _json(503, ErrorCode.QUEUE_UNAVAILABLE, "Ingestion queue temporarily unavailable.")
 
     @app.exception_handler(Exception)
     async def _handle_unhandled(request: Request, exc: Exception) -> JSONResponse:

@@ -35,3 +35,7 @@ Thumbs.db
 frontend/.dev.log
 .pytest.out
 node_modules/
+
+# Local assistant/tooling config (not part of the deliverable)
+.claude/
+_to_delete/

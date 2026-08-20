@@ -42,11 +42,10 @@ export const ERROR_MESSAGE: Partial<Record<AnyErrorCode, string>> = {
   AMBIGUOUS: 'Input data does not match F1 telemetry patterns.',
   SHAP_UNAVAILABLE: 'Explanation temporarily unavailable.',
   STALE_DATA: 'Showing cached data.',
-  // F17 — codes surfaced in-band (predict / unknown-driver / ingestion) that had no fallback message.
+  // Codes surfaced in-band by /predict and the unknown-driver projection that had no fallback message.
   INFERENCE_ERROR: 'Prediction failed. Please retry.',
   SPARSE_PROJECTION: 'Sparse projection — fewer than 30 clean laps. Result shown with reduced confidence.',
   OUT_OF_DISTRIBUTION: 'Outside the known F1 driver distribution.',
-  QUEUE_UNAVAILABLE: 'Ingestion queue unavailable. Please retry.',
   UI_NETWORK: 'Cannot reach the APEX API.',
   UI_TIMEOUT: 'Request timed out.',
   UI_SCHEMA_MISMATCH: 'Unexpected data format.',

@@ -42,6 +42,9 @@ thresholds:
 # goes through call_with_breaker using the per-source policy below.
 ingest:
   cache_max_age_days: 7            # §8.2 — use cache if fresher than this
+  resample_target_hz: 50           # §3.4 — linear-interpolation resample target; the raw
+                                   # corpus samples at ~7.5 Hz, so every lap is resampled to this
+                                   # rate before feature extraction (scripts/build_training_matrix.py)
   breakers:
     fastf1:  { timeout_s: 30, retries: 3, backoff_s: [5, 15, 30], open_after: 3, window_s: 60 }
     openf1:  { timeout_s: 10, retries: 3, backoff_s: [2, 5, 10],  open_after: 3, window_s: 60 }
@@ -330,23 +333,6 @@ cache:
   stylespace_ttl_s: 3600            # style-space read TTL (master-silent → mirror 1h, div #34)
   breaker: { timeout_s: 2, retries: 1, backoff_s: [1], open_after: 2, window_s: 30 }  # §8.3 verbatim
 
-# --- F14 Celery task queue (async ML batch jobs; §8.2/§9) -----------------------------------------
-# Redis is broker AND result backend (§9). The heavy async job is session ingestion; batch SHAP (§6.1)
-# is the other task. Broker/backend DSNs are env-only. Tests set always_eager (no broker/worker). Celery
-# retry/timeout constants are master-SILENT (§8.3 numbers are external-HTTP-dep policy) → chosen here
-# (divergence #35). Two new codes QUEUE_UNAVAILABLE / INGEST_TASK_FAILED (errors.py, div #32).
-celery:
-  broker_url_env_var: APEX_CELERY_BROKER_URL          # Redis broker DSN (env-only)
-  result_backend_env_var: APEX_CELERY_RESULT_BACKEND  # Redis result backend DSN (env-only)
-  task_default_queue: apex
-  worker_concurrency: 4             # worker pool size (design decision)
-  task_soft_time_limit_s: 600       # soft per-task cap → graceful stop (design decision)
-  task_time_limit_s: 900            # hard per-task cap → kill (design decision)
-  task_max_retries: 3               # div #35 — DECLARED; Celery autoretry not wired (fail-fast-loud; F20/ops)
-  task_retry_backoff_s: [5, 15, 30] # div #35 — declared alongside task_max_retries (enforcement deferred)
-  result_ttl_s: 86400               # result-backend retention for the terminal IngestSessionResponse
-  always_eager: false               # tests set true (synchronous, in-process, no broker)
-
 # --- F14 replay engine (Screen 6 Historical Race Replay Monitor; §5.3/§10.7/§12.1) ----------------
 # Read-only: reads persisted (session, driver) laps and streams a growing prefix through F10
 # monitor_stint. All Model-3 constants (baseline_laps, rolling_window, alert_threshold_sd,
@@ -370,22 +356,6 @@ failsafe:
   breaker_fallback_ms: 500    # §11.4 Test 2 — max time to the STALE_DATA cached fallback
   ood_injection_sd: 5.0       # §11.4 Test 6 — SD-outside-training injection magnitude (> detection SD)
   report_filename: failsafe_report.json  # RQ5 results-table artefact under paths.artefacts_dir
-
-# --- F05 manual CSV upload pipeline (§3.4 edge-case handling; §8.5 POST /ingest/upload) -----------
-# The manual-upload pre-processing knobs. The UPLOAD_001 required-column set MIRRORS
-# validate.required_channels ([Speed, Throttle, Brake, RPM, Gear] — §3.3 and §3.4 name the same 5);
-# it is referenced there and NOT re-declared. The 20 Hz post-interpolation FLOOR is
-# thresholds.sample_rate_floor_hz (§3.3); the 50 Hz below is the RESAMPLE TARGET for inconsistent
-# uploads (§3.4), a different quantity. No new error code (UPLOAD_001-004 + RESAMPLED are pre-seeded).
-upload:
-  mph_speed_median_kmh: 350          # §3.4 UPLOAD_002 — Speed median > this (km/h) -> 'appears to be mph' warning
-  max_corrupt_row_fraction: 0.05     # §3.4 UPLOAD_003 — > this fraction corrupt -> error; at/below -> drop+log+continue
-  resample_target_hz: 50             # §3.4 RESAMPLED — linear-interpolation resample target for inconsistent sampling
-  sampling_delta_std_fraction: 0.20  # §3.4 — inter-sample Δt std > this × mean -> inconsistent sampling -> resample
-  max_file_bytes: 10485760           # DoS guard (10 MiB) — reject before parse (INVALID_INPUT), no silent truncation
-  max_rows: 500000                   # DoS guard — reject before parse (INVALID_INPUT)
-  lap_number_column: LapNumber       # §3.4 duplicate-lap dedup + per-lap grouping key
-  time_column: Time                  # inter-sample Δt source for the sampling-consistency check
 
 # --- F20 evaluation framework (§11 — all four pillars + RQ verdicts; §13 Week-20 deliverable) ------
 # F20 ORCHESTRATES the existing pillar surfaces and GATES each harvested/returned metric against its

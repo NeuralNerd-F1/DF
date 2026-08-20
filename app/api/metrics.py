@@ -48,9 +48,6 @@ CACHE_MISSES = Counter(
 CACHE_BREAKER_OPEN = Gauge(
     "apex_cache_breaker_open", "1 if the Redis cache circuit breaker is open", registry=REGISTRY
 )
-INGEST_JOBS = Counter(
-    "apex_ingest_jobs_total", "Async ingestion jobs by outcome", ["status"], registry=REGISTRY
-)
 
 _LOOPBACK = {"127.0.0.1", "::1", "localhost", "testclient"}
 
@@ -85,11 +82,6 @@ def record_cache(result: CacheResult) -> None:
         CACHE_HITS.inc()
     else:
         CACHE_MISSES.inc()
-
-
-def record_ingest_job(status: str) -> None:
-    """Record an async ingestion job outcome (enqueued / completed / failed) for queue-depth."""
-    INGEST_JOBS.labels(status=status).inc()
 
 
 def update_cache_breaker_gauge(cache: RedisCache | None) -> None:

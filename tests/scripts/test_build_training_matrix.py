@@ -513,10 +513,10 @@ def test_main_refuses_an_empty_corpus(tmp_path: Path, monkeypatch: pytest.Monkey
 def test_main_refuses_to_assume_a_resample_rate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, repo_config_path: Path
 ) -> None:
-    """No ``upload`` block -> exit 2. Defaulting the rate would put an unstated Hz into every
+    """No ``ingest`` block -> exit 2. Defaulting the rate would put an unstated Hz into every
     feature in the matrix (a magic number AND a silent fallback)."""
     loaded = btm.load_config(repo_config_path)
-    loaded.upload = None
+    loaded.ingest = None
     monkeypatch.setattr(btm, "load_config", lambda _p: loaded)
 
     with pytest.raises(SystemExit) as exc:

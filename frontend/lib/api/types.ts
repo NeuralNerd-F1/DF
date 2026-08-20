@@ -6,7 +6,6 @@ export type ErrorCode = components['schemas']['ErrorCode'];
 export type ConfidenceState = components['schemas']['ConfidenceState'];
 export type DriverSummary = components['schemas']['DriverSummary'];
 export type DriverSignal = components['schemas']['DriverSignalSchema'];
-export type DriverProfile = components['schemas']['DriverProfileSchema'];
 export type FingerprintResponse = components['schemas']['FingerprintResponse'];
 export type StabilityResponse = components['schemas']['StabilityResponse'];
 export type SetupResponse = components['schemas']['SetupResponse'];
@@ -15,23 +14,14 @@ export type CompareResponse = components['schemas']['CompareResponse'];
 export type StyleSpaceResponse = components['schemas']['StyleSpaceResponse'];
 export type HealthResponse = components['schemas']['HealthResponse'];
 
-// F17 — Screen 3 (Ingestion & Prediction) + Screen 4 reuse. Aliased from the SAME generated
-// components; no backend change (div #53). The snapshot already carries these (F13/F14 defined them).
+// Screen 3 (Prediction + Setup Tendencies) + Screen 4 reuse. Aliased from the SAME generated
+// components; no backend change (div #53).
 export type SampleSegment = components['schemas']['SampleSegmentSchema'];
 export type TyreWearResponse = components['schemas']['TyreWearResponse'];
 export type TyreCompoundStats = components['schemas']['TyreCompoundStatsSchema'];
-export type TyreCurvePoint = components['schemas']['TyreCurvePointSchema'];
 export type PredictRequest = components['schemas']['PredictRequest'];
 export type PredictResponse = components['schemas']['PredictResponse'];
 export type TopK = components['schemas']['TopK'];
-export type UnknownFingerprintRequest = components['schemas']['UnknownFingerprintRequest'];
-export type UnknownFingerprintResponse = components['schemas']['UnknownFingerprintResponse'];
-export type NeighbourSchema = components['schemas']['NeighbourSchema'];
-export type DataQualitySchema = components['schemas']['DataQualitySchema'];
-export type IngestSessionRequest = components['schemas']['IngestSessionRequest'];
-export type IngestSessionResponse = components['schemas']['IngestSessionResponse'];
-export type IngestStatusResponse = components['schemas']['IngestStatusResponse'];
-export type UploadResponse = components['schemas']['UploadResponse'];
 
 // F19 — Screen 6 (Historical Race Replay Monitor). Aliased from the SAME generated components
 // (div #70). The replay redesign widened ReplayLap (threshold + alert — div #72–#74 closed) and
@@ -40,10 +30,10 @@ export type ReplayResponse = components['schemas']['ReplayResponse'];
 export type ReplayLap = components['schemas']['ReplayLap'];
 export type ReplayAlert = components['schemas']['ReplayAlert'];
 export type SessionSummary = components['schemas']['SessionSummary'];
-export type SessionDriver = components['schemas']['SessionDriverSchema'];
 
 // alert_state is a bare `str` on the wire (StintMonitorState.value, app/monitoring/detector.py).
-// Narrow it to the 8 states the monitor emits so the gauge/timeline/banner switch exhaustively.
+// The canonical list of the 8 states the monitor emits — the exhaustiveness fixture `alertTone`
+// is proven against, so a new monitor state fails the test rather than silently falling through.
 export const ALERT_STATES = [
   'INACTIVE',
   'BASELINE',
@@ -54,7 +44,6 @@ export const ALERT_STATES = [
   'ALERT',
   'HALTED',
 ] as const;
-export type AlertState = (typeof ALERT_STATES)[number];
 
 // fingerprint_snapshot is an open dict on the wire (app/replay/engine.py _snapshot_to_dict). Narrow
 // to the three keys it carries; confidence_state is the ONE real per-lap datum — coords are F08

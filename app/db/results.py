@@ -1,8 +1,8 @@
 """Typed results and exceptions for the persistence layer.
 
 The leaf of the ``app/db`` package: depends only on the contract layer (``BaseResult`` /
-``ErrorCode``) so ``breaker``/``session``/``repository``/``health`` can all import it without a
-cycle. Follows the house pattern where infra faults are *typed exceptions* (``ConfigError``,
+``ErrorCode``) so ``breaker``/``session``/``health`` can all import it without a cycle. Follows
+the house pattern where infra faults are *typed exceptions* (``ConfigError``,
 ``DataQualityLogError``) and stage outcomes are Pydantic result objects.
 """
 
@@ -31,23 +31,6 @@ class DatabaseUnavailableError(Exception):
         super().__init__(f"database {source} unavailable ({state})")
 
 
-class DbIntegrityError(Exception):
-    """Raised when a write violates a constraint or an application-layer invariant.
-
-    Carries ``ErrorCode.DB_INTEGRITY`` (F12's one new code). Covers UNIQUE / FK / NOT-NULL / the
-    clean-lap CHECK (surfaced from a driver ``IntegrityError``) and the §8.4 ``lap_features``
-    ``null_count == count(nulls)`` invariant (raised directly). The transaction is rolled back
-    before this propagates.
-    """
-
-    error_code = ErrorCode.DB_INTEGRITY
-
-    def __init__(self, message: str, *, cause: BaseException | None = None):
-        self.message = message
-        self.cause = cause
-        super().__init__(message)
-
-
 class DbHealthResult(BaseResult):
     """DB health probe outcome (consumed by F13's ``/health`` ``db_connected`` field).
 
@@ -61,15 +44,3 @@ class DbHealthResult(BaseResult):
     head_revision: str | None = None
     latency_ms: float | None = None
     detail: str | None = None
-
-
-class PersistResult(BaseResult):
-    """Outcome of a repository write.
-
-    Success → ``OK`` + ``written=True`` + ``entity_id``; integrity violation → ``FAILED`` +
-    ``DB_INTEGRITY`` + ``written=False``; DB unreachable → ``FAILED`` + ``DB_UNAVAILABLE``.
-    """
-
-    entity_type: str
-    entity_id: str | None = None
-    written: bool = False

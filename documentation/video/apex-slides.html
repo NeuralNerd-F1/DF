@@ -1,0 +1,368 @@
+<title>APEX Slides</title>
+<meta charset="utf-8">
+
+<style>
+  /* APEX pastel reference — identical tokens to the product (tailwind.config.js). */
+  :root {
+    --bg: #F6F5FA; --surface: #FFFFFF; --raised: #EEECF5; --border: #DCD8E8;
+    --strong: #B4AEC0; --text: #2B2733; --text-2: #6C6579; --text-3: #9A93A8;
+    --accent: #CE3A72; --accent-deep: #94284F; --accent-fill: #FBD5E3;
+    --ok: #2A8879; --warn: #B07520; --purple: #7A5DC0; --purple-fill: #E4DAF8;
+    --blue: #4F69C9; --threshold: #8B93A6;
+    --mono: ui-monospace, "JetBrains Mono", "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  /* The deck commits to the system's light pastel world — it IS the system's palette on camera. */
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: #262230; font-family: var(--sans); color: var(--text);
+    display: flex; align-items: center; justify-content: center; overflow: hidden; }
+
+  /* 16:9 stage that letterboxes into any window */
+  #stage { position: relative; width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16)); background: var(--bg); overflow: hidden; }
+
+  .slide { position: absolute; inset: 0; padding: 5% 7%; display: none;
+    flex-direction: column; justify-content: center; background: var(--bg); }
+  .slide.active { display: flex; }
+
+  /* type scale relative to stage height */
+  .eyebrow { font-family: var(--mono); font-size: 1.4vh; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 2vh; }
+  h1 { font-family: var(--sans); font-weight: 800; font-size: 12vh; line-height: 0.95;
+    letter-spacing: 0.02em; text-transform: uppercase; color: var(--accent); margin: 0 0 2.4vh; }
+  h2 { font-family: var(--sans); font-weight: 800; font-size: 5.4vh; line-height: 1.08;
+    letter-spacing: 0.015em; text-transform: uppercase; margin: 0 0 3vh; max-width: 88%; }
+  .sub { font-size: 2.6vh; line-height: 1.5; color: var(--text-2); max-width: 68ch; margin: 0; }
+  .sub strong { color: var(--text); }
+  p { font-size: 2.4vh; line-height: 1.55; color: var(--text-2); max-width: 70ch; margin: 0 0 1.6vh; }
+  p strong { color: var(--text); }
+
+  .footer { position: absolute; left: 7%; right: 7%; bottom: 3.4%; display: flex;
+    justify-content: space-between; font-family: var(--mono); font-size: 1.35vh;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+
+  .ethics { font-family: var(--mono); font-size: 1.6vh; line-height: 1.6; color: var(--text-2);
+    border: 1px solid var(--border); border-left: 0.4vh solid var(--ok); background: var(--surface);
+    padding: 1.6vh 2vh; margin-top: 3vh; max-width: 78ch; }
+  .ethics b { color: var(--text); }
+
+  /* stat strip */
+  .stats { display: grid; grid-auto-flow: column; gap: 1px; background: var(--border);
+    border: 1px solid var(--border); margin-top: 3vh; }
+  .stat { background: var(--surface); padding: 2.2vh 2.4vh; }
+  .stat b { display: block; font-family: var(--mono); font-weight: 600; font-size: 4.6vh;
+    letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .stat span { display: block; font-family: var(--mono); font-size: 1.35vh; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--text-3); margin-top: 0.8vh; }
+  .stat.rose b { color: var(--accent); }
+  .stat.purple b { color: var(--purple); }
+  .stat.warn b { color: var(--warn); }
+
+  /* typographic funnel */
+  .flow { font-family: var(--mono); font-size: 2.1vh; line-height: 1.5; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); padding: 3vh 3.4vh;
+    align-self: flex-start; }
+  .flow em { font-style: normal; color: var(--text-3); }
+  .flow b { color: var(--accent); font-weight: 600; }
+
+  /* two-column */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border);
+    border: 1px solid var(--border); margin-top: 1vh; }
+  .duo > div { background: var(--surface); padding: 2.6vh 3vh; }
+  .duo h3 { font-family: var(--mono); font-size: 1.5vh; letter-spacing: 0.14em;
+    text-transform: uppercase; margin: 0 0 1.6vh; font-weight: 600; color: var(--text-3); }
+  .duo .big { font-family: var(--mono); font-weight: 600; font-size: 5vh; letter-spacing: -0.02em;
+    line-height: 1.1; margin-bottom: 0.6vh; }
+  .duo p { font-size: 2vh; margin: 0 0 1vh; }
+  .duo p:last-child { margin: 0; }
+
+  /* principle chips */
+  .principles { display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+    background: var(--border); border: 1px solid var(--border); margin-top: 1vh; }
+  .principles div { background: var(--surface); padding: 2vh 2.6vh; }
+  .principles b { display: block; font-size: 2.2vh; margin-bottom: 0.6vh; color: var(--text); }
+  .principles p { font-size: 1.85vh; margin: 0; }
+
+  /* code slides */
+  .codehead { display: flex; justify-content: space-between; align-items: baseline;
+    margin: 0 0 1.6vh; }
+  .codehead h2 { margin: 0; font-size: 4.2vh; }
+  .path { font-family: var(--mono); font-size: 1.7vh; color: var(--text-3); }
+  pre.code { margin: 0; background: var(--surface); border: 1px solid var(--border);
+    border-left: 0.5vh solid var(--accent); padding: 2.6vh 3vh; overflow: hidden;
+    font-family: var(--mono); font-size: 2.05vh; line-height: 1.55; color: var(--text); }
+  pre.code.purple { border-left-color: var(--purple); }
+  pre.code.amber { border-left-color: var(--warn); }
+  .c  { color: var(--text-3); }              /* comment */
+  .k  { color: var(--purple); }              /* keyword */
+  .s  { color: var(--ok); }                  /* string */
+  .f  { color: var(--accent); font-weight: 600; } /* the load-bearing line */
+  .codenote { font-size: 2vh; color: var(--text-2); margin-top: 1.8vh; max-width: 76ch; }
+  .codenote strong { color: var(--text); }
+
+  /* roadmap slide */
+  .roadmap { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px;
+    background: var(--border); border: 1px solid var(--border); margin-top: 1vh; }
+  .roadmap div { background: var(--surface); padding: 2.6vh 2.8vh; }
+  .roadmap .n { font-family: var(--mono); font-size: 1.5vh; color: var(--accent);
+    letter-spacing: 0.14em; }
+  .roadmap b { display: block; font-size: 2.6vh; margin: 0.8vh 0; }
+  .roadmap p { font-size: 1.9vh; margin: 0; }
+
+  #counter { position: fixed; right: 1.2vh; bottom: 1vh; font-family: var(--mono);
+    font-size: 1.4vh; color: #6A6377; z-index: 5; }
+</style>
+
+<div id="stage">
+
+  <!-- ============ 1 · TITLE ============ -->
+  <section class="slide active">
+    <p class="eyebrow">COMP702 · MSc Dissertation Project · Demo</p>
+    <h1>APEX</h1>
+    <p class="sub"><strong>Behavioural driver profiling from Formula&nbsp;1 telemetry.</strong>
+      Public car data becomes a 28-feature behavioural fingerprint — validated by identification,
+      structured into a style space, explained by exact SHAP, and monitored live.</p>
+    <p class="ethics"><b>Statement of ethical compliance</b> — Participant category <b>A0</b>
+      (no human participants) · Data category <b>⟨from your ethics form⟩</b> (publicly available
+      F1 telemetry via the FastF1 / OpenF1 / Ergast archives; no data collected from people).
+      This project was conducted in accordance with the University's ethical guidance.</p>
+    <div class="footer"><span>Sabah Bhatt</span><span>2022–2025 corpus · 13 drivers</span></div>
+  </section>
+
+  <!-- ============ 2 · THE QUESTION ============ -->
+  <section class="slide">
+    <p class="eyebrow">The question</p>
+    <h2>Two drivers. Identical cars.<br>Measurably different telemetry.</h2>
+    <p>How a driver ramps the throttle. How they shape a braking zone. How much speed they carry
+      into a corner. APEX treats those differences as a <strong>behavioural signature</strong>.</p>
+    <p style="margin-top:1.4vh"><strong>Does a fingerprint built from behaviour alone encode driver
+      identity — and does it generalise to circuits the system has never seen?</strong></p>
+    <div class="footer"><span>APEX</span><span>the fingerprint question</span></div>
+  </section>
+
+  <!-- ============ 3 · ONE FUNNEL ============ -->
+  <section class="slide">
+    <p class="eyebrow">Architecture</p>
+    <h2>One funnel</h2>
+    <pre class="flow">            F1 telemetry
+                 ↓
+     Behavioural features      <em>28 per lap · six domains</em>
+                 ↓
+   <b>Driver behavioural fingerprint</b>
+                 │
+     ┌───────────┼───────────┐
+     ↓           ↓           ↓
+Identification  Style     Explainability
++ confidence    space     <em>exact SHAP</em>
+                 ↓
+        Extended analysis:  deviation monitoring · setup tendencies</pre>
+    <div class="footer"><span>engineering underneath: API · persistence · failure handling · interface · testing</span><span>no component fails silently</span></div>
+  </section>
+
+  <!-- ============ 4 · THE DATA ============ -->
+  <section class="slide">
+    <p class="eyebrow">The corpus</p>
+    <h2>Real data, counted losses,<br>two circuits quarantined</h2>
+    <div class="stats">
+      <div class="stat"><b>53,928</b><span>clean lap vectors</span></div>
+      <div class="stat"><b>13</b><span>drivers · 4 seasons</span></div>
+      <div class="stat"><b>25</b><span>circuits</span></div>
+      <div class="stat rose"><b>2</b><span>held out from day one</span></div>
+      <div class="stat"><b>84%</b><span>acceptance · every rejection coded</span></div>
+    </div>
+    <p style="margin-top:3vh">Belgium and Italy never touch a <strong>.fit()</strong> call.
+      Every result that follows is measured on circuits the models never saw.</p>
+    <div class="footer"><span>9 validation filters</span><span>every dropped lap logged with a typed code</span></div>
+  </section>
+
+  <!-- ============ 5 · IDENTIFICATION ============ -->
+  <section class="slide">
+    <p class="eyebrow">Core result · held-out circuits only</p>
+    <h2>The fingerprint identifies its driver</h2>
+    <div class="stats">
+      <div class="stat rose"><b>63.6%</b><span>top-1 · 13 drivers · chance 7.7%</span></div>
+      <div class="stat rose"><b>84.3%</b><span>top-3</span></div>
+      <div class="stat"><b>0.6225</b><span>held-out macro F1 · 8.1× chance</span></div>
+      <div class="stat warn"><b>0.78</b><span>a-priori target — unmet, reported</span></div>
+    </div>
+    <p style="margin-top:3vh">Calibrated XGBoost over the 28 behavioural features.
+      Cross-validation grouped <strong>by circuit</strong> — the same track never sits on both
+      sides of a fold.</p>
+    <div class="footer"><span>serving_metrics.json · content-hashed</span><span>every number traces to an artefact</span></div>
+  </section>
+
+  <!-- ============ 6 · THE REFUSAL ============ -->
+  <section class="slide">
+    <p class="eyebrow">Confidence-aware inference</p>
+    <h2>Below the gate,<br>the system refuses to answer</h2>
+    <div class="duo">
+      <div>
+        <h3>When it answers</h3>
+        <div class="big" style="color:var(--accent)">74.8%</div>
+        <p>accuracy when answering — the model states a driver only above the calibrated 0.65 gate.</p>
+      </div>
+      <div>
+        <h3>When it abstains</h3>
+        <div class="big" style="color:var(--purple)">28.1%</div>
+        <p>of held-out laps return a typed uncertainty state — LOW_CONFIDENCE or AMBIGUOUS —
+          with the refusal decomposed, never a forced guess.</p>
+      </div>
+    </div>
+    <p style="margin-top:2.6vh">Coverage 71.9%. Knowing when <strong>not</strong> to answer is one
+      of the results.</p>
+    <div class="footer"><span>gate · entropy · calibration</span><span>abstention is a first-class output</span></div>
+  </section>
+
+  <!-- ============ 7 · STRUCTURE & TIME ============ -->
+  <section class="slide">
+    <p class="eyebrow">Extended analysis</p>
+    <h2>The fingerprint has structure —<br>and works as a baseline in time</h2>
+    <div class="duo">
+      <div>
+        <h3>Style space</h3>
+        <div class="big" style="color:var(--accent)">2.4×</div>
+        <p>nearest-neighbour-is-teammate vs chance; teammates measurably closer,
+          permutation <strong>p&nbsp;=&nbsp;0.024</strong>; stable season to season.</p>
+      </div>
+      <div>
+        <h3>Behavioural deviation monitor</h3>
+        <div class="big" style="color:var(--warn)">9 laps</div>
+        <p>median alert lead over 2,138 real stints — causal, per-driver calibrated τ.
+          <strong>91% of alerts self-resolve</strong>: reported, not hidden.</p>
+      </div>
+    </div>
+    <div class="footer"><span>rq3_style_space.json · rq4_detector.json</span><span>claims scoped to the evidence</span></div>
+  </section>
+
+  <!-- ============ 8 · PRINCIPLES ============ -->
+  <section class="slide">
+    <p class="eyebrow">Engineering</p>
+    <h2>No component fails silently</h2>
+    <div class="principles">
+      <div><b>Typed failure everywhere</b><p>69 error codes, each with a triggering test ·
+        append-only data-quality log · executable 7-fault injection harness</p></div>
+      <div><b>No normalisation leakage</b><p>Train-only fits with fail-loud tripwires —
+        no artefact is written on a poisoned run</p></div>
+      <div><b>Reproducible</b><p>Fixed seeds · content-hashed, timestamp-free artefacts ·
+        every training run logged</p></div>
+      <div><b>Tested</b><p>1,349 tests across backend and interface — failure paths included,
+        not just happy paths</p></div>
+    </div>
+    <div class="footer"><span>the failure contract</span><span>uncertainty is rendered, never disguised</span></div>
+  </section>
+
+  <!-- ============ 9 · ROADMAP ============ -->
+  <section class="slide">
+    <p class="eyebrow">Demo</p>
+    <h2>The system, live</h2>
+    <div class="roadmap">
+      <div><span class="n">01</span><b>Driver profile</b><p>The fingerprint, explained — then
+        identification on real held-out laps, including one the system refuses.</p></div>
+      <div><span class="n">02</span><b>Comparison</b><p>Two teammates, one shared scale —
+        the fingerprint's geometry.</p></div>
+      <div><span class="n">03</span><b>Replay monitor</b><p>A real race, replayed causally —
+        the alert firing as a live pit wall would have seen it.</p></div>
+    </div>
+    <p style="margin-top:2.6vh">Then: the development environment, and the code the whole system
+      stands on.</p>
+    <div class="footer"><span>live · real 2022–2025 data</span><span>nothing staged, nothing mocked</span></div>
+  </section>
+
+  <!-- ============ 10 · CLOSE ============ -->
+  <section class="slide">
+    <p class="eyebrow">COMP702 · MSc Dissertation Project</p>
+    <h1>APEX</h1>
+    <p class="sub">A behavioural fingerprint from public data · identification that generalises ·
+      a style space with real structure · a monitor that watches it live —</p>
+    <p class="sub" style="margin-top:1.4vh"><strong>and a system that would rather tell you it
+      doesn't know than pretend that it does.</strong></p>
+    <div class="footer"><span>no component fails silently</span><span>Sabah Bhatt</span></div>
+  </section>
+
+  <!-- ============ 11 · APPENDIX CODE I — THE GATE (viva backup; not in the video flow) ============ -->
+  <section class="slide">
+    <p class="eyebrow">Appendix · the heart of the code · I</p>
+    <div class="codehead"><h2>The confidence gate</h2><span class="path">app/ml/inference.py</span></div>
+    <pre class="code purple"><span class="c"># 4-6. Entropy gate (precedence) → confidence gate → accepted band.</span>
+h_bits = _entropy_bits(proba)
+<span class="k">if</span> h_bits &gt; th.entropy_ambiguous_bits:
+    <span class="f">state = ConfidenceState.AMBIGUOUS</span>
+    top_prediction = <span class="k">None</span>
+    ledger.record(code=ErrorCode.AMBIGUOUS, entity_id=circuit,
+                  detail=<span class="s">f"entropy {h_bits:.3f} &gt; {th.entropy_ambiguous_bits} bits"</span>)
+<span class="k">elif</span> confidence &lt; th.confidence_gate:
+    <span class="f">state = ConfidenceState.LOW_CONFIDENCE</span>
+    top_prediction = <span class="k">None</span>
+    ledger.record(code=ErrorCode.LOW_CONFIDENCE, entity_id=circuit,
+                  detail=<span class="s">f"max-prob {confidence:.4f} &lt; gate {th.confidence_gate}"</span>)
+<span class="k">else</span>:
+    top_prediction = drivers[<span class="k">int</span>(order[0])]
+    state = ConfidenceState.HIGH <span class="k">if</span> confidence &gt;= cfg.confidence_high <span class="k">else</span> ConfidenceState.MEDIUM</pre>
+    <p class="codenote">The refusal is a <strong>served value, not an exception</strong>: the gate
+      sets a typed state, logs its reason with the exact margin, and <code>top_prediction</code>
+      stays <code>None</code>. The purple card in the demo is these six lines reaching the screen.</p>
+    <div class="footer"><span>predict() never raises</span><span>every threshold read from config — no magic numbers</span></div>
+  </section>
+
+  <!-- ============ 12 · APPENDIX CODE II — THE TRIPWIRE ============ -->
+  <section class="slide">
+    <p class="eyebrow">Appendix · the heart of the code · II</p>
+    <div class="codehead"><h2>The leakage tripwire</h2><span class="path">app/pipeline/normalise.py</span></div>
+    <pre class="code"><span class="k">def</span> _assert_no_leakage(train: pd.DataFrame, config: AppConfig) -&gt; <span class="k">None</span>:
+    <span class="s">"""Fail loud if any held-out circuit survives into the training set."""</span>
+    held_out = <span class="k">set</span>(config.held_out_circuits)          <span class="c"># Belgium, Italy — quarantined from day one</span>
+    leaked = held_out &amp; <span class="k">set</span>(train[<span class="s">"circuit"</span>].unique())
+    <span class="k">if</span> leaked:
+        <span class="f">raise NormalisationError(</span>
+            <span class="s">f"held-out circuits leaked into a fit: {sorted(leaked)}"</span><span class="f">)</span>
+<span class="c"># Called inside fit_normaliser AFTER the exclusion filter — it fires only if the
+# filter logic itself is broken. No artefact is written on a poisoned run.</span></pre>
+    <p class="codenote">Every fit site in the system re-asserts the train/held-out boundary
+      independently. The held-out results earlier are only meaningful because this line
+      <strong>can</strong> fire — and is tested to.</p>
+    <div class="footer"><span>non-negotiable #2</span><span>a single filter bug cannot silently poison an artefact</span></div>
+  </section>
+
+  <!-- ============ 13 · APPENDIX CODE III — THE DECOMPOSITION ============ -->
+  <section class="slide">
+    <p class="eyebrow">Appendix · the heart of the code · III</p>
+    <div class="codehead"><h2>The deviation score</h2><span class="path">app/monitoring/detector.py</span></div>
+    <pre class="code amber"><span class="k">def</span> _cosine_distance(x, b):
+    <span class="s">"""(1 − cos(x, b), per-feature ½(x̂ᵢ − b̂ᵢ)² terms) — exact additive decomposition."""</span>
+    xn, bn = norm(x), norm(b)
+    <span class="k">if</span> <span class="k">not</span> (isfinite(xn) <span class="k">and</span> isfinite(bn)) <span class="k">or</span> xn == 0.0 <span class="k">or</span> bn == 0.0:
+        <span class="k">return</span> nan, <span class="k">None</span>                      <span class="c"># the DISTANCE_NAN path — coded, never swallowed</span>
+    d = 1.0 - dot(x, b) / (xn * bn)
+    <span class="f">terms = 0.5 * (x/xn - b/bn) ** 2</span>          <span class="c"># unit-vector identity: 1 − cos = ½‖x̂ − b̂‖²</span>
+    <span class="k">return</span> d, terms</pre>
+    <p class="codenote">The monitor's score is a cosine distance — the <strong>shape</strong> of the
+      behaviour, not its magnitude — and the identity on the highlighted line makes the per-feature
+      attribution <strong>exact</strong>: the terms sum to the score. The feature chips on the alert
+      banner are these terms, not an estimate.</p>
+    <div class="footer"><span>calibrated τ = μ + 2σ per driver per circuit type</span><span>attribution sums to the score, to float tolerance</span></div>
+  </section>
+
+</div>
+<div id="counter">1 / 13</div>
+
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var counter = document.getElementById('counter');
+    var i = 0;
+    function show(n) {
+      i = Math.max(0, Math.min(slides.length - 1, n));
+      slides.forEach(function (s, j) { s.classList.toggle('active', j === i); });
+      counter.textContent = (i + 1) + ' / ' + slides.length;
+    }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') show(i + 1);
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') show(i - 1);
+      else if (e.key === 'Home') show(0);
+      else if (e.key === 'End') show(slides.length - 1);
+    });
+    document.addEventListener('click', function (e) { if (!e.defaultPrevented) show(i + 1); });
+    show(0);
+  })();
+</script>

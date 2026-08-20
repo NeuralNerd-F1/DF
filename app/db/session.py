@@ -37,8 +37,8 @@ from app.db.breaker import DbCircuitBreaker
 from app.db.results import DatabaseUnavailableError
 
 # Connection-level faults mapped to DB_UNAVAILABLE (SQLAlchemy's pool TimeoutError included). A data
-# fault (IntegrityError etc.) is deliberately NOT here — it rolls back and propagates for the
-# repository to translate to DB_INTEGRITY.
+# fault (IntegrityError etc.) is deliberately NOT here — it rolls back and propagates unchanged to
+# the caller.
 _CONNECTION_ERRORS: tuple[type[BaseException], ...] = (
     OperationalError,
     InterfaceError,
@@ -126,8 +126,7 @@ async def session_scope(
 
     Raises :class:`DatabaseUnavailableError` (``DB_UNAVAILABLE``) when the breaker is open or a
     connection-level fault occurs — the transaction is rolled back first (**no partial write**). Any
-    other exception (notably ``IntegrityError``) is rolled back and re-raised unchanged for the
-    caller to translate.
+    other exception (notably ``IntegrityError``) is rolled back and re-raised unchanged.
     """
     if breaker.is_open():
         raise DatabaseUnavailableError("postgres", short_circuited=True)
@@ -148,6 +147,6 @@ async def session_scope(
     finally:
         # Guard close() the same way as _safe_rollback: closing an already-dead connection can
         # itself raise (a termination packet over a dead socket), and that must NOT replace the
-        # already-determined typed error (DB_UNAVAILABLE / DB_INTEGRITY / a re-raised body error).
+        # already-determined typed error (DB_UNAVAILABLE, or a re-raised body error).
         with suppress(Exception):
             await session.close()

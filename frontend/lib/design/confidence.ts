@@ -21,11 +21,6 @@ export function confidenceTone(state: ConfidenceState | null | undefined): Confi
 }
 
 // Tailwind classes per tone (the colours themselves live once in tailwind.config.js).
-export const CONFIDENCE_BAR_CLASS: Record<ConfidenceTone, string> = {
-  high: 'bg-confidence-high',
-  medium: 'bg-confidence-medium',
-  low: 'bg-confidence-low',
-};
 export const CONFIDENCE_TEXT_CLASS: Record<ConfidenceTone, string> = {
   high: 'text-confidence-high',
   medium: 'text-confidence-medium',

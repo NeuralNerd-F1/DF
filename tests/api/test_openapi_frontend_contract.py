@@ -89,7 +89,7 @@ def test_confidence_state_values_match_the_frontend_union() -> None:
     }
 
 
-# --- F17 (Screen 3 Ingestion/Prediction + Screen 4 Comparison) ------------------------------------
+# --- F17 (Screen 3 Prediction + Setup Tendencies + Screen 4 Comparison) ---------------------------
 # New screens read these schemas (aliased in lib/api/types.ts, guarded in lib/api/validators.ts).
 # A backend rename must fail HERE, not in the browser.
 
@@ -143,26 +143,6 @@ def test_compare_response_fields() -> None:
         "compatibility_delta",
     ):
         assert field in props, f"CompareResponse lost {field!r} — breaks Screen 4 comparison"
-
-
-def test_ingest_status_response_fields() -> None:
-    # /ingest/status is include_in_schema=False (outside the presented surface), so its DTO is
-    # not in the OpenAPI components; the frontend poll contract is asserted on the model itself.
-    from app.api.schemas import IngestStatusResponse
-
-    props = IngestStatusResponse.model_json_schema()["properties"]
-    for field in ("status", "progress", "error_detail", "result"):
-        assert field in props, f"IngestStatusResponse lost {field!r} — FastF1 pipeline poll"
-
-
-def test_upload_response_fields() -> None:
-    # /ingest/upload is include_in_schema=False (outside the presented surface), so its DTO is
-    # not in the OpenAPI components; the contract is asserted on the model itself.
-    from app.api.schemas import UploadResponse
-
-    props = UploadResponse.model_json_schema()["properties"]
-    for field in ("upload_id", "laps_accepted", "laps_rejected", "cleaning_report", "warnings"):
-        assert field in props, f"UploadResponse lost {field!r} — breaks the Manual Upload swap-in"
 
 
 # --- F18 (Screen 5 Style Space Map) ---------------------------------------------------------------

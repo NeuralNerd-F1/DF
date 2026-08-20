@@ -43,22 +43,6 @@ async def test_db_backed_read_db_down_is_503(api: SimpleNamespace) -> None:
     assert r.json()["error_code"] == "DB_UNAVAILABLE"
 
 
-async def test_db_integrity_error_becomes_typed_409(api: SimpleNamespace) -> None:
-    """A ``DbIntegrityError`` on any route → typed 409 DB_INTEGRITY (§6). F13 has no write route
-    yet (see §4.0/divergence), so the mapping is exercised via a raising dependency — it is wired
-    and ready for the F14 write paths."""
-    from app.db.results import DbIntegrityError
-
-    def _raise_integrity() -> object:
-        raise DbIntegrityError("duplicate key violates unique constraint")
-
-    api.app.dependency_overrides[get_stylespace_fn] = _raise_integrity
-    r = await api.client.get("/stylespace")
-    assert r.status_code == 409
-    assert r.json()["error_code"] == "DB_INTEGRITY"
-    assert any(row["error_code"] == "DB_INTEGRITY" for row in _dq_rows(api))  # §6 "Logged? yes"
-
-
 async def test_stateless_routes_stay_200_when_db_down(api: SimpleNamespace) -> None:
     """§8/§4.0(d) — stateless compute needs no DB, so these routes stay 200 even with the DB down.
 

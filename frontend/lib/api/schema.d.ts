@@ -4,15 +4,58 @@
  */
 
 export interface paths {
-    "/compare/{id1}/{id2}": {
+    "/health": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Compare */
-        get: operations["compare_compare__id1___id2__get"];
+        /**
+         * Get Health
+         * @description Report DB + model-handle status. Critical = DB connected AND every model ready; cache
+         *     (Redis, F14) is reported but never critical. Any critical failure → HTTP 503.
+         */
+        get: operations["get_health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/predict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Predict */
+        post: operations["post_predict_predict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Segments
+         * @description The curated held-out sample laps for the Prediction screen. 200 with [] when the profiles
+         *     artefact is absent — the screen then explains there is nothing to pick, exactly like an empty
+         *     driver grid; a missing *demo* source is not a service failure.
+         */
+        get: operations["list_segments_segments_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -81,41 +124,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/drivers/{driver_id}/stability": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Driver Stability */
-        get: operations["driver_stability_drivers__driver_id__stability_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/fingerprint/unknown": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Fingerprint Unknown */
-        post: operations["fingerprint_unknown_fingerprint_unknown_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/health": {
+    "/tyres": {
         parameters: {
             query?: never;
             header?: never;
@@ -123,11 +132,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Health
-         * @description Report DB + model-handle status. Critical = DB connected AND every model ready; cache
-         *     (Redis, F14) is reported but never critical. Any critical failure → HTTP 503.
+         * Tyre Wear
+         * @description Per-driver, per-compound stint degradation (Screen 4). Served from the startup-loaded
+         *     profiles artefact; absent artefact → an empty map, never fabricated curves. A malformed
+         *     per-compound block is skipped WITH a data_quality_log row — a screen fed by this endpoint
+         *     can trust every curve it does receive.
          */
-        get: operations["get_health_health_get"];
+        get: operations["tyre_wear_tyres_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -136,40 +147,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/ingest/session": {
+    "/compare/{id1}/{id2}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /**
-         * Ingest Session
-         * @description Enqueue an async session ingestion → 202 Accepted (§8.5). Counts are *pending* placeholders;
-         *     poll ``/ingest/status/{session_id}`` for progress and the terminal quality report.
-         */
-        post: operations["ingest_session_ingest_session_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/ingest/status/{session_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Ingest Status
-         * @description Report a job's status (§8.5). 404 if unknown. On COMPLETE, ``result`` carries the terminal
-         *     report (the §8.5 counts + quality_report) so the async response fulfils the master contract.
-         */
-        get: operations["ingest_status_ingest_status__session_id__get"];
+        /** Compare */
+        get: operations["compare_compare__id1___id2__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -178,51 +164,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/ingest/upload": {
+    "/stylespace": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** Ingest Upload */
-        post: operations["ingest_upload_ingest_upload_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/metrics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Metrics */
-        get: operations["get_metrics_metrics_get"];
+        /** Stylespace */
+        get: operations["stylespace_stylespace_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/predict": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Post Predict */
-        post: operations["post_predict_predict_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -242,28 +194,6 @@ export interface paths {
          *     404 unknown.
          */
         get: operations["replay_replay__session_id___driver_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/segments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Segments
-         * @description The curated held-out sample laps for the Prediction screen. 200 with [] when the profiles
-         *     artefact is absent — the screen then explains there is nothing to pick, exactly like an empty
-         *     driver grid; a missing *demo* source is not a service failure.
-         */
-        get: operations["list_segments_segments_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -292,72 +222,12 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/stylespace": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Stylespace */
-        get: operations["stylespace_stylespace_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tyres": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Tyre Wear
-         * @description Per-driver, per-compound stint degradation (Screen 4). Served from the startup-loaded
-         *     profiles artefact; absent artefact → an empty map, never fabricated curves. A malformed
-         *     per-compound block is skipped WITH a data_quality_log row — a screen fed by this endpoint
-         *     can trust every curve it does receive.
-         */
-        get: operations["tyre_wear_tyres_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** Body_ingest_upload_ingest_upload_post */
-        Body_ingest_upload_ingest_upload_post: {
-            /** Circuit */
-            circuit?: string | null;
-            /** Driver Label */
-            driver_label?: string | null;
-            /** File */
-            file: string;
-            /**
-             * Unknown Driver
-             * @default false
-             */
-            unknown_driver: boolean;
-        };
         /** CompareResponse */
         CompareResponse: {
-            /** Compatibility Delta */
-            compatibility_delta: number;
-            /** Delta Shap */
-            delta_shap: {
-                [key: string]: number;
-            };
             /** Driver 1 Radar */
             driver_1_radar: {
                 [key: string]: number;
@@ -366,8 +236,14 @@ export interface components {
             driver_2_radar: {
                 [key: string]: number;
             };
+            /** Delta Shap */
+            delta_shap: {
+                [key: string]: number;
+            };
             /** Most Distinctive Features */
             most_distinctive_features: string[];
+            /** Compatibility Delta */
+            compatibility_delta: number;
         };
         /**
          * ConfidenceBreakdownSchema
@@ -377,10 +253,10 @@ export interface components {
          *     their product. Presentational — the gate's ``confidence_state`` stays authoritative.
          */
         ConfidenceBreakdownSchema: {
-            /** Distribution */
-            distribution: number;
             /** Feature Quality */
             feature_quality: number;
+            /** Distribution */
+            distribution: number;
             /** Model Confidence */
             model_confidence: number;
             /** Overall */
@@ -398,15 +274,6 @@ export interface components {
          * @enum {string}
          */
         ConfidenceState: "HIGH" | "MEDIUM" | "LOW_CONFIDENCE" | "AMBIGUOUS" | "OUT_OF_DISTRIBUTION";
-        /** DataQualitySchema */
-        DataQualitySchema: {
-            /** Imputed Features */
-            imputed_features?: string[];
-            /** N Laps Rejected */
-            n_laps_rejected: number;
-            /** N Laps Used */
-            n_laps_used: number;
-        };
         /**
          * DriverProfileSchema
          * @description Dataset + evaluation facts for one driver, sourced from ``driver_profiles.json``.
@@ -417,19 +284,19 @@ export interface components {
          *     never scored keeps ``None`` rather than borrowing a training-split number.
          */
         DriverProfileSchema: {
-            /** Identification F1 */
-            identification_f1?: number | null;
-            /** Lap Time Consistency S */
-            lap_time_consistency_s?: number | null;
             /** Laps Analysed */
             laps_analysed: number;
+            /** Seasons */
+            seasons?: number[];
             /**
              * N Circuits
              * @default 0
              */
             n_circuits: number;
-            /** Seasons */
-            seasons?: number[];
+            /** Lap Time Consistency S */
+            lap_time_consistency_s?: number | null;
+            /** Identification F1 */
+            identification_f1?: number | null;
         };
         /**
          * DriverSignalSchema
@@ -441,57 +308,57 @@ export interface components {
          *     without claiming which way it points.
          */
         DriverSignalSchema: {
-            /** Attribution */
-            attribution: number;
             /** Feature */
             feature: string;
+            /** Attribution */
+            attribution: number;
             /** Percentile */
             percentile?: number | null;
         };
         /** DriverSummary */
         DriverSummary: {
-            /** Code */
-            code: string;
-            /** Full Name */
-            full_name?: string | null;
             /** Id */
             id: string;
-            profile?: components["schemas"]["DriverProfileSchema"] | null;
+            /** Code */
+            code: string;
+            /** Team */
+            team?: string | null;
+            /** Full Name */
+            full_name?: string | null;
             /** Radar Values */
             radar_values?: {
                 [key: string]: number;
             };
             /** Signature */
             signature?: components["schemas"]["DriverSignalSchema"][];
-            /** Team */
-            team?: string | null;
+            profile?: components["schemas"]["DriverProfileSchema"] | null;
         };
         /**
          * ErrorCode
          * @description Every named error code, flag, fallback, and warning in the APEX spec.
          * @enum {string}
          */
-        ErrorCode: "OK" | "CONFIG_001" | "DATA_QUALITY_LOG_UNWRITABLE" | "DATA_001" | "STALE_DATA" | "DATA_SOURCE_UNAVAILABLE" | "COMPOUND_UNKNOWN" | "COMPOUND_FALLBACK" | "DERIVED_AGE" | "CACHE_CORRUPT" | "TRACK_STATUS_UNAVAILABLE" | "LAP_001" | "LAP_002" | "LAP_003" | "LAP_INTERP" | "LAP_004" | "LAP_005" | "LAP_006" | "LAP_PARTIAL" | "COMBO_001" | "DATA_INSUFFICIENT" | "ORPHAN_SAMPLES" | "VALIDATION_ERROR" | "FEATURE_001" | "LAP_NULL_EXCESS" | "IMPUTED" | "CORNER_001" | "UPLOAD_001" | "UPLOAD_002" | "UPLOAD_003" | "UPLOAD_004" | "RESAMPLED" | "LOW_CONFIDENCE" | "AMBIGUOUS" | "MODEL_NOT_FOUND" | "INVALID_INPUT" | "PERF_WARN" | "INFERENCE_ERROR" | "TRAIN_LEAKAGE" | "MODEL_TRAINING_FAILED" | "SPARSE_PROJECTION" | "OUT_OF_DISTRIBUTION" | "UMAP_FALLBACK" | "PROJECTION_FALLBACK" | "MONITOR_INACTIVE" | "BASELINE_INSUFFICIENT" | "FALLBACK_THRESHOLD" | "DEGRADED_QUALITY" | "DISTANCE_NAN" | "MONITOR_ERROR" | "SHAP_UNAVAILABLE" | "SHAP_CONSISTENCY_WARN" | "CONSTRAINT_CLIPPED" | "CONSISTENCY_WARNING" | "CIRCUIT_OVERRIDE_MONACO" | "WIDE_CONFIDENCE" | "NORMALISATION_FALLBACK" | "CACHE_MISS" | "CACHE_UNAVAILABLE" | "CACHE_DEGRADED" | "QUEUE_UNAVAILABLE" | "INGEST_TASK_FAILED" | "REPLAY_PARTIAL" | "DB_UNAVAILABLE" | "HEALTH_FAIL" | "DB_INTEGRITY" | "NOT_FOUND" | "FORBIDDEN" | "API_ERROR";
+        ErrorCode: "OK" | "CONFIG_001" | "DATA_QUALITY_LOG_UNWRITABLE" | "DATA_001" | "STALE_DATA" | "DATA_SOURCE_UNAVAILABLE" | "COMPOUND_UNKNOWN" | "COMPOUND_FALLBACK" | "DERIVED_AGE" | "CACHE_CORRUPT" | "TRACK_STATUS_UNAVAILABLE" | "LAP_001" | "LAP_002" | "LAP_003" | "LAP_INTERP" | "LAP_004" | "LAP_005" | "LAP_006" | "LAP_PARTIAL" | "COMBO_001" | "DATA_INSUFFICIENT" | "ORPHAN_SAMPLES" | "VALIDATION_ERROR" | "FEATURE_001" | "LAP_NULL_EXCESS" | "IMPUTED" | "CORNER_001" | "LOW_CONFIDENCE" | "AMBIGUOUS" | "MODEL_NOT_FOUND" | "INVALID_INPUT" | "PERF_WARN" | "INFERENCE_ERROR" | "TRAIN_LEAKAGE" | "MODEL_TRAINING_FAILED" | "SPARSE_PROJECTION" | "OUT_OF_DISTRIBUTION" | "UMAP_FALLBACK" | "PROJECTION_FALLBACK" | "MONITOR_INACTIVE" | "BASELINE_INSUFFICIENT" | "FALLBACK_THRESHOLD" | "DEGRADED_QUALITY" | "DISTANCE_NAN" | "MONITOR_ERROR" | "SHAP_UNAVAILABLE" | "SHAP_CONSISTENCY_WARN" | "CONSTRAINT_CLIPPED" | "CONSISTENCY_WARNING" | "CIRCUIT_OVERRIDE_MONACO" | "WIDE_CONFIDENCE" | "NORMALISATION_FALLBACK" | "CACHE_MISS" | "CACHE_UNAVAILABLE" | "CACHE_DEGRADED" | "REPLAY_PARTIAL" | "DB_UNAVAILABLE" | "HEALTH_FAIL" | "NOT_FOUND" | "FORBIDDEN" | "API_ERROR";
         /** FingerprintResponse */
         FingerprintResponse: {
             /** Driver Id */
             driver_id: string;
+            /** Vector 5D */
+            vector_5d: number[];
+            /** Shap Radar */
+            shap_radar?: {
+                [key: string]: number;
+            };
             /**
              * Nl Description
              * @default
              */
             nl_description: string;
-            /** Shap Radar */
-            shap_radar?: {
-                [key: string]: number;
-            };
+            stability?: components["schemas"]["StabilityResponse"] | null;
             /** Shap Signed */
             shap_signed?: {
                 [key: string]: number;
             };
-            stability?: components["schemas"]["StabilityResponse"] | null;
-            /** Vector 5D */
-            vector_5d: number[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -500,113 +367,56 @@ export interface components {
         };
         /** HealthResponse */
         HealthResponse: {
-            /** Cache Connected */
-            cache_connected?: boolean | null;
-            /** Db Connected */
-            db_connected: boolean;
-            /** Models Loaded */
-            models_loaded: {
-                [key: string]: boolean;
-            };
             /**
              * Status
              * @enum {string}
              */
             status: "healthy" | "unhealthy";
+            /** Models Loaded */
+            models_loaded: {
+                [key: string]: boolean;
+            };
+            /** Db Connected */
+            db_connected: boolean;
+            /** Cache Connected */
+            cache_connected?: boolean | null;
             /** Version */
             version: string;
         };
-        /**
-         * IngestSessionRequest
-         * @description POST /ingest/session body — the FastF1 session coordinates to ingest async (§8.5).
-         */
-        IngestSessionRequest: {
-            /** Event */
-            event: string;
-            /**
-             * Session
-             * @default R
-             */
-            session: string;
-            /** Year */
-            year: number;
-        };
-        /** IngestSessionResponse */
-        IngestSessionResponse: {
-            /** Laps Accepted */
-            laps_accepted: number;
-            /** Laps Rejected */
-            laps_rejected: number;
-            /** Quality Report */
-            quality_report?: {
-                [key: string]: unknown;
-            };
-            /** Rejection Summary */
-            rejection_summary?: {
-                [key: string]: number;
-            };
-            /** Session Id */
-            session_id: string;
-        };
-        /** IngestStatusResponse */
-        IngestStatusResponse: {
-            /** Error Detail */
-            error_detail?: string | null;
-            /** Progress */
-            progress: number;
-            /** Result */
-            result?: {
-                [key: string]: unknown;
-            } | null;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "PENDING" | "PROCESSING" | "COMPLETE" | "FAILED";
-        };
-        /** NeighbourSchema */
-        NeighbourSchema: {
-            /** Cosine Similarity */
-            cosine_similarity: number;
-            /** Distance */
-            distance: number;
-            /** Driver */
-            driver: string;
-        };
         /** PredictRequest */
         PredictRequest: {
-            /** Circuit */
-            circuit: string;
             /** Feature Vector */
             feature_vector: {
                 [key: string]: number | null;
             };
+            /** Circuit */
+            circuit: string;
         };
         /** PredictResponse */
         PredictResponse: {
+            /** Predicted Driver */
+            predicted_driver: string | null;
+            /** Confidence */
+            confidence: number;
+            confidence_state: components["schemas"]["ConfidenceState"] | null;
+            /** Top 3 */
+            top_3?: components["schemas"]["TopK"][];
             /** Class Probabilities */
             class_probabilities?: {
                 [key: string]: number;
             };
-            /** Confidence */
-            confidence: number;
-            confidence_breakdown?: components["schemas"]["ConfidenceBreakdownSchema"] | null;
-            confidence_state: components["schemas"]["ConfidenceState"] | null;
-            /** Model Version */
-            model_version: string;
-            /** Predicted Driver */
-            predicted_driver: string | null;
+            /** Shap Values */
+            shap_values?: {
+                [key: string]: number;
+            } | null;
             /**
              * Shap Available
              * @default false
              */
             shap_available: boolean;
-            /** Shap Values */
-            shap_values?: {
-                [key: string]: number;
-            } | null;
-            /** Top 3 */
-            top_3?: components["schemas"]["TopK"][];
+            /** Model Version */
+            model_version: string;
+            confidence_breakdown?: components["schemas"]["ConfidenceBreakdownSchema"] | null;
         };
         /**
          * ReplayAlert
@@ -615,46 +425,46 @@ export interface components {
          *     (div #74) — the route used to drop it.
          */
         ReplayAlert: {
-            /** Alert Confidence */
-            alert_confidence: string;
             /** Alert Lap */
             alert_lap: number;
-            /** Deviation Score */
-            deviation_score: number;
-            /** Feature Attribution */
-            feature_attribution?: {
-                [key: string]: number;
-            };
             /** First Crossing Lap */
             first_crossing_lap: number;
             /** Laps Since Threshold Crossed */
             laps_since_threshold_crossed: number;
-            /** Optimal Window Remaining Laps */
-            optimal_window_remaining_laps?: number | null;
+            /** Deviation Score */
+            deviation_score: number;
             /** Threshold */
             threshold: number;
+            /** Alert Confidence */
+            alert_confidence: string;
+            /** Feature Attribution */
+            feature_attribution?: {
+                [key: string]: number;
+            };
             /** Top Features */
             top_features?: string[];
+            /** Optimal Window Remaining Laps */
+            optimal_window_remaining_laps?: number | null;
         };
         /** ReplayLap */
         ReplayLap: {
-            alert?: components["schemas"]["ReplayAlert"] | null;
-            /** Alert State */
-            alert_state: string;
-            /** Deviation Score */
-            deviation_score?: number | null;
+            /** Lap Number */
+            lap_number: number;
             /** Feature Vector */
             feature_vector: {
                 [key: string]: number | null;
             };
+            /** Deviation Score */
+            deviation_score?: number | null;
+            /** Alert State */
+            alert_state: string;
             /** Fingerprint Snapshot */
             fingerprint_snapshot?: {
                 [key: string]: unknown;
             } | null;
-            /** Lap Number */
-            lap_number: number;
             /** Threshold */
             threshold?: number | null;
+            alert?: components["schemas"]["ReplayAlert"] | null;
         };
         /** ReplayResponse */
         ReplayResponse: {
@@ -669,21 +479,12 @@ export interface components {
          *     generalisation test, not a replay of training data.
          */
         SampleSegmentSchema: {
-            /** Circuit */
-            circuit: string;
-            /** Features */
-            features?: {
-                [key: string]: number | null;
-            };
             /** Id */
             id: string;
             /** Label */
             label: string;
-            /**
-             * Lap Number
-             * @default 0
-             */
-            lap_number: number;
+            /** Circuit */
+            circuit: string;
             /** Season */
             season: number;
             /**
@@ -691,8 +492,17 @@ export interface components {
              * @default
              */
             session: string;
+            /**
+             * Lap Number
+             * @default 0
+             */
+            lap_number: number;
             /** True Driver */
             true_driver: string;
+            /** Features */
+            features?: {
+                [key: string]: number | null;
+            };
         };
         /**
          * SessionDriverSchema
@@ -710,52 +520,27 @@ export interface components {
          *     sessions were listed nowhere, forcing a raw UUID input).
          */
         SessionSummary: {
+            /** Id */
+            id: string;
             /** Circuit */
             circuit: string;
             /** Circuit Type */
             circuit_type: string;
-            /** Drivers */
-            drivers?: components["schemas"]["SessionDriverSchema"][];
-            /** Id */
-            id: string;
-            /** Round */
-            round: number;
             /** Season */
             season: number;
+            /** Round */
+            round: number;
             /** Session Type */
             session_type: string;
+            /** Drivers */
+            drivers?: components["schemas"]["SessionDriverSchema"][];
         };
         /** SetupParameterSchema */
         SetupParameterSchema: {
-            /** Basis Features */
-            basis_features?: string[];
-            /** Category */
-            category?: string | null;
-            /** Confidence */
-            confidence: number;
-            /** Constraint Flags */
-            constraint_flags?: components["schemas"]["ErrorCode"][];
-            /** Fia Max */
-            fia_max?: number | null;
-            /** Fia Min */
-            fia_min?: number | null;
-            /** Grid Mean */
-            grid_mean?: number | null;
-            /** Kind */
-            kind: string;
             /** Name */
             name: string;
-            /** Rating */
-            rating: string;
-            /**
-             * Shap Available
-             * @default false
-             */
-            shap_available: boolean;
-            /** Shap Top Features */
-            shap_top_features?: string[];
-            /** Unit */
-            unit: string;
+            /** Kind */
+            kind: string;
             /** Value */
             value?: number | string | null;
             /** Value Range */
@@ -763,55 +548,80 @@ export interface components {
                 number,
                 number
             ] | null;
+            /** Category */
+            category?: string | null;
+            /** Confidence */
+            confidence: number;
+            /** Rating */
+            rating: string;
+            /** Unit */
+            unit: string;
+            /** Fia Min */
+            fia_min?: number | null;
+            /** Fia Max */
+            fia_max?: number | null;
+            /** Constraint Flags */
+            constraint_flags?: components["schemas"]["ErrorCode"][];
+            /** Shap Top Features */
+            shap_top_features?: string[];
+            /**
+             * Shap Available
+             * @default false
+             */
+            shap_available: boolean;
+            /** Grid Mean */
+            grid_mean?: number | null;
+            /** Basis Features */
+            basis_features?: string[];
         };
         /** SetupResponse */
         SetupResponse: {
-            /** Approximation Disclaimer */
-            approximation_disclaimer: string;
+            /** Driver */
+            driver: string;
             /** Circuit */
             circuit: string;
+            /** Parameters */
+            parameters: components["schemas"]["SetupParameterSchema"][];
             /**
              * Consistency Warning
              * @default false
              */
             consistency_warning: boolean;
-            /** Driver */
-            driver: string;
-            /** Model Version */
-            model_version: string;
             /**
              * Monaco Override
              * @default false
              */
             monaco_override: boolean;
-            /** Parameters */
-            parameters: components["schemas"]["SetupParameterSchema"][];
+            /** Approximation Disclaimer */
+            approximation_disclaimer: string;
+            /** Model Version */
+            model_version: string;
         };
         /** StabilityResponse */
         StabilityResponse: {
             /** Driver Id */
             driver_id: string;
+            /** Stability Score */
+            stability_score?: number | null;
             /** Pairwise Js */
             pairwise_js?: {
                 [key: string]: number;
             };
-            /** Partial */
-            partial: boolean;
             /** Seasons Available */
             seasons_available: number;
-            /** Stability Score */
-            stability_score?: number | null;
+            /** Partial */
+            partial: boolean;
         };
         /** StyleSpaceDriver */
         StyleSpaceDriver: {
+            /** Id */
+            id: string;
             /** Code */
             code: string;
             /** Coords 2D */
             coords_2d: number[];
             /** Coords 5D */
             coords_5d: number[];
-            /** Id */
-            id: string;
             /** Season */
             season?: string | null;
         };
@@ -842,28 +652,28 @@ export interface components {
          *     brake adaptation per lap of age).
          */
         TyreCompoundStatsSchema: {
-            /** Cliff Age */
-            cliff_age?: number | null;
-            /** Curve */
-            curve?: components["schemas"]["TyreCurvePointSchema"][];
-            /** Deg Slope S Per Lap */
-            deg_slope_s_per_lap: number;
-            /** F27 Median */
-            f27_median?: number | null;
-            /** F28 Median */
-            f28_median?: number | null;
-            /** Fuel Slope S Per Lap */
-            fuel_slope_s_per_lap?: number | null;
-            /** Max Stint Len */
-            max_stint_len: number;
-            /** Median Stint Len */
-            median_stint_len: number;
             /** N Laps */
             n_laps: number;
             /** N Stints */
             n_stints: number;
+            /** Median Stint Len */
+            median_stint_len: number;
+            /** Max Stint Len */
+            max_stint_len: number;
+            /** Deg Slope S Per Lap */
+            deg_slope_s_per_lap: number;
             /** Total Delta S */
             total_delta_s: number;
+            /** Fuel Slope S Per Lap */
+            fuel_slope_s_per_lap?: number | null;
+            /** Cliff Age */
+            cliff_age?: number | null;
+            /** Curve */
+            curve?: components["schemas"]["TyreCurvePointSchema"][];
+            /** F27 Median */
+            f27_median?: number | null;
+            /** F28 Median */
+            f28_median?: number | null;
         };
         /**
          * TyreCurvePointSchema
@@ -875,12 +685,12 @@ export interface components {
             age: number;
             /** Delta S */
             delta_s: number;
-            /** N */
-            n: number;
             /** Q25 */
             q25: number;
             /** Q75 */
             q75: number;
+            /** N */
+            n: number;
         };
         /**
          * TyreWearResponse
@@ -895,68 +705,18 @@ export interface components {
                 };
             };
         };
-        /** UnknownFingerprintRequest */
-        UnknownFingerprintRequest: {
-            /** Circuit */
-            circuit: string;
-            /** Circuit Type */
-            circuit_type?: string | null;
-            /** Laps */
-            laps: {
-                [key: string]: number | null;
-            }[];
-        };
-        /** UnknownFingerprintResponse */
-        UnknownFingerprintResponse: {
-            confidence_state?: components["schemas"]["ConfidenceState"] | null;
-            data_quality: components["schemas"]["DataQualitySchema"];
-            /** Fingerprint Id */
-            fingerprint_id: string;
-            /** Fingerprint Vector */
-            fingerprint_vector: number[] | null;
-            /** Nearest Neighbours */
-            nearest_neighbours?: components["schemas"]["NeighbourSchema"][];
-            /** Radar Values */
-            radar_values?: {
-                [key: string]: number;
-            };
-            /** Risk Flags */
-            risk_flags?: string[];
-            /**
-             * Style Description
-             * @default
-             */
-            style_description: string;
-            /** Warnings */
-            warnings?: components["schemas"]["ErrorCode"][];
-        };
-        /** UploadResponse */
-        UploadResponse: {
-            /** Cleaning Report */
-            cleaning_report?: {
-                [key: string]: unknown;
-            };
-            /** Laps Accepted */
-            laps_accepted: number;
-            /** Laps Rejected */
-            laps_rejected: number;
-            /** Upload Id */
-            upload_id: string;
-            /** Warnings */
-            warnings?: string[];
-        };
         /** ValidationError */
         ValidationError: {
-            /** Context */
-            ctx?: Record<string, never>;
-            /** Input */
-            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
     };
     responses: never;
@@ -967,14 +727,11 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    compare_compare__id1___id2__get: {
+    get_health_health_get: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id1: string;
-                id2: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -985,7 +742,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompareResponse"];
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    post_predict_predict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PredictRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PredictResponse"];
                 };
             };
             /** @description Validation Error */
@@ -995,6 +776,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_segments_segments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleSegmentSchema"][];
                 };
             };
         };
@@ -1082,12 +883,33 @@ export interface operations {
             };
         };
     };
-    driver_stability_drivers__driver_id__stability_get: {
+    tyre_wear_tyres_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TyreWearResponse"];
+                };
+            };
+        };
+    };
+    compare_compare__id1___id2__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                driver_id: string;
+                id1: string;
+                id2: string;
             };
             cookie?: never;
         };
@@ -1099,7 +921,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StabilityResponse"];
+                    "application/json": components["schemas"]["CompareResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1113,40 +935,7 @@ export interface operations {
             };
         };
     };
-    fingerprint_unknown_fingerprint_unknown_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UnknownFingerprintRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnknownFingerprintResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_health_health_get: {
+    stylespace_stylespace_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1161,157 +950,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HealthResponse"];
-                };
-            };
-        };
-    };
-    ingest_session_ingest_session_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IngestSessionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IngestSessionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    ingest_status_ingest_status__session_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IngestStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    ingest_upload_ingest_upload_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_ingest_upload_ingest_upload_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_metrics_metrics_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    post_predict_predict_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PredictRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PredictResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["StyleSpaceResponse"];
                 };
             };
         };
@@ -1348,26 +987,6 @@ export interface operations {
             };
         };
     };
-    list_segments_segments_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SampleSegmentSchema"][];
-                };
-            };
-        };
-    };
     sessions_sessions_get: {
         parameters: {
             query?: never;
@@ -1384,46 +1003,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionSummary"][];
-                };
-            };
-        };
-    };
-    stylespace_stylespace_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StyleSpaceResponse"];
-                };
-            };
-        };
-    };
-    tyre_wear_tyres_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TyreWearResponse"];
                 };
             };
         };

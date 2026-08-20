@@ -3,13 +3,13 @@ name = "apex"
 version = "0.1.0"
 description = "APEX — F1 driver behavioural profiling platform (Failsafe Architecture Edition)"
 authors = ["APEX"]
-readme = "CLAUDE.md"
+readme = "ARCHITECTURE.md"
 packages = [{ include = "app" }]
 
 [tool.poetry.dependencies]
 # Python floor is 3.12: the exactly-pinned data deps require it (numpy 2.5.0 declares
 # Requires-Python >=3.12), and the build env runs Python 3.14. The constitution text
-# (CLAUDE.md) still says "Python 3.11" — that line is stale and tracked separately; the
+# (ARCHITECTURE.md) still says "Python 3.11" — that line is stale and tracked separately; the
 # resolver contract lives here. With "^3.11" poetry could not resolve numpy at all.
 # Heavy ML/runtime deps (FastAPI, pandas, xgboost, umap-learn, shap, mlflow, fastf1,
 # sqlalchemy, ...) are added by the features that first import them — F00 only needs the
@@ -68,22 +68,15 @@ fastapi = "0.138.1"
 starlette = "1.3.1"
 uvicorn = "0.49.0"
 prometheus-client = "0.25.0"
-# F14 platform layer (§8.2/§8.3/§9). Redis cache + Celery task queue + replay engine. Pinned EXACTLY
-# for reproducibility (#3) at the newest releases with Python-3.14 wheels — redis-py is pure-Python
-# (redis.asyncio async client); celery pulls kombu/billiard/vine (billiard 4.2.4 ships a cp314 wheel,
-# so the F12-psycopg wheel risk did NOT recur here). Redis is broker + result backend + cache. The
-# offline suite is broker-independent (Celery always_eager) and cache-independent (fakeredis/FakeCache).
+# F14 platform layer (§8.2/§8.3/§9). Redis cache + replay engine. Pinned EXACTLY for reproducibility
+# (#3) at the newest release with a Python-3.14 wheel — redis-py is pure-Python (redis.asyncio async
+# client). The offline suite is cache-independent (fakeredis/FakeCache), so no server is needed.
 redis = "8.0.1"
-celery = "5.6.3"
 # F15 RQ5 failsafe harness (§11.4). The harness (app/eval/failsafe.py) is shipped code that DRIVES
 # the assembled ASGI app under fault injection (incl. 50 concurrent requests via ASGITransport), so
 # httpx moves from a dev-only test client (F13) to a MAIN dependency. Pinned EXACTLY (#3). F20 imports
 # run_failsafe_suite from the same module.
 httpx = "0.28.1"
-# F05 manual CSV upload (§3.4/§8.5). POST /ingest/upload is the first multipart/form-data route, so
-# Starlette/FastAPI need python-multipart to parse UploadFile/Form. Pinned EXACTLY (#3) at the newest
-# cp314-compatible release. Same "the feature adds the dep it first imports" pattern as F01/F13/F14.
-python-multipart = "0.0.32"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -97,8 +90,8 @@ aiosqlite = "0.22.1"
 pytest-asyncio = "1.4.0"
 # F13 — httpx drives the FastAPI app in-process (TestClient + ASGITransport AsyncClient). Promoted to
 # a MAIN dependency by F15 (the failsafe harness imports it); kept out of dev to avoid a duplicate pin.
-# F14 — fakeredis backs the offline cache tests (in-process sync + async Redis, no server). Celery
-# runs always_eager in tests (no broker/worker). Pinned EXACTLY (#3).
+# F14 — fakeredis backs the offline cache tests (in-process sync + async Redis, no server).
+# Pinned EXACTLY (#3).
 fakeredis = "2.36.2"
 
 [build-system]
@@ -158,10 +151,10 @@ ignore_missing_imports = true
 module = ["aiosqlite.*"]
 ignore_missing_imports = true
 
-# F14 — celery / fakeredis ship no usable py.typed surface for strict checking; redis-py ships
-# py.typed and stays strict. fakeredis is a test-only driver (never imported by app code).
+# F14 — fakeredis ships no usable py.typed surface for strict checking; redis-py ships py.typed and
+# stays strict. fakeredis is a test-only driver (never imported by app code).
 [[tool.mypy.overrides]]
-module = ["celery.*", "fakeredis.*"]
+module = ["fakeredis.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -175,6 +168,5 @@ asyncio_mode = "auto"
 markers = [
     "postgres: integration test requiring a live PostgreSQL (skipped unless APEX_TEST_DATABASE_URL set)",
     "redis: integration test requiring a live Redis (skipped unless APEX_REDIS_URL set)",
-    "celery: integration test requiring a live Celery broker/worker (skipped unless APEX_CELERY_BROKER_URL set)",
     "artefacts: F15 test needing committed model artefacts (skipped unless classifier.pkl / umap_model.pkl present)",
 ]

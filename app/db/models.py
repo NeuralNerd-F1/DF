@@ -127,8 +127,8 @@ class Lap(Base):
 
 class LapFeatures(Base):
     """The 28-feature lap vector. lap_id is UNIQUE (1:1 with laps). The §8.4 invariant
-    ``null_count == count(nulls in feature_vector)`` is "Enforced by application layer" — see
-    ``app/db/repository.py::insert_lap_features`` (raises DB_INTEGRITY on mismatch)."""
+    ``null_count == count(nulls in feature_vector)`` is "Enforced by application layer"; the
+    served API is read-only, so the invariant is asserted by whatever populates the table."""
 
     __tablename__ = "lap_features"
 
@@ -212,7 +212,7 @@ class DegradationAlert(Base):
 
 
 class DataQualityLog(Base):
-    """All pipeline errors and fallbacks. **Never deleted** (§8.4) — the repository exposes no
+    """All pipeline errors and fallbacks. **Never deleted** (§8.4) — the app exposes no
     delete. Column order + names mirror ``app/contracts/logging.py`` ``ROW_COLUMNS`` exactly, so the
     F00 JSONL writer's rows drop straight in (the "PostgreSQL swap" that docstring promises)."""
 

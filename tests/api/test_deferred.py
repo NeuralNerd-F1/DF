@@ -1,28 +1,12 @@
-"""Queue endpoints. After F05 every documented route is implemented; the async ingestion + replay
-routes 503 ONLY when their backing service is unconfigured (this F13 fixture injects no
-``celery_app``/``job_store``; the DB + monitor ARE set, so ``/replay`` reaches the engine). Real F14
-route behaviour lives in ``test_ingest_routes.py`` + ``test_replay_route.py``; the upload route
-(``/ingest/upload``, no longer deferred) is covered by ``test_upload_route.py``."""
+"""Route reachability. Every documented route is implemented; ``/replay`` 503s only when its
+backing service is unconfigured (this fixture injects the DB + monitor, so it reaches the engine).
+Real route behaviour lives in ``test_replay_route.py``. The unknown-driver projection stays routable
+but ``include_in_schema=False`` — it is outside the presented surface, so it must not appear in the
+OpenAPI document the frontend types are generated from."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
-
-import pytest
-
-
-@pytest.mark.parametrize(
-    "method_path", [("post", "/ingest/session"), ("get", "/ingest/status/abc")]
-)
-async def test_ingest_routes_503_when_queue_unconfigured(
-    api: SimpleNamespace, method_path: tuple[str, str]
-) -> None:
-    """No ``celery:`` wiring in this fixture → the queue endpoints 503 (not configured), like any
-    other not-loaded component — never a crash."""
-    method, path = method_path
-    r = await getattr(api.client, method)(path)
-    assert r.status_code == 503
-    assert r.json()["error_code"] == "HEALTH_FAIL"
 
 
 async def test_replay_reaches_engine_and_404s_on_unknown(api: SimpleNamespace) -> None:
@@ -37,8 +21,9 @@ def test_all_endpoints_present_in_openapi(api: SimpleNamespace) -> None:
     paths = api.app.openapi()["paths"]
     for p in ("/replay/{session_id}/{driver_id}",):
         assert p in paths
-    # Queue + upload + unknown-projection endpoints are include_in_schema=False: still routable,
-    # outside the presented surface.
+
+    # The unknown-projection endpoint is include_in_schema=False: still routable, outside the
+    # presented surface.
     def _all_paths(routes: list) -> set[str]:
         found: set[str] = set()
         for r in routes:
@@ -50,11 +35,20 @@ def test_all_endpoints_present_in_openapi(api: SimpleNamespace) -> None:
         return found
 
     routed = _all_paths(api.app.routes)
-    for p in (
-        "/ingest/session",
-        "/ingest/status/{session_id}",
-        "/ingest/upload",
-        "/fingerprint/unknown",
-    ):
+    for p in ("/fingerprint/unknown",):
         assert p not in paths
         assert p in routed
+
+
+async def test_removed_queue_and_upload_routes_are_gone(api: SimpleNamespace) -> None:
+    """The async ingestion queue and the manual CSV upload are out of the build entirely — not
+    deferred, not 503, simply not routed. A 404 (never a 503) is the contract."""
+    paths = api.app.openapi()["paths"]
+    for method, path in (
+        ("post", "/ingest/session"),
+        ("get", "/ingest/status/abc"),
+        ("post", "/ingest/upload"),
+    ):
+        assert path not in paths
+        r = await getattr(api.client, method)(path)
+        assert r.status_code == 404, f"{path} still routes ({r.status_code})"

@@ -1,6 +1,6 @@
 """Structural conformance: the repo skeleton and dev stores match the contracts.
 
-Covers the F00 acceptance criterion that the package layout matches the CLAUDE.md
+Covers the F00 acceptance criterion that the package layout matches the ARCHITECTURE.md
 repo map and that docker-compose.yml pins the constitution's store versions.
 """
 
@@ -14,7 +14,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# The app package map from CLAUDE.md.
+# The app package map from ARCHITECTURE.md.
 EXPECTED_PACKAGES = (
     "app",
     "app.contracts",
@@ -24,7 +24,6 @@ EXPECTED_PACKAGES = (
     "app.personalisation",
     "app.api",
     "app.cache",
-    "app.tasks",
 )
 
 

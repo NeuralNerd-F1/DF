@@ -1,0 +1,121 @@
+# APEX — Architecture and Engineering Standards
+
+> Scope: always-true, project-wide rules. The narrative design record, the master
+> specification and the dissertation write-up live in `documentation/`, not here.
+
+## What APEX is
+A production-grade F1 driver behavioural profiling platform. Driver telemetry ->
+28-feature lap vectors -> driver fingerprint -> classifier, style space,
+degradation detection, and car personalisation. The whole system is built around
+one principle: **no component fails silently.**
+
+## The five non-negotiables (these override convenience, always)
+1. **No silent failure.** Every failure path returns a typed result with an
+   explicit error code (e.g. `LAP_003`, `DATA_001`). Never `except: pass`. Never
+   drop a lap, row, or prediction without logging it to `data_quality_log`.
+2. **No normalisation leakage.** Normalisation/scaling params are computed on the
+   training split ONLY, saved to `artefacts/normalisation.json`, and loaded for
+   val/test/upload. Recomputing scalers on held-out data is a build-breaking bug.
+   Held-out circuits (Belgium, Italy) never touch any `.fit()` call.
+3. **Reproducibility.** All seeds fixed in `config.yaml` (numpy=42, xgboost=42,
+   optuna sampler=42). Every training run logged to MLflow with params + metrics +
+   artefact. A run that can't be reproduced from the repo is not done.
+4. **Confidence gates are mandatory.** Model outputs below threshold return an
+   explicit uncertainty state (`LOW_CONFIDENCE`, `AMBIGUOUS`, `OUT_OF_DISTRIBUTION`),
+   never a forced answer. Classifier gate: max prob < 0.65.
+5. **Every feature/model output is unit-tested, including its failure path.** A
+   feature returning out-of-range raises `FeatureComputationError`; the test suite
+   asserts both the happy path and the NULL/error path.
+
+## Tech stack (versions pinned in pyproject.toml / package.json)
+- Backend: Python 3.12+, FastAPI 0.111+, Pydantic v2, SQLAlchemy 2.0 + psycopg v3,
+  Alembic.
+- Data/ML: pandas 3.x, numpy 2.x (all ops vectorised — no per-row Python loops),
+  XGBoost 3.x + CalibratedClassifierCV (scikit-learn 1.x), Optuna 4.x, umap-learn 0.5.x
+  (PCA fallback), SHAP 0.45+ (TreeExplainer, exact), mlflow-skinny 3.x, FastF1 3.x.
+- Stores: PostgreSQL 15 (Supabase), Redis 7.x (Upstash). Cache is an optimisation,
+  never a hard dependency — the system must run with Redis down.
+- Frontend: Next.js 14 (App Router), TypeScript strict (no implicit any), D3.js 7,
+  Zustand 4, Tailwind 3. Pastel light theme (tokens in `frontend/tailwind.config.js`).
+
+## Stack migration notes
+
+> **pandas / numpy (F04).** The runtime is **pandas 3.x — copy-on-write is
+> the default** and **numpy 2.x — 1.x type aliases removed, stricter casting** — on **Python
+> 3.12+**. The floor moved off 3.11 because `numpy 2.5.0` declares `Requires-Python >=3.12`;
+> the pinned `numpy`/`pandas` are the only wheels with Python-3.14 support, so installing the
+> deps transitively migrated the whole stack. Write new feature code against pandas-3.x /
+> numpy-2.x semantics, not 1.x/2.x idioms. F01–F03b were authored across that transition and
+> are test-covered, so they are NOT reopened — but the ground shifted under already-merged
+> code: any odd pandas copy-on-write or numpy-alias behaviour downstream traces to here.
+
+> **ML dependencies (F06a).** The ML stack is pinned at the newest releases with
+> Python-3.14 wheels — **XGBoost 3.3, Optuna 4.9, scikit-learn 1.9, mlflow-skinny 3.14** — not the
+> 2.x/3.x/2.x the line above originally named. Full `mlflow` caps `pandas<3`, which would downgrade
+> the F04 pandas-3.x stack, so APEX uses **mlflow-skinny** (the lightweight tracking +
+> registry client, same `mlflow.*` API) on a **sqlite** store — the model registry is unsupported
+> on `file://` stores. scikit-learn ≥1.6 removed `CalibratedClassifierCV(cv="prefit")`, so prefit
+> calibration wraps the base model in `FrozenEstimator`.
+
+> **SHAP + numpy pin (F07).** F07 installs **SHAP 0.52** (TreeExplainer, exact)
+> — the newest release with a Python-3.14 wheel. Its `numba` dependency (numba 0.65.1) caps
+> `numpy<2.5`, so the pin moved **numpy 2.5.0 → 2.4.6** (a cp314 wheel exists, still Python 3.14).
+> This is the same kind of transitive migration F04 (pandas/numpy) and F06a (mlflow-skinny) already
+> set; the full F01–F06 suite (351 tests) was re-run **green on numpy 2.4.6 before** any F07 code
+> was written. Write against numpy-2.4.x — behaviour is unchanged vs 2.5 for APEX's usage (both are
+> numpy-2.x / copy-on-write).
+
+> **DB driver (F12).** F12 adds the persistence layer: **SQLAlchemy 2.0.51 +
+> Alembic 1.18.5** (async ORM + migrations). The master §9 names **asyncpg** as the Postgres driver,
+> but asyncpg ships **no Python-3.14 (cp314) wheel** and needs MSVC to build from source (unavailable
+> here), so F12 uses **psycopg v3 (`psycopg[binary]` 3.3.4, `postgresql+psycopg://`)** — a cp314
+> binary wheel exists. Same transitive-migration pattern as F04/F06a/F07. The whole DB test
+> suite runs **offline on aiosqlite** (driver-independent) via portable `.with_variant` column types;
+> a `@pytest.mark.postgres` test exercises the real migration when `APEX_TEST_DATABASE_URL` is set.
+> The DSN is **env-only** (`APEX_DATABASE_URL`; config.yaml stores only the var name).
+
+## Repo map
+```
+app/contracts/   config.py enums.py errors.py logging.py results.py
+app/pipeline/    ingest.py validate.py features.py normalise.py
+app/ml/          classifier.py inference.py stylespace.py explain.py corners.py
+app/monitoring/  detector.py
+app/personalisation/ engine.py
+app/api/         routes + Pydantic schemas
+app/cache/       Redis read cache (an optimisation, never a hard dependency)
+app/replay/      read-only growing-prefix replay engine
+app/eval/        evaluation orchestrator + RQ5 failsafe harness
+app/db/          SQLAlchemy models, repository, circuit breaker
+scripts/         training-matrix build, real training run, evaluation scripts
+frontend/        Next.js app — the five presented screens
+artefacts/       normalisation.json, umap_model.pkl, pca_fallback.pkl, models
+tests/           mirrors app/ ; one test module per source module
+documentation/   master spec, design record, dissertation write-up, video materials
+config.yaml      seeds, thresholds, paths — single source of truth for constants
+```
+
+## Commands
+Dependencies resolve from `pyproject.toml`; `requirements.lock` is the exact pinned set the
+build actually runs on. Commands below assume the project venv is active.
+- Install: `python -m venv .venv` then `pip install -r requirements.lock`
+- Test: `pytest -q` (a feature is not done until its tests pass)
+- Lint: `ruff check . --fix`
+- Types: `mypy app`
+- Migrations: `alembic revision --autogenerate -m "..."` then `alembic upgrade head`
+- Run API: `uvicorn app.api.main:app --port 8001`
+- Frontend: `cd frontend && npm run dev`
+
+## Conventions
+- No magic numbers in code. Thresholds (0.65 gate, 30-lap minimum, 6-NULL ceiling,
+  20Hz floor, 115% lap-time bound) live in `config.yaml` and are imported.
+- Error codes are an Enum in `app/contracts/errors.py`. Strings are never hardcoded.
+- Pipeline stages return Pydantic result objects (`ValidationResult`,
+  `FeatureResult`, `PredictionResult`), never bare tuples/dicts.
+- Tests use fixtures of synthetic passing AND failing laps — every error code has a
+  test that triggers it.
+- Conventional commits: `feat(features): add F19 lateral-g extraction`.
+
+## Development workflow
+One feature = one focused unit of work, designed before implementation begins. Lint,
+type-check and the full test suite must pass before a feature is committed. The design
+reasoning and the per-feature record are written up in `documentation/`.

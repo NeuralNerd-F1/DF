@@ -2,7 +2,7 @@
   "name": "apex-frontend",
   "version": "0.1.0",
   "private": true,
-  "description": "APEX F1 driver-profiling frontend — design system + Command Centre + Driver Profile (F16).",
+  "description": "APEX F1 driver-profiling frontend — the five presented screens (Driver Overview, Comparison, Prediction + Setup Tendencies, Tyre Analysis, Replay).",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
@@ -11,7 +11,6 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test",
     "gen:api": "openapi-typescript ./openapi.snapshot.json -o ./lib/api/schema.d.ts"
   },
   "dependencies": {
@@ -19,12 +18,10 @@
     "next": "^14.2.35",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "three": "^0.169.0",
     "zod": "3.23.8",
     "zustand": "4.5.5"
   },
   "devDependencies": {
-    "@playwright/test": "1.48.2",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "16.0.1",
     "@testing-library/user-event": "14.5.2",
@@ -32,7 +29,6 @@
     "@types/node": "20.16.11",
     "@types/react": "18.3.11",
     "@types/react-dom": "18.3.0",
-    "@types/three": "^0.169.0",
     "@typescript-eslint/eslint-plugin": "7.18.0",
     "@typescript-eslint/parser": "7.18.0",
     "@vitejs/plugin-react": "4.3.2",
@@ -40,7 +36,6 @@
     "eslint": "8.57.1",
     "eslint-config-next": "^14.2.35",
     "jsdom": "25.0.1",
-    "msw": "2.4.11",
     "openapi-typescript": "7.4.1",
     "postcss": "8.4.47",
     "tailwindcss": "3.4.14",

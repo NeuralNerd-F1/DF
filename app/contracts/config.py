@@ -107,7 +107,23 @@ class IngestConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cache_max_age_days: int  # §8.2 — serve cache fresher than this without fetching
+    # §3.4 — linear-interpolation resample TARGET for telemetry whose inter-sample Δt is
+    # inconsistent or below the usable rate. Distinct from ``thresholds.sample_rate_floor_hz``,
+    # which is the post-interpolation FLOOR F02 rejects below; the cross-check that the target sits
+    # at or above the floor lives on ``AppConfig``. Load-bearing for the training corpus:
+    # scripts/build_training_matrix.py resamples every lap to this rate before feature extraction,
+    # so the whole matrix is reproducible only if the rate is stated here rather than assumed.
+    resample_target_hz: int
     breakers: IngestBreakers
+
+    @model_validator(mode="after")
+    def _resample_target_positive(self) -> IngestConfig:
+        """Fail fast so a mis-edit is a load-time ``CONFIG_001`` (#1) rather than a silent rate."""
+        if self.resample_target_hz <= 0:
+            raise ValueError(
+                f"ingest.resample_target_hz must be > 0, got {self.resample_target_hz}"
+            )
+        return self
 
 
 class ValidateConfig(BaseModel):
@@ -839,7 +855,7 @@ class DatabaseConfig(BaseModel):
 
     Lives here, not in ``app/db/`` (standing rule, F01): the DB layer reads its knobs through a
     strictly-validated model. Holds only F12 constants; ``DB_UNAVAILABLE`` / ``HEALTH_FAIL`` /
-    ``DATA_QUALITY_LOG_UNWRITABLE`` are pre-seeded in ``errors.py``; ``DB_INTEGRITY`` is F12's.
+    ``DATA_QUALITY_LOG_UNWRITABLE`` are pre-seeded in ``errors.py``.
     The **DSN is a secret** from the env var named by ``dsn_env_var`` — never stored here
     (§9 RLS / secret hygiene); this block carries only the env-var *name* plus non-secret knobs.
     ``breaker`` reuses the shared ``BreakerConfig`` and mirrors the §8.3 Supabase policy verbatim.
@@ -999,62 +1015,6 @@ class CacheConfig(BaseModel):
         return self
 
 
-class CeleryConfig(BaseModel):
-    """Typed view over the ``celery:`` block (F14 Celery task queue, §8.2/§9).
-
-    Lives here, not in ``app/tasks/`` (standing rule, F01): the queue reads its knobs through a
-    strictly-validated model. Redis is broker AND result backend (§9); both DSNs are **secrets**
-    from the env vars named here — never stored in YAML. Celery retry/timeout constants are
-    master-SILENT (§8.3's numbers are for external HTTP deps) → chosen here (divergence #35). The
-    offline test suite sets ``always_eager`` so the task body runs in-process with no broker/worker.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    broker_url_env_var: str  # Redis broker DSN env var (secret, never in YAML)
-    result_backend_env_var: str  # Redis result backend DSN env var (secret, never in YAML)
-    task_default_queue: str  # named queue the ingestion task routes to
-    worker_concurrency: int  # worker pool size (design decision)
-    task_soft_time_limit_s: int  # soft per-task cap → graceful stop (design decision)
-    task_time_limit_s: int  # hard per-task cap → kill (design decision)
-    task_max_retries: int  # ingest-task retries on a transient fault (div #35)
-    task_retry_backoff_s: list[float]  # backoff between task retries (div #35)
-    result_ttl_s: int  # result-backend retention for the terminal IngestSessionResponse
-    always_eager: bool = False  # tests set true (synchronous, in-process, no broker)
-
-    @model_validator(mode="after")
-    def _scalars_sane(self) -> CeleryConfig:
-        """Fail fast on bad constants so a mis-edit is a load-time ``CONFIG_001`` (#1)."""
-        for name, val in (
-            ("broker_url_env_var", self.broker_url_env_var),
-            ("result_backend_env_var", self.result_backend_env_var),
-            ("task_default_queue", self.task_default_queue),
-        ):
-            if not val:
-                raise ValueError(f"celery.{name} must be non-empty")
-        if self.worker_concurrency < 1:
-            raise ValueError(
-                f"celery.worker_concurrency must be >= 1, got {self.worker_concurrency}"
-            )
-        if self.task_soft_time_limit_s < 1:
-            raise ValueError("celery.task_soft_time_limit_s must be >= 1")
-        if self.task_time_limit_s <= self.task_soft_time_limit_s:
-            raise ValueError(
-                f"celery.task_time_limit_s ({self.task_time_limit_s}) must be > "
-                f"task_soft_time_limit_s ({self.task_soft_time_limit_s})"
-            )
-        if self.task_max_retries < 0:
-            raise ValueError(f"celery.task_max_retries must be >= 0, got {self.task_max_retries}")
-        if not self.task_retry_backoff_s:
-            raise ValueError("celery.task_retry_backoff_s must be non-empty")
-        for b in self.task_retry_backoff_s:
-            if b < 0:
-                raise ValueError(f"celery.task_retry_backoff_s entries must be >= 0, got {b}")
-        if self.result_ttl_s < 1:
-            raise ValueError(f"celery.result_ttl_s must be >= 1, got {self.result_ttl_s}")
-        return self
-
-
 class ReplayConfig(BaseModel):
     """Typed view over the ``replay:`` block (F14 replay engine, §5.3/§10.7/§12.1).
 
@@ -1122,53 +1082,6 @@ class FailsafeConfig(BaseModel):
             raise ValueError(f"failsafe.ood_injection_sd must be > 0, got {self.ood_injection_sd}")
         if not self.report_filename:
             raise ValueError("failsafe.report_filename must be non-empty")
-        return self
-
-
-class UploadConfig(BaseModel):
-    """Typed view over the ``upload:`` block (F05 manual CSV upload pipeline, §3.4).
-
-    Lives here (standing rule): ``app/pipeline/upload.py`` reads its knobs through a validated
-    model. Holds only the F05 pre-processing constants; the shared bounds it also needs are
-    referenced, never re-declared — the UPLOAD_001 required-column set is
-    ``validate.required_channels`` (§3.3/§3.4 name the same five), and the 20 Hz post-interpolation
-    FLOOR is ``thresholds.sample_rate_floor_hz``. The 50 Hz below is the RESAMPLE *target* for
-    inconsistent uploads (§3.4) — a different quantity from the floor; the cross-check
-    (``resample_target_hz >= sample_rate_floor_hz``) lives on ``AppConfig``. F05 adds no error code.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    mph_speed_median_kmh: float  # §3.4 UPLOAD_002 — Speed median > this (km/h) -> mph warning
-    max_corrupt_row_fraction: float  # §3.4 UPLOAD_003 — > this fraction corrupt -> error; else drop
-    resample_target_hz: int  # §3.4 RESAMPLED — linear-interp resample target (inconsistent Δt)
-    sampling_delta_std_fraction: float  # §3.4 — inter-sample Δt std > this × mean -> resample
-    max_file_bytes: int  # DoS guard — reject before parse (INVALID_INPUT), no silent truncation
-    max_rows: int  # DoS guard — reject before parse (INVALID_INPUT)
-    lap_number_column: str  # §3.4 duplicate-lap dedup + per-lap grouping key
-    time_column: str  # inter-sample Δt source for the sampling-consistency check + per-lap lap_time
-
-    @model_validator(mode="after")
-    def _scalars_sane(self) -> UploadConfig:
-        """Fail fast on out-of-range constants so a mis-edit is a load-time ``CONFIG_001`` (#1)."""
-        for name, val in (
-            ("mph_speed_median_kmh", self.mph_speed_median_kmh),
-            ("resample_target_hz", self.resample_target_hz),
-            ("max_file_bytes", self.max_file_bytes),
-            ("max_rows", self.max_rows),
-            ("sampling_delta_std_fraction", self.sampling_delta_std_fraction),
-        ):
-            if val <= 0:
-                raise ValueError(f"upload.{name} must be > 0, got {val}")
-        if not 0.0 < self.max_corrupt_row_fraction < 1.0:
-            raise ValueError(
-                "upload.max_corrupt_row_fraction must be in (0, 1), got "
-                f"{self.max_corrupt_row_fraction}"
-            )
-        if not self.lap_number_column:
-            raise ValueError("upload.lap_number_column must be non-empty")
-        if not self.time_column:
-            raise ValueError("upload.time_column must be non-empty")
         return self
 
 
@@ -1259,10 +1172,8 @@ class AppConfig(BaseModel):
     database: DatabaseConfig | None = None  # F12; None until the database: block is present
     api: ApiConfig | None = None  # F13; None until the api: block is present
     cache: CacheConfig | None = None  # F14; None until the cache: block is present
-    celery: CeleryConfig | None = None  # F14; None until the celery: block is present
     replay: ReplayConfig | None = None  # F14; None until the replay: block is present
     failsafe: FailsafeConfig | None = None  # F15; None until the failsafe: block is present
-    upload: UploadConfig | None = None  # F05; None until the upload: block is present
     # YAML key is `eval:`; the Python attribute is `eval_` to avoid shadowing the builtin `eval`
     # (F20; None until the eval: block is present). Same alias precedent as `lap_validation`.
     eval_: EvalConfig | None = Field(default=None, alias="eval")
@@ -1277,6 +1188,21 @@ class AppConfig(BaseModel):
         if not self.held_out_circuits:
             raise ValueError(
                 "held_out_circuits must be non-empty (it gates the F04 leakage chokepoint)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _resample_target_at_or_above_floor(self) -> AppConfig:
+        """The §3.4 resample TARGET must sit at or above the §3.3 sampling-rate FLOOR — resampling
+        telemetry *below* the floor F02 then rejects (LAP_004) would be self-defeating. Cross-block
+        (``ingest`` cannot see its sibling ``thresholds``), so it lives here on ``AppConfig``."""
+        if (
+            self.ingest is not None
+            and self.ingest.resample_target_hz < self.thresholds.sample_rate_floor_hz
+        ):
+            raise ValueError(
+                f"ingest.resample_target_hz ({self.ingest.resample_target_hz}) must be >= "
+                f"thresholds.sample_rate_floor_hz ({self.thresholds.sample_rate_floor_hz})"
             )
         return self
 
@@ -1383,20 +1309,6 @@ class AppConfig(BaseModel):
                 )
         return self
 
-    @model_validator(mode="after")
-    def _upload_resample_at_or_above_floor(self) -> AppConfig:
-        """F05's §3.4 resample TARGET must sit at or above the §3.3 sampling-rate FLOOR — resampling
-        an inconsistent upload *below* the floor F02 then rejects (LAP_004) would be self-defeating.
-        Cross-block (``upload`` cannot see its sibling ``thresholds``), so it lives here on
-        ``AppConfig`` (spec §5 placement)."""
-        if self.upload is not None and (
-            self.upload.resample_target_hz < self.thresholds.sample_rate_floor_hz
-        ):
-            raise ValueError(
-                f"upload.resample_target_hz ({self.upload.resample_target_hz}) must be >= "
-                f"thresholds.sample_rate_floor_hz ({self.thresholds.sample_rate_floor_hz})"
-            )
-        return self
 
     @model_validator(mode="after")
     def _eval_requires_sibling_blocks(self) -> AppConfig:

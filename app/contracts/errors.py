@@ -58,13 +58,6 @@ class ErrorCode(StrEnum):
     # --- Corner decomposition (F09) — §4.4 ----------------------------------
     CORNER_001 = "CORNER_001"  # curvature / X-Y unavailable -> skip decomposition
 
-    # --- Manual upload (F05) — §3.4 -----------------------------------------
-    UPLOAD_001 = "UPLOAD_001"  # missing required columns
-    UPLOAD_002 = "UPLOAD_002"  # speed likely mph not km/h (warning)
-    UPLOAD_003 = "UPLOAD_003"  # > 5% corrupt rows
-    UPLOAD_004 = "UPLOAD_004"  # empty file
-    RESAMPLED = "RESAMPLED"  # inconsistent sampling resampled to 50 Hz (flag)
-
     # --- Classifier (F06) — §5.1 --------------------------------------------
     LOW_CONFIDENCE = "LOW_CONFIDENCE"  # max prob < confidence gate
     AMBIGUOUS = "AMBIGUOUS"  # Shannon entropy > threshold (likely non-F1 input)
@@ -109,15 +102,12 @@ class ErrorCode(StrEnum):
     CACHE_UNAVAILABLE = "CACHE_UNAVAILABLE"  # Redis unavailable (logged)
     CACHE_DEGRADED = "CACHE_DEGRADED"  # breaker open; writes silently dropped
 
-    # --- Queue + replay (F14) — §8.2, §8.5, §10.7 ---------------------------
-    QUEUE_UNAVAILABLE = "QUEUE_UNAVAILABLE"  # broker/worker down -> enqueue 503 (div #32)
-    INGEST_TASK_FAILED = "INGEST_TASK_FAILED"  # ingestion task faulted -> FAILED (div #32)
+    # --- Replay (F14) — §10.7 -----------------------------------------------
     REPLAY_PARTIAL = "REPLAY_PARTIAL"  # /replay partial lap data -> 206 flag (div #32)
 
     # --- Database / platform (F12, F13) — §8.3, §8.5 ------------------------
     DB_UNAVAILABLE = "DB_UNAVAILABLE"  # Postgres breaker open -> API 503
     HEALTH_FAIL = "HEALTH_FAIL"  # critical component down at startup -> 503
-    DB_INTEGRITY = "DB_INTEGRITY"  # F12 — constraint / app-invariant violation on write (div #24)
     NOT_FOUND = "NOT_FOUND"  # F13 — resource (driver/combination) not found -> HTTP 404 (div #29)
     FORBIDDEN = "FORBIDDEN"  # F13 — /metrics called externally -> HTTP 403 (div #29)
     API_ERROR = "API_ERROR"  # F13 — unhandled fault -> typed HTTP 500, no raw stack (div #29)

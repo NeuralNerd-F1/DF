@@ -1,0 +1,422 @@
+<title>APEX Demo Script</title>
+<meta charset="utf-8">
+
+<style>
+  /* APEX pastel reference — the same identity as the product, the deck, and the design record. */
+  :root {
+    --bg: #F6F5FA; --surface: #FFFFFF; --raised: #EEECF5; --border: #DCD8E8;
+    --text: #2B2733; --text-2: #6C6579; --text-3: #9A93A8;
+    --accent: #CE3A72; --accent-deep: #94284F; --accent-fill: #FBD5E3;
+    --ok: #2A8879; --warn: #B07520; --purple: #7A5DC0; --purple-fill: #E4DAF8;
+    --mono: ui-monospace, "JetBrains Mono", "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17151D; --surface: #1E1B26; --raised: #262230; --border: #37323F;
+      --text: #E9E6EF; --text-2: #A79FB2; --text-3: #7A7386;
+      --accent: #E06A96; --accent-deep: #F0A3BF; --accent-fill: #3A2230;
+      --ok: #4BB39A; --warn: #D9A05B; --purple: #A78BE0; --purple-fill: #2A2338;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17151D; --surface: #1E1B26; --raised: #262230; --border: #37323F;
+    --text: #E9E6EF; --text-2: #A79FB2; --text-3: #7A7386;
+    --accent: #E06A96; --accent-deep: #F0A3BF; --accent-fill: #3A2230;
+    --ok: #4BB39A; --warn: #D9A05B; --purple: #A78BE0; --purple-fill: #2A2338;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
+    font-size: 15.5px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .shell { max-width: 1080px; margin: 0 auto; padding: 48px 24px 100px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 14px; }
+  h1 { font-family: var(--sans); font-weight: 800; font-size: clamp(2rem, 5vw, 3rem);
+    text-transform: uppercase; letter-spacing: 0.02em; line-height: 1; margin: 0 0 12px; color: var(--accent); }
+  .standfirst { color: var(--text-2); max-width: 64ch; margin: 0 0 26px; }
+  h2 { font-family: var(--sans); font-weight: 800; font-size: 1.25rem; text-transform: uppercase;
+    letter-spacing: 0.02em; margin: 44px 0 6px; }
+  h2 .tc { font-family: var(--mono); font-weight: 600; font-size: 0.85rem; color: var(--accent);
+    margin-right: 10px; letter-spacing: 0; }
+  .part { border-top: 3px solid var(--accent); margin-top: 52px; padding-top: 8px; }
+  .part h2 { margin-top: 0; font-size: 1.5rem; }
+  .beat-sub { font-family: var(--mono); font-size: 11px; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 14px; }
+  p { max-width: 70ch; margin: 0 0 12px; }
+  code { font-family: var(--mono); font-size: 0.86em; background: var(--raised);
+    padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border); }
+
+  .row { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 1px;
+    background: var(--border); border: 1px solid var(--border); margin: 0 0 14px; }
+  @media (max-width: 760px) { .row { grid-template-columns: 1fr; } }
+  .cell { background: var(--surface); padding: 14px 18px; }
+  .cell h4 { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--text-3); margin: 0 0 8px; font-weight: 600; }
+  .cell.action h4 { color: var(--warn); }
+  .cell.vo h4 { color: var(--accent); }
+  .cell ul { margin: 0; padding-left: 18px; }
+  .cell li { margin-bottom: 5px; font-size: 14px; color: var(--text-2); }
+  .cell p { font-size: 14.5px; margin-bottom: 10px; }
+  .cell p:last-child { margin-bottom: 0; }
+  .vo p { border-left: 3px solid var(--accent-fill); padding-left: 12px; }
+
+  .callout { border-left: 3px solid var(--purple); background: var(--purple-fill);
+    padding: 12px 18px; margin: 16px 0; max-width: 72ch; }
+  .callout.warn { border-left-color: var(--warn); background: var(--surface); }
+  .callout h4 { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+    text-transform: uppercase; margin: 0 0 6px; color: var(--text-2); }
+  .callout p { font-size: 14px; color: var(--text-2); margin: 0 0 8px; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; margin: 14px 0 22px;
+    background: var(--surface); border: 1px solid var(--border); }
+  th, td { text-align: left; padding: 8px 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-3); background: var(--raised); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.n { font-family: var(--mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .scroll { overflow-x: auto; }
+
+  .check { list-style: none; padding: 0; margin: 0 0 20px; max-width: 78ch; }
+  .check li { padding: 7px 0 7px 30px; border-bottom: 1px solid var(--border); position: relative;
+    font-size: 14.5px; color: var(--text-2); }
+  .check li::before { content: "□"; position: absolute; left: 6px; color: var(--accent); font-weight: 700; }
+
+  footer { border-top: 2px solid var(--text); margin-top: 60px; padding-top: 18px;
+    font-family: var(--mono); font-size: 11px; color: var(--text-3);
+    display: flex; flex-wrap: wrap; gap: 8px 24px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+</style>
+
+<div class="shell">
+  <p class="eyebrow">COMP702 · Demo Video · Production Script · v3 — aligned to the university brief</p>
+  <h1>APEX Demo Script</h1>
+  <p class="standfirst">
+    ≈9:20 of a 10-minute cap, structured exactly as the brief asks: <strong>ethics statement on
+    the title slide → short introduction (~2½ min) → the software in use → the development
+    environment and source code → close.</strong> Voiceover is written word-for-word at
+    130&nbsp;wpm — <strong>narrate it in your own voice; never text-to-speech</strong>
+    (presentation and English proficiency are assessed). The deck is
+    <code>docs/video/apex-slides.html</code>: slides 1–9 are the introduction, slide 10 the close,
+    slides 11–13 a code appendix for the viva — the video itself shows code in the editor.
+  </p>
+
+  <!-- ============================================================ -->
+  <h2>Compliance map — the brief, point by point</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>The brief asks</th><th>Where this script delivers it</th></tr></thead>
+      <tbody>
+        <tr><td>Ethical compliance statement on the title page (categories + sentence)</td><td>Slide 1 carries it; VO speaks one confirming line at 0:10. <strong>You must set the data category from your ethics form before recording.</strong></td></tr>
+        <tr><td>Introduction: overview, motivation, objectives, conclusions, objectives→design, "if it didn't go to plan"</td><td>Part I, 0:00–2:40 — slides 2–5 explicitly cover motivation, objectives shaping the funnel, headline conclusions, and the target miss told straight</td></tr>
+        <tr><td>Most of the time demonstrating the software; variety of interactions</td><td>Part II, 2:40–7:00 — five interaction types: profile exploration, live prediction, a gated refusal, comparison, causal replay + 8-driver grid</td></tr>
+        <tr><td>Different user types</td><td>Not applicable — single analyst role; one VO clause says so (4:55)</td></tr>
+        <tr><td>Development environment + source code; a piece of code you're proud of</td><td>Part III, 7:00–8:50 — VS Code, repo, green test suite, config-driven thresholds, then the three load-bearing functions</td></tr>
+        <tr><td>≤ 10 minutes</td><td>Total ≈ 9:20 with buffer</td></tr>
+        <tr><td>Own-voice narration</td><td>Pre-flight rule; record VO yourself over the edit</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>Pre-flight checklist</h2>
+  <ul class="check">
+    <li><strong>Slide 1: replace ⟨from your ethics form⟩ with your actual data category code</strong> (participant category is A0 — no human participants); check "Sabah Bhatt" matches your submission name format</li>
+    <li>API up: <code>APEX_DATABASE_URL="sqlite+aiosqlite:///artefacts/apex_demo.db" .venv/Scripts/python -m uvicorn --factory app.api.main:create_app --port 8001</code> — <code>/health</code> shows all four models</li>
+    <li>Frontend up: <code>npm run dev</code> (never <code>npm run build</code> while dev runs); <code>.env.local</code> → <code>http://127.0.0.1:8001</code></li>
+    <li>Deck fullscreen (F11) in one window on slide 1; the system in a second window; VS Code in a third — cut between them in the edit</li>
+    <li><strong>VS Code prep</strong>: light theme (matches the palette on camera), editor font ≥ 16, minimap off, sidebar showing the repo tree; tabs pinned in order:
+      <code>config.yaml</code> (at the <code>thresholds:</code> block), <code>app/ml/inference.py</code> (at the gate, ~line 457),
+      <code>app/pipeline/normalise.py</code> (at <code>_assert_no_leakage</code>, ~line 206),
+      <code>app/monitoring/detector.py</code> (at <code>_cosine_distance</code>, ~line 536)</li>
+    <li><strong>Before recording, run the suite once</strong>: <code>.venv/Scripts/python -m pytest -q</code> (takes a while — start early) and leave the green tail visible in the VS Code terminal</li>
+    <li>Browser: 1920×1080, bookmarks hidden, 100% zoom, notifications off, light OS theme; warm every page once (first compile is slow)</li>
+    <li>Replay pre-checks: Bahrain 2023 · R; LEC loads; ALL DRIVERS fills 8 cells; pick the speed where LEC's τ crossing lands 15–25&nbsp;s after Play</li>
+    <li>Prediction: note your rehearsed <em>confident</em> segment; the gated one is Belgium 2022 · Race · Lap 34</li>
+    <li>Comparison: note the teammate pair that reads best</li>
+    <li>Record a full silent rehearsal pass; then record your own voiceover over the edit</li>
+  </ul>
+
+  <div class="callout warn">
+    <h4>The one rule</h4>
+    <p>Never say a number that isn't on a slide, on screen, or in <code>artefacts/real/eval/</code>.
+    Every figure here is verified (table at the end). If a take drifts from the script's numbers,
+    cut it.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <div class="part">
+  <h2><span class="tc">0:00–2:40</span> Part I — introduction (the deck)</h2>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">0:00–0:25</span> Slide 1 · Title + ethics</h2>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul><li>Slide 1; hold 2&nbsp;s before speaking; let the ethics box be clearly readable</li></ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>This is APEX — a behavioural driver-profiling system for Formula 1, built from public
+      telemetry. On ethics: this project has no human participants — category A-zero — and uses
+      only publicly available telemetry archives, in line with the University's ethical
+      guidance.</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">0:25–0:50</span> Slide 2 · Motivation</h2>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul><li>Advance on "identical cars"</li></ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>The motivation: two drivers in identical cars produce measurably different telemetry —
+      throttle ramps, braking shape, cornering commitment. APEX turns those differences into a
+      behavioural fingerprint, and asks the question the whole project set out to answer: does it
+      encode who is driving, and does it generalise to circuits the system has never seen?</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">0:50–1:20</span> Slide 3 · Objectives → design</h2>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul><li>Slide 3; trace the funnel with the cursor</li></ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>The original objectives dictated this shape directly. One funnel: telemetry is validated
+      — every rejected lap coded, never silently dropped — features become the fingerprint, and
+      everything downstream either validates it or applies it: gated identification, a style
+      space, exact SHAP explanation, and two extended analyses. One design principle governed
+      every layer from the specification onward: no component fails silently.</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">1:20–1:45</span> Slide 4 · The corpus</h2>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul><li>Slide 4; rest on the rose "2 held out" cell for the last line</li></ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>Four seasons of real data — fifty-three thousand nine hundred clean lap vectors,
+      thirteen drivers, twenty-five circuits. And the commitment that makes the results
+      meaningful: Belgium and Italy were quarantined from the first line of code. Everything that
+      follows is measured on circuits the models never saw.</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">1:45–2:15</span> Slide 5 · Conclusions — including the plan change</h2>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul><li>Slide 5; cursor across the strip, ending on the amber 0.78</li></ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>The headline conclusions. On unseen circuits the fingerprint identifies the correct
+      driver first sixty-three point six percent of the time — chance is under eight — and
+      top-three eighty-four percent. And the project didn't entirely go to plan: the a-priori
+      target of zero point seven eight was missed. The system reported that miss itself, and
+      chasing it produced the project's best finding — a normalisation assumption that turned out
+      to erase driver signal, whose correction is the model you're about to see serving.</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">2:15–2:40</span> Slides 6–9 · Confidence, structure, roadmap</h2>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul><li>Slide 6 (~8&nbsp;s), slide 7 (~8&nbsp;s), flash slide 8, land on slide 9</li></ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>It only answers above a calibrated gate — right seventy-five percent of the time when it
+      does. The fingerprint has statistically real structure — teammates cluster at p zero point
+      zero two four — and it works as a live baseline, flagging deviation a median of nine laps
+      before the pit stop. Now the software itself.</p></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <div class="part">
+  <h2><span class="tc">2:40–7:00</span> Part II — the software in use</h2>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">2:40–3:50</span> Fingerprint → live identification</h2>
+  <p class="beat-sub">Screens: Driver Overview → LEC profile → Prediction (confident segment)</p>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul>
+        <li>Cut to the Driver Overview; brief scroll; open LEC</li>
+        <li>Point at the radar, the signed SHAP weights, then 3,914 laps</li>
+        <li>Navigate to Prediction + Setup Tendencies; click the rehearsed confident segment; let the card fill; hover the confidence bar, then the truth line</li>
+      </ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>This is the fingerprint in the product. Thirteen drivers, live from the real corpus —
+      and here is Leclerc's: three thousand nine hundred laps in one signature, explained
+      feature by feature with exact SHAP attributions. Committed throttle, aggressive late
+      braking — that's what makes it his.</p>
+      <p>Now the experiment from the introduction, live. Each of these segments is a real lap
+      from a held-out circuit — the classifier has never seen these tracks. Pick one… it names
+      the driver, explains the decision, and states a calibrated confidence — calibrated meaning
+      a zero point nine genuinely means ninety percent. And the truth line confirms it:
+      correct.</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">3:50–4:30</span> The refusal, live</h2>
+  <p class="beat-sub">Screen: Prediction, gated segment (Belgium 2022 · Race · Lap 34)</p>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul>
+        <li>Click the gated segment → the card turns epistemic purple</li>
+        <li>Trace the breakdown row: gate · distribution · model · overall</li>
+        <li>Point at "SHAP unavailable" and the empty setup panel; 2&nbsp;s silence</li>
+      </ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>And here's a different kind of interaction — one most classifiers can't have. This lap
+      doesn't carry enough evidence, so APEX refuses: no driver named, a typed uncertainty state
+      in its own colour, and the refusal decomposed — data quality, distribution familiarity,
+      model confidence — so you can see which link was weak. Nothing downstream pretends
+      otherwise: no fabricated explanation, no setup tendency. The whole interface obeys the
+      gate.</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">4:30–5:15</span> Comparison — the geometry</h2>
+  <p class="beat-sub">Screen: Comparison, rehearsed teammate pair</p>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul>
+        <li>Navigate to Comparison; pick the rehearsed teammates via chips</li>
+        <li>Sweep the shared-scale radars; the signed delta; hover one distinctive-feature bar for its plain-English meaning</li>
+      </ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>The comparison view — a single analyst's tool, like every screen here, so there are no
+      separate user roles to show. Two teammates side by side: same car, so what separates these
+      fingerprints is mostly the drivers. Both radars share one scale per axis, and every
+      distinctive feature is a signed SHAP difference the model computed — not a hand-picked
+      statistic. This is the geometry behind that p-value, one pair at a time.</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">5:15–7:00</span> Replay — the fingerprint in time</h2>
+  <p class="beat-sub">Screen: Race Replay Monitor — single driver, then the 8-driver grid</p>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul>
+        <li>Navigate to Replay; Bahrain 2023 · R, LEC, rehearsed speed, Play</li>
+        <li>Let the line wander under τ ~5&nbsp;s in silence; the amber alert slides in at lap 15 — pause</li>
+        <li>Anatomy: confidence chip → laps-since-crossing → feature chips → historical pit window</li>
+        <li>Switch to ALL DRIVERS · 10× · Play; run to 26/26; hold the finished grid</li>
+      </ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>The last interaction: the fingerprint as a baseline in time. A real race, replayed lap
+      by lap, strictly causally — lap fifteen is scored knowing only laps one to fifteen, exactly
+      what a live pit wall would have known.</p>
+      <p>Each lap the system measures how far the behaviour's shape has rotated from the driver's
+      own baseline; the dashed line is his threshold, calibrated per driver, per circuit type.
+      Two consecutive crossings — and there it is. High confidence, the exact features driving it
+      — a decomposition that sums to the score, not an estimate — and a pit window stated as what
+      it is: a historical median, not a recommendation.</p>
+      <p>Evaluated over two thousand one hundred real stints it leads the stop by a median of
+      nine laps — and, reported honestly, ninety-one percent of alerts self-resolve: this detects
+      behavioural deviation, transients included, with degradation as one driver of it.</p>
+      <p>And it scales — eight drivers, one race, every monitor in lock-step.</p></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <div class="part">
+  <h2><span class="tc">7:00–8:50</span> Part III — the development environment and the code</h2>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">7:00–7:30</span> The environment</h2>
+  <p class="beat-sub">Screen: VS Code — repo tree · terminal with the green suite · config.yaml</p>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul>
+        <li>Cut to VS Code; sidebar shows the repo (<code>app/</code> mirrored by <code>tests/</code>)</li>
+        <li>Show the terminal: the tail of the full <code>pytest -q</code> run, green</li>
+        <li>Open the pinned <code>config.yaml</code> at the <code>thresholds:</code> block</li>
+      </ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>Under the hood. The repository mirrors the pipeline — and every source package is
+      shadowed by a test package: one thousand three hundred and forty-nine tests, and the rule
+      that every error code has a test that triggers it. One more convention worth showing:
+      there are no magic numbers anywhere in the code. Every threshold you saw — the confidence
+      gate, the lap minimums — lives here, in one typed configuration file.</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">7:30–8:00</span> Code I · the confidence gate</h2>
+  <p class="beat-sub">Screen: app/ml/inference.py, the gate (~line 457)</p>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul><li>Switch to the pinned <code>inference.py</code> tab; the entropy → confidence → accepted cascade fills the screen; cursor on the two <code>state =</code> lines</li></ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>Three functions I'd call the heart of the system. First, the gate you watched refuse.
+      High entropy — ambiguous; below the calibrated threshold — low confidence. In both branches
+      the prediction stays empty, the state is a served value rather than an exception, and the
+      exact margin is logged. That purple card earlier is these lines reaching the screen.</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">8:00–8:25</span> Code II · the leakage tripwire</h2>
+  <p class="beat-sub">Screen: app/pipeline/normalise.py, _assert_no_leakage (~line 206)</p>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul><li>Switch to <code>normalise.py</code>; the tripwire on screen; cursor on the raise</li></ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>Second — the line every held-out number depends on. Before any statistic is fitted, this
+      tripwire checks whether a quarantined circuit survived the exclusion filter; if one did, it
+      raises, and no artefact is written. Every fit site re-asserts this boundary independently.
+      The results are only credible because this line can fire — and it's tested to.</p></div>
+  </div>
+
+  <h2 style="font-size:1.05rem"><span class="tc">8:25–8:50</span> Code III · the deviation score</h2>
+  <p class="beat-sub">Screen: app/monitoring/detector.py, _cosine_distance (~line 536)</p>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul><li>Switch to <code>detector.py</code>; cursor on the <code>terms = 0.5 * (…)**2</code> line</li></ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>And the piece I'm proudest of: the monitor's score. A cosine distance — the shape of the
+      behaviour, not its magnitude, so fuel burn doesn't read as degradation — and this one line
+      is a unit-vector identity that makes the per-feature attribution exact. The feature chips
+      on the alert banner sum to the score, to floating-point tolerance.</p></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2><span class="tc">8:50–9:20</span> Close — Slide 10</h2>
+  <div class="row">
+    <div class="cell action"><h4>On screen</h4>
+      <ul><li>Cut to the deck, slide 10; hold the final frame ~3&nbsp;s after the last word</li></ul></div>
+    <div class="cell vo"><h4>Voiceover</h4>
+      <p>A behavioural fingerprint from public data. Identification that generalises — with its
+      target miss reported and turned into the finding that improved the served model. A style
+      space with real structure; a monitor that watches it live. And one principle from the first
+      telemetry sample to the last pixel: the system would rather tell you it doesn't know than
+      pretend that it does. This is APEX.</p></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>The numbers, verified</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Spoken / on slide</th><th class="n">Exact value</th><th>Source artefact</th></tr></thead>
+      <tbody>
+        <tr><td>Top-1 held-out accuracy "63.6%"</td><td class="n">0.6356</td><td><code>serving_metrics.json</code></td></tr>
+        <tr><td>Top-3 "84%"</td><td class="n">0.8434</td><td><code>serving_metrics.json</code></td></tr>
+        <tr><td>Held-out macro F1 "0.62" · "8.1× chance"</td><td class="n">0.6225</td><td><code>train_real_summary.json</code> · reproduced by <code>serving_metrics.json</code></td></tr>
+        <tr><td>Coverage "72%" / abstention "28.1%"</td><td class="n">0.7190 / 0.2810</td><td><code>serving_metrics.json</code></td></tr>
+        <tr><td>Accuracy when answering "75%"</td><td class="n">0.7476</td><td><code>serving_metrics.json</code></td></tr>
+        <tr><td>Clean vectors "53,900"</td><td class="n">53,928</td><td><code>train_real_summary.json</code></td></tr>
+        <tr><td>Acceptance "84%"</td><td class="n">53,972 / 64,364</td><td>build DQ log · design record §5</td></tr>
+        <tr><td>Teammate proximity "p = 0.024"</td><td class="n">0.0236</td><td><code>rq3_style_space.json</code></td></tr>
+        <tr><td>Nearest-neighbour teammate "2.4× chance"</td><td class="n">6/30 vs 8.33%</td><td><code>rq3_style_space.json</code></td></tr>
+        <tr><td>"2,100 real stints" · median lead "9 laps"</td><td class="n">2,138 · p50 = 9.0</td><td><code>rq4_detector.json</code></td></tr>
+        <tr><td>Self-resolving alerts "91%"</td><td class="n">0.9136</td><td><code>rq4_detector.json</code></td></tr>
+        <tr><td>Representation finding "erased driver signal"</td><td class="n">0.4068 → 0.6225 (ablation 0.614)</td><td><code>ablation.json</code> · <code>train_real_summary.json</code></td></tr>
+        <tr><td>Error codes "every code tested" · tests "1,349"</td><td class="n">69 · 1,078 + 271</td><td>design record §10</td></tr>
+        <tr><td>LEC laps "3,900"</td><td class="n">3,914</td><td>Driver Overview card (served)</td></tr>
+        <tr><td>Chance level "under 8%"</td><td class="n">1/13 = 0.0769</td><td>arithmetic</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <h4>Held in reserve — for the discussion, not the cut</h4>
+    <p><strong>Ethics detail</strong>: you will be asked about project ethics in the discussion —
+    be ready to state your categories and why they apply (public telemetry archives, no human
+    participants, drivers are public figures whose professional performance data is published by
+    the sport).</p>
+    <p><strong>Setup tendencies</strong>: live on every driver profile — "telemetry-derived setup
+    tendencies associated with the fingerprint, heuristic targets, not ground-truth setups", with
+    r&nbsp;=&nbsp;−0.80 (served reliability tracks held-out error) as the exploratory evidence.</p>
+    <p><strong>Tyre Analysis</strong>: real fuel-corrected stint curves — one sentence if asked.</p>
+    <p><strong>Deck appendix</strong>: slides 11–13 are the three code excerpts, typeset — for the
+    viva, not the video.</p>
+  </div>
+
+  <footer>
+    <span>APEX · COMP702 demo video · slides → software → dev environment</span>
+    <span>Target ≈9:20 of 10:00 · 130 wpm · own voice only</span>
+    <span>Deck: docs/video/apex-slides.html (slides 1–10 + appendix)</span>
+    <span>All numbers artefact-verified</span>
+  </footer>
+</div>

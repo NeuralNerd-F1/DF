@@ -9,19 +9,12 @@ import type {
   DriverSummary,
   FingerprintResponse,
   HealthResponse,
-  IngestSessionRequest,
-  IngestSessionResponse,
-  IngestStatusResponse,
   PredictRequest,
   PredictResponse,
   ReplayResponse,
   SessionSummary,
   SetupResponse,
-  StabilityResponse,
   StyleSpaceResponse,
-  UnknownFingerprintRequest,
-  UnknownFingerprintResponse,
-  UploadResponse,
 } from './types';
 import * as v from './validators';
 
@@ -42,12 +35,10 @@ export function getDrivers(): Promise<ApiResult<DriverSummary[]>> {
   return fetchApi<DriverSummary[]>('/drivers', v.zDriverSummaryList);
 }
 
+// Cross-season stability rides along on the fingerprint payload (`stability`), so the Driver
+// Profile never issues a second call for it — there is deliberately no getStability wrapper.
 export function getFingerprint(code: string): Promise<ApiResult<FingerprintResponse>> {
   return fetchApi<FingerprintResponse>(`/drivers/${enc(code)}/fingerprint`, v.zFingerprint);
-}
-
-export function getStability(code: string): Promise<ApiResult<StabilityResponse>> {
-  return fetchApi<StabilityResponse>(`/drivers/${enc(code)}/stability`, v.zStability);
 }
 
 export function getSetup(code: string, circuit: string): Promise<ApiResult<SetupResponse>> {
@@ -62,7 +53,7 @@ export function getCompare(a: string, b: string): Promise<ApiResult<CompareRespo
   return fetchApi<CompareResponse>(`/compare/${enc(a)}/${enc(b)}`, v.zCompare);
 }
 
-// --- F17 Screen 3: prediction + ingestion (all POST except getIngestStatus) -----------------------
+// --- Screen 3: prediction over curated held-out segments ------------------------------------------
 
 export function getSegments(): Promise<ApiResult<SampleSegment[]>> {
   return fetchApi<SampleSegment[]>('/segments', v.zSegmentList);
@@ -74,30 +65,6 @@ export function getTyres(): Promise<ApiResult<TyreWearResponse>> {
 
 export function postPredict(body: PredictRequest): Promise<ApiResult<PredictResponse>> {
   return fetchApi<PredictResponse>('/predict', v.zPredict, jsonPost(body));
-}
-
-export function postUnknownFingerprint(
-  body: UnknownFingerprintRequest,
-): Promise<ApiResult<UnknownFingerprintResponse>> {
-  return fetchApi<UnknownFingerprintResponse>('/fingerprint/unknown', v.zUnknownFingerprint, jsonPost(body));
-}
-
-export function postIngestSession(
-  body: IngestSessionRequest,
-): Promise<ApiResult<IngestSessionResponse>> {
-  return fetchApi<IngestSessionResponse>('/ingest/session', v.zIngestSession, jsonPost(body));
-}
-
-export function getIngestStatus(sessionId: string): Promise<ApiResult<IngestStatusResponse>> {
-  return fetchApi<IngestStatusResponse>(`/ingest/status/${enc(sessionId)}`, v.zIngestStatus);
-}
-
-// Manual upload: multipart file POST. Currently a 503 stub (F05, div #58) — the client surfaces the
-// honest error; NO Content-Type header (the browser sets the multipart boundary for FormData).
-export function postUpload(file: File): Promise<ApiResult<UploadResponse>> {
-  const form = new FormData();
-  form.append('file', file);
-  return fetchApi<UploadResponse>('/ingest/upload', v.zUpload, { method: 'POST', body: form });
 }
 
 // --- F19 Screen 6: historical race replay (F14 → F10) ---------------------------------------------

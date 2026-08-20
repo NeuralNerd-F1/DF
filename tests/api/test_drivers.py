@@ -1,4 +1,4 @@
-"""GET /drivers, /drivers/{id}/fingerprint, /setup/{circuit}, /stability."""
+"""GET /drivers, /drivers/{id}/fingerprint, /setup/{circuit}, /tyres."""
 
 from __future__ import annotations
 
@@ -56,13 +56,6 @@ async def test_driver_fingerprint_not_found_is_404(api: SimpleNamespace) -> None
     r = await api.client.get("/drivers/NOPE/fingerprint")
     assert r.status_code == 404
     assert r.json()["error_code"] == "NOT_FOUND"
-
-
-async def test_driver_stability_partial_is_206(api: SimpleNamespace) -> None:
-    await seed_fingerprint(api.session_factory, code="VER", season=2023)
-    r = await api.client.get("/drivers/VER/stability")
-    assert r.status_code == 206
-    assert r.json()["partial"] is True
 
 
 async def test_driver_setup_ok(api: SimpleNamespace) -> None:
@@ -152,21 +145,6 @@ async def test_radar_endpoints_agree_on_latest_season(api: SimpleNamespace) -> N
     assert listed["VER"]["throttle"] == 0.8  # latest season (2024), not 0.2 (2022)
     assert fp["throttle"] == 0.8
     assert cmp_["throttle"] == 0.8
-
-
-async def test_driver_stability_three_seasons_is_200(api: SimpleNamespace) -> None:
-    for season in (2022, 2023, 2024):
-        await seed_fingerprint(api.session_factory, code="VER", season=season)
-    r = await api.client.get("/drivers/VER/stability")
-    assert r.status_code == 200  # 3 seasons -> not partial
-    assert r.json()["partial"] is False
-    assert r.json()["seasons_available"] == 3
-
-
-async def test_driver_stability_unknown_is_404(api: SimpleNamespace) -> None:
-    r = await api.client.get("/drivers/NOPE/stability")
-    assert r.status_code == 404
-    assert r.json()["error_code"] == "NOT_FOUND"
 
 
 async def test_driver_setup_returns_all_parameters(api: SimpleNamespace) -> None:
